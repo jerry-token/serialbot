@@ -1,0 +1,5 @@
+# Pinned so local builds and CI see exactly the same compiler and lints.
+# Upgrade deliberately in its own pull request.
+[toolchain]
+channel = "1.97.0"
+components = ["rustfmt", "clippy"]
