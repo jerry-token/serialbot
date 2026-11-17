@@ -2,8 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => invoke(...args) }));
+type Handler = (event: { payload: unknown }) => void;
+const listen = vi.fn(async (_name: string, _handler: Handler) => () => {});
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: (name: string, handler: Handler) => listen(name, handler),
+}));
 
-const { errorMessage, portLabel, tauriBackend } = await import("./api");
+const { claudeCommand, errorMessage, portLabel, tauriBackend } = await import("./api");
 const { detectLang, strings } = await import("./i18n");
 const { formatTime } = await import("./timefmt");
 
@@ -37,17 +42,44 @@ describe("tauriBackend", () => {
     await tauriBackend.closeSession(1);
     await tauriBackend.writeData(1, new Uint8Array([1, 2]));
     await tauriBackend.readLog(1, 5, 100);
+    await tauriBackend.listSessions();
+    const settings = { enabled: true, port: 9633, token: "t" };
+    await tauriBackend.mcpStatus();
+    await tauriBackend.mcpApply(settings);
+    await tauriBackend.mcpRegenerateToken();
     expect(invoke.mock.calls).toEqual([
       ["list_ports"],
       ["open_session", { request }],
       ["close_session", { id: 1 }],
       ["write_data", { id: 1, data: [1, 2] }],
       ["read_log", { id: 1, cursor: 5, maxBytes: 100 }],
+      ["list_sessions"],
+      ["mcp_status"],
+      ["mcp_apply", { settings }],
+      ["mcp_regenerate_token"],
     ]);
+  });
+
+  it("forwards event payloads", async () => {
+    const sessions = vi.fn();
+    const logs = vi.fn();
+    await tauriBackend.onSessionsChanged(sessions);
+    await tauriBackend.onLogChanged(logs);
+    expect(listen.mock.calls.map((c) => c[0])).toEqual(["sessions-changed", "log-changed"]);
+    listen.mock.calls[0]?.[1]({ payload: [{ id: 1 }] });
+    listen.mock.calls[1]?.[1]({ payload: [1, 2] });
+    expect(sessions).toHaveBeenCalledWith([{ id: 1 }]);
+    expect(logs).toHaveBeenCalledWith([1, 2]);
   });
 });
 
 describe("helpers", () => {
+  it("builds the Claude Code command", () => {
+    expect(claudeCommand("http://127.0.0.1:9633/mcp", "abc")).toBe(
+      'claude mcp add --transport http serialx http://127.0.0.1:9633/mcp --header "Authorization: Bearer abc"',
+    );
+  });
+
   it("labels ports with what is known", () => {
     expect(portLabel(port)).toBe("COM3 — CP2102 (10c4:ea60)");
     expect(portLabel({ ...port, product: null })).toBe("COM3 — Silicon Labs (10c4:ea60)");

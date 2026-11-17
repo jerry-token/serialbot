@@ -39,6 +39,20 @@ const en = {
   deviceGone: "Device disconnected",
   rxBytes: "RX",
   txBytes: "TX",
+  closeSession: "Close session",
+  mcp: "MCP",
+  mcpTitle: "MCP server (lets AI agents use the ports)",
+  mcpEnable: "Enable MCP server",
+  mcpPort: "Port",
+  mcpToken: "Token",
+  mcpRegenerate: "New token",
+  mcpSave: "Save",
+  mcpRunning: (url: string) => `Running at ${url}`,
+  mcpStopped: "Not running",
+  mcpClaude: "Add to Claude Code:",
+  copy: "Copy",
+  copied: "Copied",
+  invalidMcpPort: "Port must be between 1 and 65535",
 };
 
 export type Strings = typeof en;
@@ -80,6 +94,20 @@ const zh: Strings = {
   deviceGone: "设备已断开",
   rxBytes: "收",
   txBytes: "发",
+  closeSession: "关闭会话",
+  mcp: "MCP",
+  mcpTitle: "MCP 服务（让 AI 代理使用串口）",
+  mcpEnable: "启用 MCP 服务",
+  mcpPort: "端口",
+  mcpToken: "Token",
+  mcpRegenerate: "重新生成",
+  mcpSave: "保存",
+  mcpRunning: (url: string) => `运行中：${url}`,
+  mcpStopped: "未运行",
+  mcpClaude: "添加到 Claude Code：",
+  copy: "复制",
+  copied: "已复制",
+  invalidMcpPort: "端口必须在 1 到 65535 之间",
 };
 
 export function strings(lang: Lang): Strings {

@@ -17,6 +17,7 @@ proptest = "1.12"
 regex = "1.12"
 serialport = "4.10"
 serialx-core = { path = "crates/serialx-core" }
+serialx-mcp = { path = "crates/serialx-mcp" }
 rmcp = { version = "3.10", default-features = false }
 axum = { version = "0.8", default-features = false }
 tokio = "1.54"

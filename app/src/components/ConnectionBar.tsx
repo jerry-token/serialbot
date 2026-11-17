@@ -22,7 +22,10 @@ interface Props {
   settings: PortSettings;
   onChange: (settings: PortSettings) => void;
   onRefresh: () => void;
-  /** A session exists (open or disconnected): settings are locked. */
+  /**
+   * The selected port already has a session: the button closes it, and the
+   * settings (which only apply when opening) are locked.
+   */
   connected: boolean;
   busy: boolean;
   onOpen: () => void;
@@ -41,7 +44,6 @@ export function ConnectionBar(props: Props) {
         <select
           aria-label={t.port}
           value={settings.port}
-          disabled={connected}
           onChange={(e) => set("port", e.target.value)}
         >
           {ports.length === 0 && <option value="">{t.noPorts}</option>}
@@ -52,7 +54,7 @@ export function ConnectionBar(props: Props) {
           ))}
         </select>
       </label>
-      <button type="button" onClick={props.onRefresh} disabled={connected}>
+      <button type="button" onClick={props.onRefresh}>
         {t.refresh}
       </button>
       <label>

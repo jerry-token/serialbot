@@ -3282,8 +3282,11 @@ dependencies = [
  "serde",
  "serde_json",
  "serialx-core",
+ "serialx-mcp",
  "tauri",
  "tauri-build",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]

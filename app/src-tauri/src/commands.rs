@@ -12,10 +12,10 @@ use serialx_core::transport::TransportError;
 use serialx_core::transport::serial::{
     DataBits, FlowControl, Parity, PortInfo, PortKind, SerialConfig, StopBits,
 };
-use serialx_core::{Cursor, Direction, EntryKind, SessionId, SessionManager, SessionState};
-
-/// Lists the ports present on the machine; replaceable in tests.
-pub type PortLister = dyn Fn() -> Result<Vec<PortInfo>, TransportError> + Send + Sync;
+use serialx_core::{
+    Cursor, Direction, EntryKind, SessionId, SessionManager, SessionState, SessionSummary,
+};
+pub use serialx_mcp::PortLister;
 
 /// Largest payload one [`AppState::read`] returns.
 pub const MAX_READ_BYTES: usize = 4 * 1024 * 1024;
@@ -158,12 +158,26 @@ impl OpenRequest {
 pub struct SessionDto {
     /// Session number (`1` for "s1").
     pub id: u32,
+    /// Alias given by an MCP client, if any.
+    pub alias: Option<String>,
     /// Port name.
     pub port: String,
     /// `"open"`, `"disconnected"`, `"closed"` or `"failed"`.
     pub state: &'static str,
     /// Reason, when the state is `"failed"`.
     pub error: Option<String>,
+}
+
+/// Converts a manager listing entry.
+pub fn session_dto(summary: &SessionSummary) -> SessionDto {
+    let (state, error) = state_parts(summary.state.clone());
+    SessionDto {
+        id: summary.id.0,
+        alias: summary.alias.clone(),
+        port: summary.info.name.clone(),
+        state,
+        error,
+    }
 }
 
 fn state_parts(state: SessionState) -> (&'static str, Option<String>) {
@@ -210,7 +224,7 @@ pub struct LogChunk {
 /// Backend state shared by all windows.
 pub struct AppState {
     manager: Arc<SessionManager>,
-    list_ports: Box<PortLister>,
+    list_ports: Arc<PortLister>,
 }
 
 impl std::fmt::Debug for AppState {
@@ -223,7 +237,7 @@ impl std::fmt::Debug for AppState {
 
 impl AppState {
     /// State over `manager`, listing ports with `list_ports`.
-    pub fn new(manager: Arc<SessionManager>, list_ports: Box<PortLister>) -> Self {
+    pub fn new(manager: Arc<SessionManager>, list_ports: Arc<PortLister>) -> Self {
         Self {
             manager,
             list_ports,
@@ -234,8 +248,23 @@ impl AppState {
     pub fn with_serial_ports() -> Self {
         Self::new(
             Arc::new(SessionManager::with_serial_ports()),
-            Box::new(serialx_core::transport::serial::list_ports),
+            Arc::new(serialx_core::transport::serial::list_ports),
         )
+    }
+
+    /// The session manager, shared with the MCP server.
+    pub fn manager(&self) -> &Arc<SessionManager> {
+        &self.manager
+    }
+
+    /// The port lister, shared with the MCP server.
+    pub fn port_lister(&self) -> &Arc<PortLister> {
+        &self.list_ports
+    }
+
+    /// All sessions, oldest first, including those opened over MCP.
+    pub fn sessions(&self) -> Vec<SessionDto> {
+        self.manager.list().iter().map(session_dto).collect()
     }
 
     /// Ports present on the machine.
@@ -255,6 +284,7 @@ impl AppState {
         let (state, error) = state_parts(session.state());
         Ok(SessionDto {
             id: session.id().0,
+            alias: session.alias(),
             port: session.info().name.clone(),
             state,
             error,
@@ -379,7 +409,7 @@ mod tests {
                 },
             ])
         };
-        (AppState::new(Arc::new(manager), Box::new(lister)), devices)
+        (AppState::new(Arc::new(manager), Arc::new(lister)), devices)
     }
 
     fn request(port: &str) -> OpenRequest {
@@ -423,7 +453,7 @@ mod tests {
     fn port_listing_errors_become_messages() {
         let app = AppState::new(
             Arc::new(SessionManager::with_serial_ports()),
-            Box::new(|| Err(TransportError::PermissionDenied("udev".into()))),
+            Arc::new(|| Err(TransportError::PermissionDenied("udev".into()))),
         );
         assert_eq!(app.ports().unwrap_err(), "permission denied: udev");
     }
@@ -436,6 +466,7 @@ mod tests {
             session,
             SessionDto {
                 id: 1,
+                alias: None,
                 port: "mock0".into(),
                 state: "open",
                 error: None
@@ -459,7 +490,11 @@ mod tests {
         assert_eq!(idle.next, 2);
         assert_eq!(idle.state, "open");
 
+        assert_eq!(app.sessions(), std::slice::from_ref(&session));
+        assert!(Arc::ptr_eq(app.manager(), &app.manager));
+        assert!(app.port_lister()().is_ok());
         app.close(1).unwrap();
+        assert!(app.sessions().is_empty());
         assert!(app.read(1, 0, 1024).unwrap_err().contains("no session"));
         assert!(app.close(1).is_err());
         // The port can be opened again after closing.

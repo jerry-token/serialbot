@@ -155,3 +155,127 @@ button.primary {
 .error {
   color: var(--info);
 }
+
+.spacer {
+  flex: 1;
+}
+
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  background: var(--muted);
+}
+
+.dot.open {
+  background: #188038;
+}
+
+.dot.disconnected,
+.dot.failed {
+  background: var(--info);
+}
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  padding: 4px 10px 0;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: var(--bg);
+}
+
+.tab.active {
+  background: var(--panel);
+  border-color: var(--accent);
+}
+
+.tab button {
+  border: none;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+}
+
+.tab-close {
+  color: var(--muted);
+}
+
+.alias {
+  color: var(--muted);
+}
+
+.mcp-panel {
+  padding: 8px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mcp-panel h2 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.mcp-panel .row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.mcp-panel label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.mcp-panel p {
+  margin: 0;
+}
+
+.grow {
+  flex: 1;
+  min-width: 200px;
+}
+
+.mcp-port {
+  width: 70px;
+}
+
+.mcp-token {
+  flex: 1;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+.mcp-panel code {
+  font-size: 12px;
+  word-break: break-all;
+  padding: 4px 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.ok {
+  color: #188038;
+}
+
+.muted,
+.note {
+  color: var(--muted);
+}
