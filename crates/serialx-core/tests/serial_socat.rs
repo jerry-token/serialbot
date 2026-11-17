@@ -1,10 +1,15 @@
 //! Exercises the real serial transport through a pair of virtual ports made
-//! by `socat` (Linux and macOS).
+//! by `socat`.
+//!
+//! Linux only: on macOS `serialport` sets the baud rate with the
+//! `IOSSIOSPEED` ioctl (that is how it supports non-standard rates), which
+//! pseudo-terminals reject with `ENOTTY`. Real USB adapters support it, so
+//! macOS serial I/O is verified with hardware instead (see CLAUDE.md).
 //!
 //! If `socat` is missing the tests are skipped, unless the environment
 //! variable `SERIALX_REQUIRE_SOCAT` is set (CI sets it), in which case a
 //! missing `socat` fails the run instead of silently skipping coverage.
-#![cfg(unix)]
+#![cfg(target_os = "linux")]
 #![allow(clippy::unwrap_used, clippy::print_stderr)]
 
 use std::path::{Path, PathBuf};

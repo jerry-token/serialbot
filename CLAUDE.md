@@ -35,6 +35,14 @@ ports. Plan of record: the "AI 串口助手 · 开工前计划" doc.
 
 - `crates/serialx-core` — log buffer, transports, sessions (Rust)
   - `src/transport/mock.rs` — in-memory device for tests of everything above transports
-  - `tests/serial_socat.rs` — real serial code over socat virtual ports (Linux/macOS)
+  - `tests/serial_socat.rs` — real serial code over socat virtual ports (Linux only)
+
+## Testing on real hardware (done locally, not in CI)
+
+- macOS: PTYs reject the `IOSSIOSPEED` baud ioctl, so serial I/O on macOS
+  must be checked with a real USB adapter (CH340 / CP2102 / FT232).
+- Windows: virtual-port tests need com0com; until then use a real adapter.
+- Checklist per release: open/close, 115200 and 921600 round trip, busy
+  detection, unplug while reading, DTR/RTS reset of an ESP32.
 - `.github/workflows/ci.yml` — fmt, clippy, tests on Windows/macOS/Linux,
   MSRV, docs, coverage gate, license/advisory checks
