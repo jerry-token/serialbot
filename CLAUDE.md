@@ -19,6 +19,12 @@ ports. Plan of record: the "AI 串口助手 · 开工前计划" doc.
 - One focused change per pull request; CI must be green and the change
   reviewed before it is merged into `main`.
 
+## Commits and pull requests
+
+- Conventional Commits (`feat(core): ...`, `fix: ...`, `test: ...`, `ci: ...`).
+- Keep messages short: a subject line, plus a body only when the *why* is
+  not obvious from the diff. No repeated summaries, no session links.
+
 ## Architecture rules
 
 - `crates/serialx-core` holds all device logic and must not depend on any UI.
@@ -34,8 +40,12 @@ ports. Plan of record: the "AI 串口助手 · 开工前计划" doc.
 ## Layout
 
 - `crates/serialx-core` — log buffer, transports, sessions (Rust)
+  - `src/session.rs` — one open connection: reader thread, log, `wait_for`
+  - `src/manager.rs` — owns all sessions; refuses to open a port twice
   - `src/transport/mock.rs` — in-memory device for tests of everything above transports
   - `tests/serial_socat.rs` — real serial code over socat virtual ports (Linux only)
+- `.github/workflows/ci.yml` — fmt, clippy, tests on Windows/macOS/Linux,
+  MSRV, docs, coverage gate, license/advisory checks
 
 ## Testing on real hardware (done locally, not in CI)
 
@@ -44,5 +54,3 @@ ports. Plan of record: the "AI 串口助手 · 开工前计划" doc.
 - Windows: virtual-port tests need com0com; until then use a real adapter.
 - Checklist per release: open/close, 115200 and 921600 round trip, busy
   detection, unplug while reading, DTR/RTS reset of an ESP32.
-- `.github/workflows/ci.yml` — fmt, clippy, tests on Windows/macOS/Linux,
-  MSRV, docs, coverage gate, license/advisory checks
