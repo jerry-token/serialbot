@@ -362,7 +362,7 @@ async fn tool_errors_are_reported_to_the_agent() {
             json!({"port": "mock0", "data_bits": 9})
         )
         .await
-        .contains("data_bits")
+        .contains("data bits")
     );
     assert!(
         err(
@@ -371,7 +371,7 @@ async fn tool_errors_are_reported_to_the_agent() {
             json!({"port": "mock0", "stop_bits": 3})
         )
         .await
-        .contains("stop_bits")
+        .contains("stop bits")
     );
     assert!(
         err(

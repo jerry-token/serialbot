@@ -77,6 +77,39 @@ pub struct SerialConfig {
     pub read_timeout: Duration,
 }
 
+impl TryFrom<u8> for DataBits {
+    type Error = TransportError;
+
+    /// Converts 5, 6, 7 or 8; any other count is
+    /// [`TransportError::InvalidConfig`].
+    fn try_from(bits: u8) -> Result<Self, Self::Error> {
+        match bits {
+            5 => Ok(Self::Five),
+            6 => Ok(Self::Six),
+            7 => Ok(Self::Seven),
+            8 => Ok(Self::Eight),
+            _ => Err(TransportError::InvalidConfig(format!(
+                "data bits must be 5, 6, 7 or 8, not {bits}"
+            ))),
+        }
+    }
+}
+
+impl TryFrom<u8> for StopBits {
+    type Error = TransportError;
+
+    /// Converts 1 or 2; any other count is [`TransportError::InvalidConfig`].
+    fn try_from(bits: u8) -> Result<Self, Self::Error> {
+        match bits {
+            1 => Ok(Self::One),
+            2 => Ok(Self::Two),
+            _ => Err(TransportError::InvalidConfig(format!(
+                "stop bits must be 1 or 2, not {bits}"
+            ))),
+        }
+    }
+}
+
 impl SerialConfig {
     /// 8N1 settings with no flow control and a 20 ms read timeout.
     pub fn new(path: impl Into<String>, baud_rate: u32) -> Self {
@@ -435,6 +468,24 @@ impl TransportControl for SerialControl {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bit_counts_convert() {
+        assert_eq!(DataBits::try_from(5).unwrap(), DataBits::Five);
+        assert_eq!(DataBits::try_from(6).unwrap(), DataBits::Six);
+        assert_eq!(DataBits::try_from(7).unwrap(), DataBits::Seven);
+        assert_eq!(DataBits::try_from(8).unwrap(), DataBits::Eight);
+        assert!(matches!(
+            DataBits::try_from(9),
+            Err(TransportError::InvalidConfig(m)) if m.contains("not 9")
+        ));
+        assert_eq!(StopBits::try_from(1).unwrap(), StopBits::One);
+        assert_eq!(StopBits::try_from(2).unwrap(), StopBits::Two);
+        assert!(matches!(
+            StopBits::try_from(0),
+            Err(TransportError::InvalidConfig(m)) if m.contains("not 0")
+        ));
+    }
 
     fn port(path: &str) -> PortInfo {
         PortInfo {

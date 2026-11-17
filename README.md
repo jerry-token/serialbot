@@ -11,12 +11,23 @@ close the loop on embedded debugging.
 
 ## Development
 
-Requires the stable Rust toolchain (MSRV 1.88).
+Requires the stable Rust toolchain (MSRV 1.90).
 
 ```sh
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+```
+
+Linux also needs the Tauri system libraries:
+`libwebkit2gtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev libudev-dev`.
+
+Run the desktop app (Node 22+):
+
+```sh
+cd app
+npm ci
+npm run tauri dev
 ```
 
 To try the MCP server with real ports (listens on 127.0.0.1:9633 and

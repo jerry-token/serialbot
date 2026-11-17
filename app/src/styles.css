@@ -1,0 +1,157 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f7f8fa;
+  --panel: #ffffff;
+  --border: #d9dde3;
+  --text: #1d232b;
+  --muted: #6b7480;
+  --rx: #1d232b;
+  --tx: #b25e00;
+  --marker: #6a3fb5;
+  --info: #b3261e;
+  --accent: #1a73e8;
+  font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 13px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15181d;
+    --panel: #1d2128;
+    --border: #2f353e;
+    --text: #e3e6ea;
+    --muted: #8b939e;
+    --rx: #e3e6ea;
+    --tx: #f0a14a;
+    --marker: #b892ff;
+    --info: #ff8a80;
+    --accent: #5b9dff;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 6px 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.bar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+}
+
+select,
+input,
+button {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 6px;
+}
+
+input[type="checkbox"] {
+  padding: 0;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.baud {
+  width: 90px;
+}
+
+.log {
+  flex: 1;
+  overflow: auto;
+  padding: 6px 10px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Cascadia Mono", monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+}
+
+.line.rx {
+  color: var(--rx);
+}
+
+.line.tx {
+  color: var(--tx);
+}
+
+.line.marker {
+  color: var(--marker);
+}
+
+.line.info {
+  color: var(--info);
+}
+
+.ts {
+  color: var(--muted);
+}
+
+.send {
+  border-top: 1px solid var(--border);
+}
+
+.send-input {
+  flex: 1;
+  min-width: 200px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+.status {
+  border-bottom: none;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.state.open {
+  color: #188038;
+}
+
+.state.disconnected,
+.state.failed,
+.error {
+  color: var(--info);
+}

@@ -356,21 +356,11 @@ impl WaitOut {
 // ---- helpers -------------------------------------------------------------
 
 fn data_bits(n: u8) -> Result<DataBits, String> {
-    match n {
-        5 => Ok(DataBits::Five),
-        6 => Ok(DataBits::Six),
-        7 => Ok(DataBits::Seven),
-        8 => Ok(DataBits::Eight),
-        _ => Err(format!("data_bits must be 5, 6, 7 or 8, not {n}")),
-    }
+    DataBits::try_from(n).map_err(|e| e.to_string())
 }
 
 fn stop_bits(n: u8) -> Result<StopBits, String> {
-    match n {
-        1 => Ok(StopBits::One),
-        2 => Ok(StopBits::Two),
-        _ => Err(format!("stop_bits must be 1 or 2, not {n}")),
-    }
+    StopBits::try_from(n).map_err(|e| e.to_string())
 }
 
 fn timeout(ms: Option<u64>) -> Result<Duration, String> {
