@@ -1,0 +1,28 @@
+[package]
+name = "serialx-mcp"
+description = "MCP server (Streamable HTTP) that lets AI agents drive serialx sessions."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+serialx-core.workspace = true
+rmcp = { workspace = true, features = ["server", "macros", "transport-streamable-http-server"] }
+axum = { workspace = true, features = ["tokio", "http1"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "signal"] }
+tokio-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+schemars.workspace = true
+regex.workspace = true
+thiserror.workspace = true
+getrandom.workspace = true
+
+[dev-dependencies]
+rmcp = { workspace = true, features = ["client", "transport-streamable-http-client-reqwest"] }
+
+[lints]
+workspace = true

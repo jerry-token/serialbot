@@ -44,6 +44,11 @@ ports. Plan of record: the "AI 串口助手 · 开工前计划" doc.
   - `src/manager.rs` — owns all sessions; refuses to open a port twice
   - `src/transport/mock.rs` — in-memory device for tests of everything above transports
   - `tests/serial_socat.rs` — real serial code over socat virtual ports (Linux only)
+- `crates/serialx-mcp` — MCP server (rmcp, Streamable HTTP at `/mcp`)
+  - `src/tools.rs` — the curated tools; all device work goes through `SessionManager`
+  - `src/lib.rs` — `router`/`serve`: bearer token, Host allowlist, Origin rejected
+  - `src/main.rs` — `serialx-mcp` binary on 127.0.0.1 for trying it before the app exists
+  - `tests/http.rs` — real MCP client over HTTP against mock devices
 - `.github/workflows/ci.yml` — fmt, clippy, tests on Windows/macOS/Linux,
   MSRV, docs, coverage gate, license/advisory checks
 

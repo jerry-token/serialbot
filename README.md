@@ -11,12 +11,19 @@ close the loop on embedded debugging.
 
 ## Development
 
-Requires the stable Rust toolchain (MSRV 1.85).
+Requires the stable Rust toolchain (MSRV 1.88).
 
 ```sh
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+```
+
+To try the MCP server with real ports (listens on 127.0.0.1:9633 and
+prints the token and a ready-made `claude mcp add` command):
+
+```sh
+cargo run -p serialx-mcp
 ```
 
 See [CLAUDE.md](CLAUDE.md) for the quality rules every change must meet.
