@@ -1,26 +1,43 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Backend, PortInfo, SessionInfo, SessionStateName } from "./api";
+import type { Backend, McpSettings, McpStatus, PortInfo, SessionInfo, Unlisten } from "./api";
 import { errorMessage } from "./api";
 import { encodeInput } from "./bytes";
 import { ConnectionBar, type PortSettings } from "./components/ConnectionBar";
 import { LogView } from "./components/LogView";
+import { McpPanel } from "./components/McpPanel";
 import { SendBar, type SendSettings } from "./components/SendBar";
+import { SessionTabs } from "./components/SessionTabs";
 import { type Lang, strings } from "./i18n";
 import { Terminal } from "./terminal";
 
-/** Payload budget of one log poll. */
+/** Payload budget of one log read. */
 export const READ_BYTES = 256 * 1024;
 
 interface Props {
   backend: Backend;
   lang: Lang;
-  /** Delay between log polls when nothing new arrived. */
-  pollMs?: number;
+  /** Clipboard writer (replaceable in tests). */
+  copy?: (text: string) => Promise<void>;
+}
+
+/** What the window keeps per session: its rendered log and read position. */
+interface SessionView {
+  terminal: Terminal;
+  cursor: number;
+  rx: number;
+  tx: number;
+  reading: boolean;
+  /** A change arrived while reading: read again afterwards. */
+  again: boolean;
+  /** The end of the session was reported. */
+  ended: boolean;
 }
 
 const nowUs = () => Date.now() * 1000;
 
-export function App({ backend, lang, pollMs = 30 }: Props) {
+const defaultCopy = (text: string) => navigator.clipboard.writeText(text);
+
+export function App({ backend, lang, copy = defaultCopy }: Props) {
   const t = strings(lang);
   const [ports, setPorts] = useState<PortInfo[]>([]);
   const [settings, setSettings] = useState<PortSettings>({
@@ -31,8 +48,8 @@ export function App({ backend, lang, pollMs = 30 }: Props) {
     stopBits: 1,
     flowControl: "none",
   });
-  const [session, setSession] = useState<SessionInfo | null>(null);
-  const [status, setStatus] = useState<SessionStateName>("closed");
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [activeId, setActiveId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [send, setSend] = useState<SendSettings>({ text: "", hex: false, ending: "crlf" });
@@ -40,10 +57,81 @@ export function App({ backend, lang, pollMs = 30 }: Props) {
   const [hexView, setHexView] = useState(false);
   const [showSent, setShowSent] = useState(true);
   const [autoScroll, setAutoScroll] = useState(true);
-  const [counts, setCounts] = useState({ rx: 0, tx: 0 });
-  const terminal = useRef(new Terminal());
+  const [mcp, setMcp] = useState<McpStatus | null>(null);
+  const [mcpOpen, setMcpOpen] = useState(false);
+  const views = useRef(new Map<number, SessionView>());
+  const hexRef = useRef(false);
   const [version, setVersion] = useState(0);
   const redraw = () => setVersion((v) => v + 1);
+
+  const viewOf = (id: number): SessionView => {
+    let view = views.current.get(id);
+    if (!view) {
+      const terminal = new Terminal();
+      terminal.setHex(hexRef.current);
+      view = { terminal, cursor: 0, rx: 0, tx: 0, reading: false, again: false, ended: false };
+      views.current.set(id, view);
+    }
+    return view;
+  };
+
+  /** Reads everything new of a session; overlapping calls are merged. */
+  const pull = useCallback(
+    async (id: number) => {
+      const view = viewOf(id);
+      if (view.reading) {
+        view.again = true;
+        return;
+      }
+      view.reading = true;
+      try {
+        for (;;) {
+          view.again = false;
+          const chunk = await backend.readLog(id, view.cursor, READ_BYTES);
+          if (views.current.get(id) !== view) return; // Closed meanwhile.
+          view.cursor = chunk.next;
+          if (chunk.missed > 0) view.terminal.info(t.missed(chunk.missed), nowUs());
+          view.terminal.push(chunk.entries);
+          for (const e of chunk.entries) {
+            if (e.kind === "rx") view.rx += e.data.length;
+            if (e.kind === "tx") view.tx += e.data.length;
+          }
+          if (chunk.missed > 0 || chunk.entries.length > 0) redraw();
+          if (chunk.entries.length > 0) continue;
+          if (chunk.state !== "open" && !view.ended) {
+            // Everything received before the port went away has been shown.
+            view.ended = true;
+            view.terminal.info(chunk.error ?? t.deviceGone, nowUs());
+            redraw();
+          }
+          if (!view.again) break;
+        }
+      } catch (e) {
+        setError(errorMessage(e));
+      } finally {
+        view.reading = false;
+      }
+    },
+    // viewOf and redraw only touch refs and state setters.
+    [backend, t],
+  );
+
+  const applySessions = useCallback(
+    (list: SessionInfo[]) => {
+      setSessions(list);
+      const ids = new Set(list.map((s) => s.id));
+      for (const id of views.current.keys()) {
+        if (!ids.has(id)) views.current.delete(id);
+      }
+      for (const s of list) {
+        if (!views.current.has(s.id)) void pull(s.id);
+      }
+      setActiveId((active) =>
+        active !== null && ids.has(active) ? active : (list.at(-1)?.id ?? null),
+      );
+    },
+    [pull],
+  );
 
   const refreshPorts = useCallback(async () => {
     try {
@@ -58,51 +146,38 @@ export function App({ backend, lang, pollMs = 30 }: Props) {
     }
   }, [backend]);
 
+  // Subscribe to backend changes, then load the current state.
   useEffect(() => {
-    void refreshPorts();
-  }, [refreshPorts]);
-
-  // Poll the session's log while it exists.
-  useEffect(() => {
-    if (!session) return undefined;
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let cursor = 0;
-    const tick = async () => {
+    let disposed = false;
+    const unlisteners: Unlisten[] = [];
+    const keep = (u: Unlisten) => (disposed ? u() : unlisteners.push(u));
+    const start = async () => {
       try {
-        const chunk = await backend.readLog(session.id, cursor, READ_BYTES);
-        if (cancelled) return;
-        cursor = chunk.next;
-        if (chunk.missed > 0) terminal.current.info(t.missed(chunk.missed), nowUs());
-        if (chunk.entries.length > 0) {
-          terminal.current.push(chunk.entries);
-          let rx = 0;
-          let tx = 0;
-          for (const e of chunk.entries) {
-            if (e.kind === "rx") rx += e.data.length;
-            if (e.kind === "tx") tx += e.data.length;
-          }
-          setCounts((c) => ({ rx: c.rx + rx, tx: c.tx + tx }));
-        }
-        if (chunk.missed > 0 || chunk.entries.length > 0) redraw();
-        if (chunk.state !== "open" && chunk.entries.length === 0) {
-          // Everything received before the port went away has been shown.
-          setStatus(chunk.state);
-          terminal.current.info(chunk.error ?? t.deviceGone, nowUs());
-          redraw();
-          return;
-        }
-        timer = setTimeout(() => void tick(), chunk.entries.length > 0 ? 0 : pollMs);
+        keep(await backend.onSessionsChanged(applySessions));
+        keep(
+          await backend.onLogChanged((ids) => {
+            for (const id of ids) void pull(id);
+          }),
+        );
+        const list = await backend.listSessions();
+        if (!disposed) applySessions(list);
+        const status = await backend.mcpStatus();
+        if (!disposed) setMcp(status);
       } catch (e) {
-        if (!cancelled) setError(errorMessage(e));
+        if (!disposed) setError(errorMessage(e));
       }
     };
-    void tick();
+    void start();
+    void refreshPorts();
     return () => {
-      cancelled = true;
-      clearTimeout(timer);
+      disposed = true;
+      for (const u of unlisteners) u();
     };
-  }, [backend, session, pollMs, t]);
+  }, [backend, applySessions, pull, refreshPorts]);
+
+  const active = sessions.find((s) => s.id === activeId) ?? null;
+  const activeView = activeId !== null ? views.current.get(activeId) : undefined;
+  const portSession = sessions.find((s) => s.port === settings.port) ?? null;
 
   const open = async () => {
     const baudRate = Number(settings.baudRate);
@@ -120,9 +195,9 @@ export function App({ backend, lang, pollMs = 30 }: Props) {
         stopBits: settings.stopBits,
         flowControl: settings.flowControl,
       });
-      setSession(opened);
-      setStatus(opened.state);
-      setCounts({ rx: 0, tx: 0 });
+      setSessions((list) => (list.some((s) => s.id === opened.id) ? list : [...list, opened]));
+      setActiveId(opened.id);
+      void pull(opened.id);
       setError(null);
     } catch (e) {
       setError(errorMessage(e));
@@ -131,24 +206,22 @@ export function App({ backend, lang, pollMs = 30 }: Props) {
     }
   };
 
-  const close = async () => {
-    if (!session) return;
+  const close = async (id: number) => {
     setBusy(true);
     try {
-      await backend.closeSession(session.id);
+      await backend.closeSession(id);
       setError(null);
     } catch (e) {
       // The session is gone either way; report why closing failed.
       setError(errorMessage(e));
     } finally {
-      setSession(null);
-      setStatus("closed");
+      applySessions(sessions.filter((s) => s.id !== id));
       setBusy(false);
     }
   };
 
   const sendData = async () => {
-    if (!session) return;
+    if (!active) return;
     let data: Uint8Array;
     try {
       data = encodeInput(send.text, send.hex, send.ending);
@@ -157,7 +230,7 @@ export function App({ backend, lang, pollMs = 30 }: Props) {
       return;
     }
     try {
-      await backend.writeData(session.id, data);
+      await backend.writeData(active.id, data);
       setError(null);
     } catch (e) {
       setError(errorMessage(e));
@@ -165,23 +238,36 @@ export function App({ backend, lang, pollMs = 30 }: Props) {
   };
 
   const toggleHexView = (hex: boolean) => {
+    hexRef.current = hex;
     setHexView(hex);
-    terminal.current.setHex(hex);
+    for (const view of views.current.values()) view.terminal.setHex(hex);
     redraw();
   };
 
   const clear = () => {
-    terminal.current.clear();
-    setCounts({ rx: 0, tx: 0 });
+    if (!activeView) return;
+    activeView.terminal.clear();
+    activeView.rx = 0;
+    activeView.tx = 0;
     redraw();
   };
 
-  const statusText = {
-    open: t.statusOpen,
-    disconnected: t.statusDisconnected,
-    closed: t.statusClosed,
-    failed: t.statusFailed,
-  }[status];
+  const mcpCall = async (call: () => Promise<McpStatus>) => {
+    try {
+      setMcp(await call());
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  };
+
+  const statusText = active
+    ? {
+        open: t.statusOpen,
+        disconnected: t.statusDisconnected,
+        closed: t.statusClosed,
+        failed: t.statusFailed,
+      }[active.state]
+    : t.statusClosed;
 
   return (
     <div className="app">
@@ -191,10 +277,10 @@ export function App({ backend, lang, pollMs = 30 }: Props) {
         settings={settings}
         onChange={setSettings}
         onRefresh={() => void refreshPorts()}
-        connected={session !== null}
+        connected={portSession !== null}
         busy={busy}
         onOpen={() => void open()}
-        onClose={() => void close()}
+        onClose={() => portSession && void close(portSession.id)}
       />
       <div className="bar options">
         <label>
@@ -229,12 +315,39 @@ export function App({ backend, lang, pollMs = 30 }: Props) {
           />
           {t.autoScroll}
         </label>
-        <button type="button" onClick={clear}>
+        <button type="button" onClick={clear} disabled={!activeView}>
           {t.clear}
         </button>
+        <span className="spacer" />
+        <button
+          type="button"
+          className="mcp-toggle"
+          aria-expanded={mcpOpen}
+          onClick={() => setMcpOpen((o) => !o)}
+        >
+          <span className={`dot ${mcp?.running ? "open" : "closed"}`} aria-hidden="true" />
+          {t.mcp}
+        </button>
       </div>
+      {mcpOpen && mcp && (
+        <McpPanel
+          t={t}
+          status={mcp}
+          onApply={(s: McpSettings) => void mcpCall(() => backend.mcpApply(s))}
+          onRegenerate={() => void mcpCall(() => backend.mcpRegenerateToken())}
+          copy={copy}
+        />
+      )}
+      <SessionTabs
+        t={t}
+        sessions={sessions}
+        activeId={activeId}
+        onSelect={setActiveId}
+        onClose={(id) => void close(id)}
+      />
       <LogView
-        lines={terminal.current.view}
+        key={activeId ?? 0}
+        lines={activeView?.terminal.view ?? []}
         showTimestamps={showTimestamps}
         showSent={showSent}
         autoScroll={autoScroll}
@@ -244,16 +357,16 @@ export function App({ backend, lang, pollMs = 30 }: Props) {
         t={t}
         settings={send}
         onChange={setSend}
-        enabled={status === "open"}
+        enabled={active?.state === "open"}
         onSend={() => void sendData()}
       />
       <div className="bar status" role="status">
-        <span className={`state ${status}`}>
-          {session ? `${session.port} · ` : ""}
+        <span className={`state ${active?.state ?? "closed"}`}>
+          {active ? `${active.port} · ` : ""}
           {statusText}
         </span>
         <span>
-          {t.rxBytes} {counts.rx} · {t.txBytes} {counts.tx}
+          {t.rxBytes} {activeView?.rx ?? 0} · {t.txBytes} {activeView?.tx ?? 0}
         </span>
         {error && <span className="error">{error}</span>}
       </div>

@@ -17,11 +17,15 @@ path = "src/main.rs"
 
 [dependencies]
 serialx-core.workspace = true
+serialx-mcp.workspace = true
 tauri.workspace = true
 serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["net", "sync", "time"] }
+tokio-util.workspace = true
 
 [dev-dependencies]
-serde_json.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "io-util"] }
 
 [build-dependencies]
 tauri-build.workspace = true

@@ -53,6 +53,10 @@ ports. Plan of record: the "AI 串口助手 · 开工前计划" doc.
 - `app/` — desktop app (Tauri 2 + React/TypeScript, Vite, Vitest)
   - `src-tauri/src/commands.rs` — everything the UI can ask for, tested with mock devices;
     `lib.rs` only forwards IPC calls to it
+  - `src-tauri/src/mcp.rs` — embedded MCP server on the same `SessionManager`
+    (127.0.0.1, port fallback, settings in `mcp.json` via `settings.rs`)
+  - `src-tauri/src/watch.rs` — change detection; the window gets `sessions-changed` /
+    `log-changed` events and reads new entries itself (no IPC polling)
   - `src/terminal.ts` — log entries to display lines (text/hex, line breaks, UTF-8)
   - `src/App.tsx` + `src/components/` — UI; tests use a fake `Backend`
   - Frontend gate: `npm run typecheck`, `npm run coverage` (≥ 85% lines), `npm run build`
