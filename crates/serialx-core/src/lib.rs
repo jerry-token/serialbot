@@ -6,6 +6,7 @@
 //! mode all talk to the device only through this crate.
 
 pub mod log;
+pub mod transport;
 
 pub use log::{
     Cursor, Direction, ENTRY_OVERHEAD, Entry, EntryKind, LogBuffer, LogError, ReadResult,
