@@ -201,3 +201,44 @@ fn closing_the_peer_is_reported_as_disconnected() {
         Err(TransportError::Disconnected)
     ));
 }
+
+#[test]
+fn live_baud_change_and_break_work_on_a_pty() {
+    let Some(pair) = virtual_pair("ctl") else {
+        return;
+    };
+    let mut a = open(&pair.a);
+    let mut b = open(&pair.b);
+    a.control.set_baud_rate(921_600).unwrap();
+    a.control.send_break(Duration::from_millis(10)).unwrap();
+    assert!(matches!(
+        a.control.set_baud_rate(0),
+        Err(TransportError::InvalidConfig(_))
+    ));
+    // The port keeps working after the changes.
+    a.control.write_all(b"still alive").unwrap();
+    assert_eq!(
+        read_exact(&mut b, 11, Duration::from_secs(5)),
+        b"still alive"
+    );
+}
+
+#[test]
+fn modem_lines_on_a_pty_are_reported_as_unsupported() {
+    let Some(pair) = virtual_pair("lines") else {
+        return;
+    };
+    let mut a = open(&pair.a);
+    assert!(matches!(
+        a.control.set_dtr(true),
+        Err(TransportError::Unsupported(_))
+    ));
+    assert!(matches!(
+        a.control.set_rts(false),
+        Err(TransportError::Unsupported(_))
+    ));
+    assert!(matches!(
+        a.control.line_states(),
+        Err(TransportError::Unsupported(_))
+    ));
+}

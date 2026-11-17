@@ -301,6 +301,24 @@ fn map_error(e: serialport::Error) -> TransportError {
     }
 }
 
+/// Maps errors from DTR/RTS/CTS/DSR/RI/CD calls.
+///
+/// Ports without modem lines (PTYs, many virtual and Bluetooth ports) fail
+/// these ioctls with `ENOTTY`. `serialport` keeps only the errno's text, so
+/// it is recognised by the fixed English descriptions `nix` uses for it
+/// (these are compile-time strings, not localized OS messages).
+fn map_modem_error(e: serialport::Error) -> TransportError {
+    let not_a_tty = matches!(
+        e.description.as_str(),
+        "Not a typewriter" | "Inappropriate ioctl for device"
+    );
+    if matches!(e.kind, serialport::ErrorKind::Unknown) && not_a_tty {
+        TransportError::Unsupported("modem control lines (DTR/RTS/CTS/DSR/RI/CD)")
+    } else {
+        map_error(e)
+    }
+}
+
 /// Classifies an I/O error from reading or writing an open port.
 fn map_io_error(e: io::Error) -> TransportError {
     match e.kind() {
@@ -380,19 +398,21 @@ impl TransportControl for SerialControl {
     fn set_dtr(&mut self, level: bool) -> Result<(), TransportError> {
         self.port
             .write_data_terminal_ready(level)
-            .map_err(map_error)
+            .map_err(map_modem_error)
     }
 
     fn set_rts(&mut self, level: bool) -> Result<(), TransportError> {
-        self.port.write_request_to_send(level).map_err(map_error)
+        self.port
+            .write_request_to_send(level)
+            .map_err(map_modem_error)
     }
 
     fn line_states(&mut self) -> Result<LineStates, TransportError> {
         Ok(LineStates {
-            cts: self.port.read_clear_to_send().map_err(map_error)?,
-            dsr: self.port.read_data_set_ready().map_err(map_error)?,
-            ri: self.port.read_ring_indicator().map_err(map_error)?,
-            cd: self.port.read_carrier_detect().map_err(map_error)?,
+            cts: self.port.read_clear_to_send().map_err(map_modem_error)?,
+            dsr: self.port.read_data_set_ready().map_err(map_modem_error)?,
+            ri: self.port.read_ring_indicator().map_err(map_modem_error)?,
+            cd: self.port.read_carrier_detect().map_err(map_modem_error)?,
         })
     }
 
@@ -554,6 +574,26 @@ mod tests {
         assert!(matches!(
             map_error(err(K::Io(io::ErrorKind::TimedOut), "x")),
             TransportError::Io(ref e) if e.kind() == io::ErrorKind::TimedOut
+        ));
+    }
+
+    #[test]
+    fn missing_modem_lines_are_unsupported_not_io_errors() {
+        use serialport::ErrorKind as K;
+        for desc in ["Not a typewriter", "Inappropriate ioctl for device"] {
+            assert!(matches!(
+                map_modem_error(err(K::Unknown, desc)),
+                TransportError::Unsupported(_)
+            ));
+        }
+        // Other failures keep their normal classification.
+        assert!(matches!(
+            map_modem_error(err(K::NoDevice, "")),
+            TransportError::Disconnected
+        ));
+        assert!(matches!(
+            map_modem_error(err(K::Unknown, "something else")),
+            TransportError::Io(_)
         ));
     }
 
