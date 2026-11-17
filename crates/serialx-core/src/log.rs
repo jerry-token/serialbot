@@ -276,7 +276,7 @@ mod tests {
     fn empty_buffer_reads_nothing() {
         let log = LogBuffer::new(1024).unwrap();
         let r = log.read(Cursor(0), usize::MAX).unwrap();
-        assert!(r.entries.is_empty());
+        assert_eq!(r.entries, []);
         assert_eq!(r.next, Cursor(0));
         assert_eq!(r.missed, 0);
         assert_eq!(log.start(), log.end());
@@ -308,7 +308,7 @@ mod tests {
         assert_eq!(payloads(&second), vec![b"cd".to_vec(), b"ef".to_vec()]);
 
         let third = log.read(second.next, usize::MAX).unwrap();
-        assert!(third.entries.is_empty());
+        assert_eq!(third.entries, []);
         assert_eq!(third.next, second.next);
     }
 
@@ -391,7 +391,7 @@ mod tests {
             LogError::CursorAhead { cursor: 5, next: 1 }
         );
         // The end cursor itself is valid and simply reads nothing.
-        assert!(log.read(log.end(), 10).unwrap().entries.is_empty());
+        assert_eq!(log.read(log.end(), 10).unwrap().entries, []);
     }
 
     #[test]
