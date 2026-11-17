@@ -13,7 +13,7 @@ use serialx_core::transport::serial::{
     DataBits, FlowControl, Parity, PortInfo, PortKind, SerialConfig, StopBits,
 };
 use serialx_core::{
-    Cursor, Direction, EntryKind, SessionId, SessionManager, SessionState, SessionSummary,
+    Cursor, Direction, EntryKind, Session, SessionId, SessionManager, SessionState, SessionSummary,
 };
 pub use serialx_mcp::PortLister;
 
@@ -221,6 +221,42 @@ pub struct LogChunk {
     pub error: Option<String>,
 }
 
+/// Modem line levels of a session for the status bar.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignalsDto {
+    /// Session number.
+    pub id: u32,
+    /// DTR level last set (`null`: not set in this session).
+    pub dtr: Option<bool>,
+    /// RTS level last set (`null`: not set in this session).
+    pub rts: Option<bool>,
+    /// Clear To Send (`null`: the port cannot report input lines).
+    pub cts: Option<bool>,
+    /// Data Set Ready.
+    pub dsr: Option<bool>,
+    /// Ring Indicator.
+    pub ri: Option<bool>,
+    /// Carrier Detect.
+    pub cd: Option<bool>,
+}
+
+/// Reads the line levels of `session`; input lines are `None` when they
+/// cannot be read (closed session, PTY, unsupported adapter).
+pub fn signals_dto(session: &Session) -> SignalsDto {
+    let outputs = session.output_signals();
+    let lines = session.line_states().ok();
+    SignalsDto {
+        id: session.id().0,
+        dtr: outputs.dtr,
+        rts: outputs.rts,
+        cts: lines.map(|l| l.cts),
+        dsr: lines.map(|l| l.dsr),
+        ri: lines.map(|l| l.ri),
+        cd: lines.map(|l| l.cd),
+    }
+}
+
 /// Backend state shared by all windows.
 pub struct AppState {
     manager: Arc<SessionManager>,
@@ -347,6 +383,30 @@ impl AppState {
             state,
             error,
         })
+    }
+
+    /// Current line levels of a session.
+    pub fn signals(&self, id: u32) -> Result<SignalsDto, String> {
+        let session = self.manager.get(SessionId(id)).map_err(|e| e.to_string())?;
+        Ok(signals_dto(&session))
+    }
+
+    /// Drives DTR and/or RTS (`None` leaves a line unchanged), then returns
+    /// the line levels.
+    pub fn set_signals(
+        &self,
+        id: u32,
+        dtr: Option<bool>,
+        rts: Option<bool>,
+    ) -> Result<SignalsDto, String> {
+        let session = self.manager.get(SessionId(id)).map_err(|e| e.to_string())?;
+        if let Some(level) = dtr {
+            session.set_dtr(level).map_err(|e| e.to_string())?;
+        }
+        if let Some(level) = rts {
+            session.set_rts(level).map_err(|e| e.to_string())?;
+        }
+        Ok(signals_dto(&session))
     }
 
     /// Closes every session (on app exit).
@@ -518,6 +578,57 @@ mod tests {
         assert_eq!(first.next, 1);
         assert_eq!(first.missed, 0);
         assert!(app.read(1, 99, 1).unwrap_err().contains("ahead"));
+    }
+
+    #[test]
+    fn signals_are_set_and_read() {
+        let (app, devices) = state();
+        app.open(&request("mock0")).unwrap();
+        let device = devices.lock().unwrap()["mock0"].clone();
+        device.set_line_states(serialx_core::transport::LineStates {
+            cts: true,
+            dsr: true,
+            ri: false,
+            cd: false,
+        });
+        let read = app.signals(1).unwrap();
+        assert_eq!(
+            read,
+            SignalsDto {
+                id: 1,
+                dtr: None,
+                rts: None,
+                cts: Some(true),
+                dsr: Some(true),
+                ri: Some(false),
+                cd: Some(false)
+            }
+        );
+        let set = app.set_signals(1, Some(true), None).unwrap();
+        assert_eq!((set.dtr, set.rts), (Some(true), None));
+        let set = app.set_signals(1, None, Some(false)).unwrap();
+        assert_eq!((set.dtr, set.rts), (Some(true), Some(false)));
+        assert!(device.dtr() && !device.rts());
+        assert!(app.signals(9).unwrap_err().contains("no session"));
+        assert!(app.set_signals(9, Some(true), None).is_err());
+
+        device.disconnect();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while app.read(1, 0, 1).unwrap().state == "open" {
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(app.signals(1).unwrap().cts, None, "unreadable once gone");
+        assert!(
+            app.set_signals(1, None, Some(true))
+                .unwrap_err()
+                .contains("Disconnected")
+        );
+        assert!(
+            app.set_signals(1, Some(true), None)
+                .unwrap_err()
+                .contains("Disconnected")
+        );
     }
 
     #[test]

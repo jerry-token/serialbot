@@ -46,7 +46,7 @@ const REGEX_SIZE_LIMIT: usize = 1 << 20;
 const INSTRUCTIONS: &str = "Drives serial ports opened in serialx. \
 Use port.list to find ports, session.open to open one (or session.list to \
 reuse an open session), then io.write / io.read / io.wait_for / \
-io.send_and_expect. Every log entry has a sequence number; pass the \
+io.send_and_expect, and io.signals for DTR/RTS. Every log entry has a sequence number; pass the \
 `cursor` a result returns to the next call so nothing is read twice. \
 io.write returns the cursor taken just before sending: pass it to \
 io.wait_for to catch replies that arrive very fast.";
@@ -184,6 +184,19 @@ pub(crate) struct WaitArgs {
     pub format: Format,
 }
 
+/// Arguments of `io.signals`.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub(crate) struct SignalsArgs {
+    /// Session id or alias.
+    pub session: String,
+    /// New DTR level; omit to leave it unchanged.
+    #[serde(default)]
+    pub dtr: Option<bool>,
+    /// New RTS level; omit to leave it unchanged.
+    #[serde(default)]
+    pub rts: Option<bool>,
+}
+
 /// Arguments of `io.send_and_expect`.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct SendExpectArgs {
@@ -318,6 +331,25 @@ pub(crate) struct ReadOut {
     pub missed: u64,
     /// Whether more entries are already available after `cursor`.
     pub more: bool,
+}
+
+/// Result of `io.signals`.
+#[derive(Debug, Serialize, JsonSchema)]
+pub(crate) struct SignalsOut {
+    /// DTR level last set in this session (null: never set).
+    pub dtr: Option<bool>,
+    /// RTS level last set in this session (null: never set).
+    pub rts: Option<bool>,
+    /// Clear To Send (null: cannot be read on this port).
+    pub cts: Option<bool>,
+    /// Data Set Ready.
+    pub dsr: Option<bool>,
+    /// Ring Indicator.
+    pub ri: Option<bool>,
+    /// Carrier Detect.
+    pub cd: Option<bool>,
+    /// Why the input lines could not be read, if they could not.
+    pub input_error: Option<String>,
 }
 
 /// Result of `io.wait_for` and `io.send_and_expect`.
@@ -625,6 +657,45 @@ impl SerialTools {
                 .wait_for(&pattern, from, timeout, DEFAULT_MATCH_WINDOW)
                 .map_err(|e| e.to_string())?;
             Ok(Json(WaitOut::from_result(found, from, format)))
+        })
+        .await
+    }
+
+    #[tool(
+        name = "io.signals",
+        description = "Set DTR and/or RTS (omit both to only read) and read CTS/DSR/RI/CD. DTR/RTS changes are logged as markers. Chip reset or boot-mode sequences are up to the caller.",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true
+        )
+    )]
+    async fn io_signals(
+        &self,
+        Parameters(args): Parameters<SignalsArgs>,
+    ) -> Result<Json<SignalsOut>, String> {
+        let session = self.session(&args.session)?;
+        blocking(move || {
+            if let Some(level) = args.dtr {
+                session.set_dtr(level).map_err(|e| e.to_string())?;
+            }
+            if let Some(level) = args.rts {
+                session.set_rts(level).map_err(|e| e.to_string())?;
+            }
+            let outputs = session.output_signals();
+            let (lines, input_error) = match session.line_states() {
+                Ok(l) => (Some(l), None),
+                Err(e) => (None, Some(e.to_string())),
+            };
+            Ok(Json(SignalsOut {
+                dtr: outputs.dtr,
+                rts: outputs.rts,
+                cts: lines.map(|l| l.cts),
+                dsr: lines.map(|l| l.dsr),
+                ri: lines.map(|l| l.ri),
+                cd: lines.map(|l| l.cd),
+                input_error,
+            }))
         })
         .await
     }

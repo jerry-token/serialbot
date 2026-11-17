@@ -161,6 +161,7 @@ async fn lists_the_curated_tools_with_annotations() {
         [
             "io.read",
             "io.send_and_expect",
+            "io.signals",
             "io.wait_for",
             "io.write",
             "port.list",
@@ -284,6 +285,74 @@ async fn open_write_read_round_trip() {
     let sessions = ok(&client, "session.list", json!({})).await;
     assert_eq!(sessions["sessions"][0]["id"], "s1");
     assert_eq!(sessions["sessions"][0]["port"], "mock0");
+    client.cancel().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn signals_are_set_read_and_logged() {
+    let h = Harness::start().await;
+    let client = h.client().await;
+    ok(&client, "session.open", json!({"port": "mock0"})).await;
+    let device = h.device("mock0");
+    device.set_line_states(serialx_core::transport::LineStates {
+        cts: true,
+        dsr: false,
+        ri: false,
+        cd: true,
+    });
+    let read = ok(&client, "io.signals", json!({"session": "s1"})).await;
+    assert_eq!(read["dtr"], Value::Null, "never set");
+    assert_eq!(read["cts"], true);
+    assert_eq!(read["cd"], true);
+    assert_eq!(read["input_error"], Value::Null);
+
+    let set = ok(
+        &client,
+        "io.signals",
+        json!({"session": "s1", "dtr": false, "rts": true}),
+    )
+    .await;
+    assert_eq!(set["dtr"], false);
+    assert_eq!(set["rts"], true);
+    assert!(!device.dtr() && device.rts());
+    let log = ok(&client, "io.read", json!({"session": "s1"})).await;
+    let markers: Vec<&str> = log["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["data"].as_str().unwrap())
+        .collect();
+    assert_eq!(markers, ["DTR=0", "RTS=1"]);
+
+    device.disconnect();
+    for _ in 0..200 {
+        if ok(&client, "session.list", json!({})).await["sessions"][0]["state"] == "disconnected" {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(
+        err(
+            &client,
+            "io.signals",
+            json!({"session": "s1", "rts": false})
+        )
+        .await
+        .contains("Disconnected")
+    );
+    let read = ok(&client, "io.signals", json!({"session": "s1"})).await;
+    assert_eq!(read["cts"], Value::Null);
+    assert!(
+        read["input_error"]
+            .as_str()
+            .unwrap()
+            .contains("Disconnected")
+    );
+    assert!(
+        err(&client, "io.signals", json!({"session": "nope"}))
+            .await
+            .contains("no session")
+    );
     client.cancel().await.unwrap();
 }
 

@@ -12,6 +12,7 @@ import type {
   PortInfo,
   SessionInfo,
   SessionStateName,
+  SignalsInfo,
 } from "./api";
 
 const PORTS: PortInfo[] = [
@@ -63,6 +64,9 @@ class FakeBackend implements Backend {
     url: null,
     error: null,
   };
+  lines: Record<number, SignalsInfo> = {};
+  failSignals = false;
+  signalListeners = new Set<(s: SignalsInfo) => void>();
   sessionListeners = new Set<(s: SessionInfo[]) => void>();
   logListeners = new Set<(ids: number[]) => void>();
   private nextId = 1;
@@ -126,6 +130,39 @@ class FakeBackend implements Backend {
   async onLogChanged(handler: (ids: number[]) => void) {
     this.logListeners.add(handler);
     return () => this.logListeners.delete(handler);
+  }
+
+  async signals(id: number) {
+    if (this.failSignals) throw "not supported by this transport: modem lines";
+    return this.linesOf(id);
+  }
+
+  async setSignals(id: number, levels: { dtr?: boolean; rts?: boolean }) {
+    const session = this.sessions.get(id);
+    if (session?.info.state !== "open") throw "session is Disconnected";
+    const lines = { ...this.linesOf(id), ...levels };
+    this.lines[id] = lines;
+    return lines;
+  }
+
+  async onSignalsChanged(handler: (s: SignalsInfo) => void) {
+    this.signalListeners.add(handler);
+    return () => this.signalListeners.delete(handler);
+  }
+
+  /** The device changed its input lines. */
+  changeLines(id: number, levels: Partial<SignalsInfo>) {
+    this.lines[id] = { ...this.linesOf(id), ...levels };
+    const info = this.lines[id];
+    setTimeout(() => {
+      for (const l of this.signalListeners) l(info);
+    }, 0);
+  }
+
+  private linesOf(id: number): SignalsInfo {
+    return (
+      this.lines[id] ?? { id, dtr: null, rts: null, cts: false, dsr: false, ri: false, cd: null }
+    );
   }
 
   async mcpStatus() {
@@ -463,13 +500,54 @@ describe("App", () => {
     await waitFor(() => expect(log()).toHaveTextContent(/→ a.*→ b/));
   });
 
+  it("shows and drives the modem lines of the selected session", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    const dtr = screen.getByRole("button", { name: /^DTR/ });
+    const rts = screen.getByRole("button", { name: /^RTS/ });
+    await waitFor(() => expect(screen.getByRole("img", { name: /^CTS.*: 0$/ })).toBeInTheDocument());
+    expect(screen.getByRole("img", { name: /^CD.*: unknown$/ })).toBeInTheDocument();
+    expect(dtr).toHaveAttribute("aria-pressed", "false");
+    expect(dtr).toHaveAttribute("title", expect.stringContaining("unknown"));
+
+    await user.click(dtr);
+    await waitFor(() => expect(dtr).toHaveAttribute("aria-pressed", "true"));
+    expect(backend.lines[1]?.dtr).toBe(true);
+    await user.click(dtr);
+    await waitFor(() => expect(dtr).toHaveAttribute("aria-pressed", "false"));
+    expect(backend.lines[1]?.dtr).toBe(false);
+    await user.click(rts);
+    await waitFor(() => expect(backend.lines[1]?.rts).toBe(true));
+
+    act(() => backend.changeLines(1, { cts: true }));
+    await waitFor(() => expect(screen.getByRole("img", { name: /^CTS.*: 1$/ })).toBeInTheDocument());
+
+    act(() => backend.setState(1, "disconnected"));
+    await waitFor(() => expect(dtr).toBeDisabled());
+  });
+
+  it("reports modem line errors", async () => {
+    const backend = new FakeBackend();
+    backend.failSignals = true;
+    const { user } = setup(backend);
+    await openPort(user);
+    await waitFor(() => expect(status()).toHaveTextContent("modem lines"));
+    backend.failSignals = false;
+    backend.sessions.get(1)!.info = { ...backend.sessions.get(1)!.info, state: "failed" };
+    // Setting fails once the session is no longer open on the backend side.
+    await user.click(screen.getByRole("button", { name: /^DTR/ }));
+    await waitFor(() => expect(status()).toHaveTextContent("session is Disconnected"));
+  });
+
   it("stops listening when closed", async () => {
     const { backend, view } = setup();
-    await waitFor(() => expect(backend.logListeners.size).toBe(1));
+    await waitFor(() => expect(backend.signalListeners.size).toBe(1));
     expect(backend.sessionListeners.size).toBe(1);
+    expect(backend.logListeners.size).toBe(1);
     view.unmount();
     expect(backend.logListeners.size).toBe(0);
     expect(backend.sessionListeners.size).toBe(0);
+    expect(backend.signalListeners.size).toBe(0);
   });
 });
 

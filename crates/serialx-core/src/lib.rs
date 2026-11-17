@@ -16,4 +16,6 @@ pub use log::{
     Cursor, Direction, ENTRY_OVERHEAD, Entry, EntryKind, LogBuffer, LogError, ReadResult,
 };
 pub use manager::{ManagerError, SessionManager, SessionSummary};
-pub use session::{Session, SessionError, SessionId, SessionOptions, SessionState, WaitMatch};
+pub use session::{
+    OutputSignals, Session, SessionError, SessionId, SessionOptions, SessionState, WaitMatch,
+};
