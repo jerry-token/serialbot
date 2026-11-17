@@ -90,12 +90,12 @@ pub(crate) mod tests {
     pub(crate) struct TempDir(pub(crate) PathBuf);
 
     impl TempDir {
+        /// `name` must be unique among the tests; the process id keeps
+        /// parallel test runs apart. Only characters valid on every OS.
         pub(crate) fn new(name: &str) -> Self {
-            let dir = std::env::temp_dir().join(format!(
-                "serialx-test-{name}-{}-{:?}",
-                std::process::id(),
-                std::time::SystemTime::now()
-            ));
+            let dir =
+                std::env::temp_dir().join(format!("serialx-test-{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
             std::fs::create_dir_all(&dir).unwrap();
             Self(dir)
         }
