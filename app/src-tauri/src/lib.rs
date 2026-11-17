@@ -6,7 +6,8 @@
 //! main thread (`async`) so that opening a slow port never freezes the
 //! window. Changes reach the window as events (see [`watch`]):
 //! `sessions-changed` carries the session list, `log-changed` the ids of
-//! sessions with new log entries.
+//! sessions with new log entries, `signals-changed` the line levels of one
+//! session.
 
 pub mod commands;
 pub mod mcp;
@@ -25,6 +26,10 @@ use tauri::{Emitter, Manager};
 /// How often the change detector runs (about 60 times a second).
 const WATCH_INTERVAL: Duration = Duration::from_millis(16);
 
+/// Line levels are read every this many watch ticks (about 10 times a
+/// second), because reading them may cost a USB round trip.
+const SIGNAL_TICKS: u32 = 6;
+
 /// Thin IPC wrappers. Tauri hands command arguments over by value, and
 /// async commands that borrow state must return `Result`.
 #[allow(
@@ -33,7 +38,7 @@ const WATCH_INTERVAL: Duration = Duration::from_millis(16);
     reason = "signatures required by tauri::command"
 )]
 mod ipc {
-    use super::commands::{AppState, LogChunk, OpenRequest, PortDto, SessionDto};
+    use super::commands::{AppState, LogChunk, OpenRequest, PortDto, SessionDto, SignalsDto};
     use super::mcp::{McpController, McpStatus};
     use super::settings::McpSettings;
 
@@ -81,6 +86,24 @@ mod ipc {
         state.read(id, cursor, max_bytes)
     }
 
+    #[tauri::command(async)]
+    pub(crate) fn signals(
+        state: tauri::State<'_, AppState>,
+        id: u32,
+    ) -> Result<SignalsDto, String> {
+        state.signals(id)
+    }
+
+    #[tauri::command(async)]
+    pub(crate) fn set_signals(
+        state: tauri::State<'_, AppState>,
+        id: u32,
+        dtr: Option<bool>,
+        rts: Option<bool>,
+    ) -> Result<SignalsDto, String> {
+        state.set_signals(id, dtr, rts)
+    }
+
     #[tauri::command]
     pub(crate) async fn mcp_status(
         mcp: tauri::State<'_, McpController>,
@@ -116,6 +139,7 @@ impl Watcher {
         let flag = Arc::clone(&stop);
         let thread = std::thread::spawn(move || {
             let mut detector = watch::ChangeDetector::default();
+            let mut tick = 0u32;
             while !flag.load(Ordering::Relaxed) {
                 let changes = detector.poll(&manager);
                 // Emitting fails only while the window is gone; the window
@@ -126,6 +150,12 @@ impl Watcher {
                 if !changes.logs.is_empty() {
                     let _ = handle.emit("log-changed", changes.logs);
                 }
+                if tick.is_multiple_of(SIGNAL_TICKS) {
+                    for signals in detector.poll_signals(&manager) {
+                        let _ = handle.emit("signals-changed", signals);
+                    }
+                }
+                tick = tick.wrapping_add(1);
                 std::thread::sleep(WATCH_INTERVAL);
             }
         });
@@ -186,6 +216,8 @@ pub fn run() -> Result<(), tauri::Error> {
             ipc::close_session,
             ipc::write_data,
             ipc::read_log,
+            ipc::signals,
+            ipc::set_signals,
             ipc::mcp_status,
             ipc::mcp_apply,
             ipc::mcp_regenerate_token

@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Backend, McpSettings, McpStatus, PortInfo, SessionInfo, Unlisten } from "./api";
+import type {
+  Backend,
+  McpSettings,
+  McpStatus,
+  PortInfo,
+  SessionInfo,
+  SignalsInfo,
+  Unlisten,
+} from "./api";
 import { errorMessage } from "./api";
 import { encodeInput } from "./bytes";
 import { ConnectionBar, type PortSettings } from "./components/ConnectionBar";
 import { LogView } from "./components/LogView";
 import { McpPanel } from "./components/McpPanel";
 import { SendBar, type SendSettings } from "./components/SendBar";
+import { SignalBar } from "./components/SignalBar";
 import { SessionTabs, Toggle } from "./components/SessionTabs";
 import { type Page, Sidebar } from "./components/Sidebar";
 import { ClearIcon } from "./components/icons";
@@ -61,6 +70,11 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
   const [autoScroll, setAutoScroll] = useState(true);
   const [mcp, setMcp] = useState<McpStatus | null>(null);
   const [page, setPage] = useState<Page>("terminal");
+  const [signals, setSignals] = useState<Record<number, SignalsInfo>>({});
+  const storeSignals = useCallback(
+    (info: SignalsInfo) => setSignals((all) => ({ ...all, [info.id]: info })),
+    [],
+  );
   const views = useRef(new Map<number, SessionView>());
   const hexRef = useRef(false);
   const [version, setVersion] = useState(0);
@@ -161,6 +175,7 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
             for (const id of ids) void pull(id);
           }),
         );
+        keep(await backend.onSignalsChanged(storeSignals));
         const list = await backend.listSessions();
         if (!disposed) applySessions(list);
         const status = await backend.mcpStatus();
@@ -175,9 +190,24 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
       disposed = true;
       for (const u of unlisteners) u();
     };
-  }, [backend, applySessions, pull, refreshPorts]);
+  }, [backend, applySessions, pull, refreshPorts, storeSignals]);
 
   const active = sessions.find((s) => s.id === activeId) ?? null;
+  const activeOpen = active?.state === "open";
+
+  // Show the line levels of the selected session right away; changes then
+  // arrive as events.
+  useEffect(() => {
+    if (activeId === null || !activeOpen) return;
+    backend.signals(activeId).then(storeSignals, (e: unknown) => setError(errorMessage(e)));
+  }, [backend, activeId, activeOpen, storeSignals]);
+
+  const setLines = (levels: { dtr?: boolean; rts?: boolean }) => {
+    if (!active) return;
+    backend
+      .setSignals(active.id, levels)
+      .then(storeSignals, (e: unknown) => setError(errorMessage(e)));
+  };
   const activeView = activeId !== null ? views.current.get(activeId) : undefined;
   const portSession = sessions.find((s) => s.port === settings.port) ?? null;
 
@@ -376,6 +406,14 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
           <span>
             {t.rxBytes} {activeView?.rx ?? 0} · {t.txBytes} {activeView?.tx ?? 0}
           </span>
+          {active && (
+            <SignalBar
+              t={t}
+              signals={signals[active.id] ?? null}
+              enabled={activeOpen}
+              onSet={setLines}
+            />
+          )}
           {error && <span className="error">{error}</span>}
           <span className="spacer" />
           <button type="button" className="link" onClick={() => setPage("ai")}>

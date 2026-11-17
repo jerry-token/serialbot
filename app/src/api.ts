@@ -53,6 +53,17 @@ export interface LogChunk {
   error: string | null;
 }
 
+/** Modem line levels; `null` = unknown (output never set / input unreadable). */
+export interface SignalsInfo {
+  id: number;
+  dtr: boolean | null;
+  rts: boolean | null;
+  cts: boolean | null;
+  dsr: boolean | null;
+  ri: boolean | null;
+  cd: boolean | null;
+}
+
 export interface McpSettings {
   enabled: boolean;
   /** Preferred port; the next free one of the following nine is used if taken. */
@@ -80,6 +91,11 @@ export interface Backend {
   onSessionsChanged(handler: (sessions: SessionInfo[]) => void): Promise<Unlisten>;
   /** Called with the ids of sessions that have new log entries or a new state. */
   onLogChanged(handler: (ids: number[]) => void): Promise<Unlisten>;
+  signals(id: number): Promise<SignalsInfo>;
+  /** Drives DTR and/or RTS; an omitted line is left unchanged. */
+  setSignals(id: number, levels: { dtr?: boolean; rts?: boolean }): Promise<SignalsInfo>;
+  /** Called when the line levels of an open session change. */
+  onSignalsChanged(handler: (signals: SignalsInfo) => void): Promise<Unlisten>;
   mcpStatus(): Promise<McpStatus>;
   mcpApply(settings: McpSettings): Promise<McpStatus>;
   mcpRegenerateToken(): Promise<McpStatus>;
@@ -96,6 +112,11 @@ export const tauriBackend: Backend = {
   onSessionsChanged: (handler) =>
     listen<SessionInfo[]>("sessions-changed", (event) => handler(event.payload)),
   onLogChanged: (handler) => listen<number[]>("log-changed", (event) => handler(event.payload)),
+  signals: (id) => invoke("signals", { id }),
+  setSignals: (id, levels) =>
+    invoke("set_signals", { id, dtr: levels.dtr ?? null, rts: levels.rts ?? null }),
+  onSignalsChanged: (handler) =>
+    listen<SignalsInfo>("signals-changed", (event) => handler(event.payload)),
   mcpStatus: () => invoke("mcp_status"),
   mcpApply: (settings) => invoke("mcp_apply", { settings }),
   mcpRegenerateToken: () => invoke("mcp_regenerate_token"),

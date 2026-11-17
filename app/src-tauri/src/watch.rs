@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 
 use serialx_core::SessionManager;
 
-use crate::commands::{SessionDto, session_dto};
+use crate::commands::{SessionDto, SignalsDto, session_dto, signals_dto};
 
 /// Changes since the previous poll.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -30,11 +30,12 @@ impl Changes {
     }
 }
 
-/// Remembers the last seen session list and log ends.
+/// Remembers the last seen session list, log ends and line levels.
 #[derive(Debug, Default)]
 pub struct ChangeDetector {
     sessions: Vec<SessionDto>,
     ends: BTreeMap<u32, (u64, &'static str)>,
+    signals: BTreeMap<u32, SignalsDto>,
 }
 
 impl ChangeDetector {
@@ -61,6 +62,31 @@ impl ChangeDetector {
             sessions
         });
         Changes { sessions, logs }
+    }
+
+    /// Line levels of open sessions that changed since the previous call
+    /// (including sessions seen for the first time).
+    ///
+    /// Reading input lines can cost a USB round trip, so the caller runs
+    /// this less often than [`ChangeDetector::poll`].
+    pub fn poll_signals(&mut self, manager: &SessionManager) -> Vec<SignalsDto> {
+        let mut seen = BTreeMap::new();
+        let mut changed = Vec::new();
+        for summary in manager.list() {
+            if summary.state != serialx_core::SessionState::Open {
+                continue;
+            }
+            let Ok(session) = manager.get(summary.id) else {
+                continue;
+            };
+            let dto = signals_dto(&session);
+            if self.signals.get(&dto.id) != Some(&dto) {
+                changed.push(dto.clone());
+            }
+            seen.insert(dto.id, dto);
+        }
+        self.signals = seen;
+        changed
     }
 }
 
@@ -137,5 +163,34 @@ mod tests {
         let changes = detector.poll(&manager);
         assert_eq!(changes.sessions, Some(Vec::new()));
         assert!(changes.logs.is_empty());
+    }
+
+    #[test]
+    fn reports_signal_changes_of_open_sessions() {
+        let (manager, device) = manager();
+        let mut detector = ChangeDetector::default();
+        assert!(detector.poll_signals(&manager).is_empty());
+        let session = manager
+            .open(&SerialConfig::new("mock0", 115_200), None)
+            .unwrap();
+        let first = detector.poll_signals(&manager);
+        assert_eq!(first.len(), 1, "a new session is reported");
+        assert_eq!(first[0].cts, Some(false));
+        assert!(detector.poll_signals(&manager).is_empty());
+
+        let dev = device.lock().unwrap().clone().unwrap();
+        dev.set_line_states(serialx_core::transport::LineStates {
+            cts: true,
+            ..Default::default()
+        });
+        assert_eq!(detector.poll_signals(&manager)[0].cts, Some(true));
+        session.set_rts(true).unwrap();
+        assert_eq!(detector.poll_signals(&manager)[0].rts, Some(true));
+
+        manager.close(SessionId(1)).unwrap();
+        assert!(
+            detector.poll_signals(&manager).is_empty(),
+            "closed sessions are skipped"
+        );
     }
 }

@@ -63,6 +63,15 @@ const en = {
   noSession: "No open port. Pick one above and press Open.",
   aiAssistantSoon: "Bo, the built-in AI assistant, will live here too.",
   mcpShort: (port: number | null) => (port === null ? "MCP off" : `MCP :${port}`),
+  signalHint: {
+    dtr: "DTR (Data Terminal Ready): click to toggle",
+    rts: "RTS (Request To Send): click to toggle",
+    cts: "CTS (Clear To Send)",
+    dsr: "DSR (Data Set Ready)",
+    ri: "RI (Ring Indicator)",
+    cd: "CD (Carrier Detect)",
+  },
+  signalUnknown: "unknown",
 };
 
 export type Strings = typeof en;
@@ -128,6 +137,15 @@ const zh: Strings = {
   noSession: "还没有打开串口。在上方选择端口后点「打开」。",
   aiAssistantSoon: "内置 AI 助手「小波」之后也会放在这里。",
   mcpShort: (port: number | null) => (port === null ? "MCP 未开启" : `MCP :${port}`),
+  signalHint: {
+    dtr: "DTR（数据终端就绪）：点击切换",
+    rts: "RTS（请求发送）：点击切换",
+    cts: "CTS（清除发送）",
+    dsr: "DSR（数据设备就绪）",
+    ri: "RI（振铃指示）",
+    cd: "CD（载波检测）",
+  },
+  signalUnknown: "未知",
 };
 
 export function strings(lang: Lang): Strings {

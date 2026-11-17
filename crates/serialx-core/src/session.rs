@@ -113,10 +113,21 @@ impl Shared {
     }
 }
 
+/// Levels last driven on the output lines; `None` until first set in this
+/// session (the level the OS chose at open is not known).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct OutputSignals {
+    /// Data Terminal Ready.
+    pub dtr: Option<bool>,
+    /// Request To Send.
+    pub rts: Option<bool>,
+}
+
 /// One open connection with its log and reader thread.
 pub struct Session {
     id: SessionId,
     alias: Mutex<Option<String>>,
+    outputs: Mutex<OutputSignals>,
     info: TransportInfo,
     shared: Arc<Shared>,
     control: Mutex<Box<dyn TransportControl>>,
@@ -160,6 +171,7 @@ impl Session {
         Ok(Self {
             id,
             alias: Mutex::new(None),
+            outputs: Mutex::new(OutputSignals::default()),
             info: connection.info,
             shared,
             control: Mutex::new(connection.control),
@@ -227,14 +239,26 @@ impl Session {
         Ok(seq)
     }
 
-    /// Drives DTR.
+    /// Drives DTR. On success the level is remembered and a `DTR=0`/`DTR=1`
+    /// marker is logged, so resets are visible in the timeline.
     pub fn set_dtr(&self, level: bool) -> Result<(), SessionError> {
-        self.with_control(|c| c.set_dtr(level))
+        self.with_control(|c| c.set_dtr(level))?;
+        lock(&self.outputs).dtr = Some(level);
+        self.mark(&format!("DTR={}", u8::from(level)));
+        Ok(())
     }
 
-    /// Drives RTS.
+    /// Drives RTS; remembered and logged like [`Session::set_dtr`].
     pub fn set_rts(&self, level: bool) -> Result<(), SessionError> {
-        self.with_control(|c| c.set_rts(level))
+        self.with_control(|c| c.set_rts(level))?;
+        lock(&self.outputs).rts = Some(level);
+        self.mark(&format!("RTS={}", u8::from(level)));
+        Ok(())
+    }
+
+    /// Levels last set with [`Session::set_dtr`] / [`Session::set_rts`].
+    pub fn output_signals(&self) -> OutputSignals {
+        *lock(&self.outputs)
     }
 
     /// Reads CTS/DSR/RI/CD.
@@ -743,6 +767,45 @@ mod tests {
         assert!(d.dtr() && d.rts());
         assert_eq!(d.baud_rate(), 921_600);
         assert_eq!(d.breaks().len(), 1);
+    }
+
+    #[test]
+    fn output_signals_are_remembered_and_logged() {
+        let (s, d, _c) = session();
+        assert_eq!(s.output_signals(), OutputSignals::default());
+        s.set_dtr(false).unwrap();
+        s.set_rts(true).unwrap();
+        assert_eq!(
+            s.output_signals(),
+            OutputSignals {
+                dtr: Some(false),
+                rts: Some(true)
+            }
+        );
+        assert!(!d.dtr() && d.rts());
+        let labels: Vec<String> = s
+            .read(Cursor(0), usize::MAX)
+            .unwrap()
+            .entries
+            .into_iter()
+            .map(|e| match e.kind {
+                EntryKind::Marker { label } => label,
+                other @ EntryKind::Data { .. } => panic!("unexpected {other:?}"),
+            })
+            .collect();
+        assert_eq!(labels, ["DTR=0", "RTS=1"]);
+    }
+
+    #[test]
+    fn failed_signal_changes_are_not_remembered() {
+        let (s, d, _c) = session();
+        d.disconnect();
+        while s.state() == SessionState::Open {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert!(s.set_dtr(true).is_err());
+        assert_eq!(s.output_signals(), OutputSignals::default());
+        assert_eq!(s.end(), Cursor(0), "nothing logged");
     }
 
     #[test]

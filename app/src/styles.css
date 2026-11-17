@@ -516,3 +516,50 @@ label.check {
 .page > .muted {
   max-width: 760px;
 }
+
+/* ---- modem signals ----------------------------------------------------- */
+
+.signals {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
+.signal {
+  padding: 0 5px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  line-height: 16px;
+}
+
+.signal.in {
+  border-color: transparent;
+}
+
+.signal.on {
+  color: #fff;
+  background: var(--ok);
+  border-color: var(--ok);
+}
+
+.signal.off {
+  color: var(--muted);
+}
+
+.signal.unknown {
+  color: var(--muted);
+  border-style: dashed;
+  opacity: 0.7;
+}
+
+.signal.in.unknown {
+  border-color: transparent;
+  text-decoration: line-through;
+}
+
+button.signal.on:hover:not(:disabled) {
+  background: var(--ok);
+  filter: brightness(1.1);
+}
