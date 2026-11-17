@@ -229,6 +229,7 @@ label.check {
   border-radius: var(--radius);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
   min-width: 220px;
+  white-space: nowrap;
 }
 
 .popover label {
@@ -562,4 +563,63 @@ label.check {
 button.signal.on:hover:not(:disabled) {
   background: var(--ok);
   filter: brightness(1.1);
+}
+
+/* ---- search, display settings ------------------------------------------ */
+
+.log-area {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.searchbar {
+  position: absolute;
+  z-index: 5;
+  top: 6px;
+  right: 18px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+}
+
+.searchbar input {
+  width: 200px;
+}
+
+.searchbar .count {
+  min-width: 56px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: right;
+}
+
+.line.match {
+  background: rgba(255, 200, 0, 0.22);
+}
+
+.line.current {
+  background: rgba(255, 170, 0, 0.5);
+  outline: 1px solid rgba(255, 150, 0, 0.8);
+}
+
+.popover.right {
+  left: auto;
+  right: 0;
+}
+
+.gap-input {
+  width: 80px;
+}
+
+.icon-button[aria-pressed="true"] {
+  color: var(--accent);
+  background: var(--accent-soft);
 }

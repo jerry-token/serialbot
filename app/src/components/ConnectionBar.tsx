@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react";
 import type { FlowControl, Parity, PortInfo } from "../api";
 import { portLabel } from "../api";
 import type { Strings } from "../i18n";
 import { ChevronIcon, RefreshIcon } from "./icons";
+import { Popover } from "./Popover";
 
 export const COMMON_BAUD_RATES = [
   1200, 2400, 4800, 9600, 19200, 38400, 57600, 74880, 115200, 230400, 460800, 921600, 1500000,
@@ -44,27 +44,8 @@ interface Props {
 /** One compact row: port, baud, frame format (in a popover), open/close. */
 export function ConnectionBar(props: Props) {
   const { t, ports, settings, onChange, connected, busy } = props;
-  const [frameOpen, setFrameOpen] = useState(false);
-  const frameRef = useRef<HTMLDivElement>(null);
   const set = <K extends keyof PortSettings>(key: K, value: PortSettings[K]) =>
     onChange({ ...settings, [key]: value });
-
-  // Close the popover on a click outside it or on Escape.
-  useEffect(() => {
-    if (!frameOpen) return undefined;
-    const onDown = (e: MouseEvent) => {
-      if (!frameRef.current?.contains(e.target as Node)) setFrameOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setFrameOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [frameOpen]);
 
   return (
     <div className="toolbar">
@@ -106,76 +87,70 @@ export function ConnectionBar(props: Props) {
           <option key={rate} value={rate} />
         ))}
       </datalist>
-      <div className="popover-anchor" ref={frameRef}>
-        <button
-          type="button"
-          className="frame-button"
-          aria-label={t.frameSettings}
-          title={t.frameSettings}
-          aria-expanded={frameOpen}
-          onClick={() => setFrameOpen((o) => !o)}
-        >
-          {frameSummary(settings)}
-          <ChevronIcon size={14} />
-        </button>
-        {frameOpen && (
-          <div className="popover" role="dialog" aria-label={t.frameSettings}>
-            <label>
-              {t.dataBits}
-              <select
-                aria-label={t.dataBits}
-                value={settings.dataBits}
-                disabled={connected}
-                onChange={(e) => set("dataBits", Number(e.target.value))}
-              >
-                {[8, 7, 6, 5].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              {t.parity}
-              <select
-                aria-label={t.parity}
-                value={settings.parity}
-                disabled={connected}
-                onChange={(e) => set("parity", e.target.value as Parity)}
-              >
-                <option value="none">{t.parityNone}</option>
-                <option value="odd">{t.parityOdd}</option>
-                <option value="even">{t.parityEven}</option>
-              </select>
-            </label>
-            <label>
-              {t.stopBits}
-              <select
-                aria-label={t.stopBits}
-                value={settings.stopBits}
-                disabled={connected}
-                onChange={(e) => set("stopBits", Number(e.target.value))}
-              >
-                <option value={1}>1</option>
-                <option value={2}>2</option>
-              </select>
-            </label>
-            <label>
-              {t.flowControl}
-              <select
-                aria-label={t.flowControl}
-                value={settings.flowControl}
-                disabled={connected}
-                onChange={(e) => set("flowControl", e.target.value as FlowControl)}
-              >
-                <option value="none">{t.flowNone}</option>
-                <option value="software">{t.flowSoftware}</option>
-                <option value="hardware">{t.flowHardware}</option>
-              </select>
-            </label>
-          </div>
-        )}
-      </div>
+      <Popover
+        label={t.frameSettings}
+        className="frame-button"
+        button={
+          <>
+            {frameSummary(settings)}
+            <ChevronIcon size={14} />
+          </>
+        }
+      >
+        <label>
+          {t.dataBits}
+          <select
+            aria-label={t.dataBits}
+            value={settings.dataBits}
+            disabled={connected}
+            onChange={(e) => set("dataBits", Number(e.target.value))}
+          >
+            {[8, 7, 6, 5].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          {t.parity}
+          <select
+            aria-label={t.parity}
+            value={settings.parity}
+            disabled={connected}
+            onChange={(e) => set("parity", e.target.value as Parity)}
+          >
+            <option value="none">{t.parityNone}</option>
+            <option value="odd">{t.parityOdd}</option>
+            <option value="even">{t.parityEven}</option>
+          </select>
+        </label>
+        <label>
+          {t.stopBits}
+          <select
+            aria-label={t.stopBits}
+            value={settings.stopBits}
+            disabled={connected}
+            onChange={(e) => set("stopBits", Number(e.target.value))}
+          >
+            <option value={1}>1</option>
+            <option value={2}>2</option>
+          </select>
+        </label>
+        <label>
+          {t.flowControl}
+          <select
+            aria-label={t.flowControl}
+            value={settings.flowControl}
+            disabled={connected}
+            onChange={(e) => set("flowControl", e.target.value as FlowControl)}
+          >
+            <option value="none">{t.flowNone}</option>
+            <option value="software">{t.flowSoftware}</option>
+            <option value="hardware">{t.flowHardware}</option>
+          </select>
+        </label>
+      </Popover>
       {connected ? (
         <button type="button" className="danger" onClick={props.onClose} disabled={busy}>
           {t.close}

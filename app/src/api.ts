@@ -91,6 +91,8 @@ export interface Backend {
   onSessionsChanged(handler: (sessions: SessionInfo[]) => void): Promise<Unlisten>;
   /** Called with the ids of sessions that have new log entries or a new state. */
   onLogChanged(handler: (ids: number[]) => void): Promise<Unlisten>;
+  /** Encodes text in a non-UTF-8 encoding (WHATWG label) for sending. */
+  encodeText(text: string, encoding: string): Promise<number[]>;
   signals(id: number): Promise<SignalsInfo>;
   /** Drives DTR and/or RTS; an omitted line is left unchanged. */
   setSignals(id: number, levels: { dtr?: boolean; rts?: boolean }): Promise<SignalsInfo>;
@@ -112,6 +114,7 @@ export const tauriBackend: Backend = {
   onSessionsChanged: (handler) =>
     listen<SessionInfo[]>("sessions-changed", (event) => handler(event.payload)),
   onLogChanged: (handler) => listen<number[]>("log-changed", (event) => handler(event.payload)),
+  encodeText: (text, encoding) => invoke("encode_text", { text, encoding }),
   signals: (id) => invoke("signals", { id }),
   setSignals: (id, levels) =>
     invoke("set_signals", { id, dtr: levels.dtr ?? null, rts: levels.rts ?? null }),

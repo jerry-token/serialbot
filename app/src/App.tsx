@@ -9,7 +9,9 @@ import type {
   Unlisten,
 } from "./api";
 import { errorMessage } from "./api";
-import { encodeInput } from "./bytes";
+import { encodeInput, withEndings } from "./bytes";
+import { DisplaySettings } from "./components/DisplaySettings";
+import { SearchBar } from "./components/SearchBar";
 import { ConnectionBar, type PortSettings } from "./components/ConnectionBar";
 import { LogView } from "./components/LogView";
 import { McpPanel } from "./components/McpPanel";
@@ -17,9 +19,9 @@ import { SendBar, type SendSettings } from "./components/SendBar";
 import { SignalBar } from "./components/SignalBar";
 import { SessionTabs, Toggle } from "./components/SessionTabs";
 import { type Page, Sidebar } from "./components/Sidebar";
-import { ClearIcon } from "./components/icons";
+import { ClearIcon, SearchIcon } from "./components/icons";
 import { type Lang, strings } from "./i18n";
-import { Terminal } from "./terminal";
+import { type Line, Terminal } from "./terminal";
 
 /** Payload budget of one log read. */
 export const READ_BYTES = 256 * 1024;
@@ -76,7 +78,15 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
     [],
   );
   const views = useRef(new Map<number, SessionView>());
-  const hexRef = useRef(false);
+  const [encoding, setEncoding] = useState("utf-8");
+  const [frameGapMs, setFrameGapMs] = useState(0);
+  // Display settings also apply to sessions that appear later.
+  const display = useRef({ hex: false, encoding: "utf-8", frameGapMs: 0 });
+  const [frozen, setFrozen] = useState<{ id: number; lines: readonly Line[] } | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  /** Index into the matches; null follows the newest match. */
+  const [matchPos, setMatchPos] = useState<number | null>(null);
   const [version, setVersion] = useState(0);
   const redraw = () => setVersion((v) => v + 1);
 
@@ -84,7 +94,9 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
     let view = views.current.get(id);
     if (!view) {
       const terminal = new Terminal();
-      terminal.setHex(hexRef.current);
+      terminal.setHex(display.current.hex);
+      terminal.setEncoding(display.current.encoding);
+      terminal.setFrameGap(display.current.frameGapMs);
       view = { terminal, cursor: 0, rx: 0, tx: 0, reading: false, again: false, ended: false };
       views.current.set(id, view);
     }
@@ -262,6 +274,11 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
       return;
     }
     try {
+      if (!send.hex && encoding !== "utf-8") {
+        data = Uint8Array.from(
+          await backend.encodeText(withEndings(send.text, send.ending), encoding),
+        );
+      }
       await backend.writeData(active.id, data);
       setError(null);
     } catch (e) {
@@ -270,11 +287,58 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
   };
 
   const toggleHexView = (hex: boolean) => {
-    hexRef.current = hex;
+    display.current.hex = hex;
     setHexView(hex);
     for (const view of views.current.values()) view.terminal.setHex(hex);
     redraw();
   };
+
+  const changeEncoding = (label: string) => {
+    display.current.encoding = label;
+    setEncoding(label);
+    for (const view of views.current.values()) view.terminal.setEncoding(label);
+    redraw();
+  };
+
+  const changeFrameGap = (ms: number) => {
+    display.current.frameGapMs = ms;
+    setFrameGapMs(ms);
+    for (const view of views.current.values()) view.terminal.setFrameGap(ms);
+    redraw();
+  };
+
+  const togglePause = (pause: boolean) => {
+    setFrozen(pause && activeView && activeId !== null
+      ? { id: activeId, lines: activeView.terminal.view.slice() }
+      : null);
+  };
+
+  // Ctrl/Cmd+F opens the search on the terminal page.
+  useEffect(() => {
+    if (page !== "terminal") return undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [page]);
+
+  const live = activeView?.terminal.view ?? [];
+  const paused = frozen !== null && frozen.id === activeId;
+  const shown = paused ? frozen.lines : live;
+  const visibleLines = showSent ? shown : shown.filter((l) => l.kind !== "tx");
+  const lastFrozenId = paused ? (frozen.lines.at(-1)?.id ?? -1) : -1;
+  const newWhilePaused = paused ? live.filter((l) => l.id > lastFrozenId).length : 0;
+  const needle = searchOpen ? query.toLowerCase() : "";
+  const matchIds = needle
+    ? visibleLines.filter((l) => l.text.toLowerCase().includes(needle)).map((l) => l.id)
+    : [];
+  const matchIndex =
+    matchIds.length === 0 ? -1 : Math.min(matchPos ?? matchIds.length - 1, matchIds.length - 1);
+  const currentMatch = matchIndex >= 0 ? (matchIds[matchIndex] ?? null) : null;
 
   const clear = () => {
     if (!activeView) return;
@@ -351,6 +415,29 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
                 pressed={autoScroll}
                 onChange={setAutoScroll}
               />
+              <Toggle
+                label={paused ? t.paused(newWhilePaused) : t.pause}
+                hint={t.pauseHint}
+                pressed={paused}
+                onChange={togglePause}
+              />
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={t.search}
+                title={`${t.search} (Ctrl+F)`}
+                aria-pressed={searchOpen}
+                onClick={() => setSearchOpen((o) => !o)}
+              >
+                <SearchIcon size={16} />
+              </button>
+              <DisplaySettings
+                t={t}
+                encoding={encoding}
+                onEncoding={changeEncoding}
+                frameGapMs={frameGapMs}
+                onFrameGap={changeFrameGap}
+              />
               <button
                 type="button"
                 className="icon-button"
@@ -363,14 +450,38 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
               </button>
             </SessionTabs>
             {active ? (
-              <LogView
-                key={activeId ?? 0}
-                lines={activeView?.terminal.view ?? []}
-                showTimestamps={showTimestamps}
-                showSent={showSent}
-                autoScroll={autoScroll}
-                version={version}
-              />
+              <div className="log-area">
+                {searchOpen && (
+                  <SearchBar
+                    t={t}
+                    query={query}
+                    onQuery={(q) => {
+                      setQuery(q);
+                      setMatchPos(null);
+                    }}
+                    current={matchIndex + 1}
+                    total={matchIds.length}
+                    onStep={(delta) =>
+                      setMatchPos(
+                        (matchIndex + delta + matchIds.length) % matchIds.length,
+                      )
+                    }
+                    onClose={() => {
+                      setSearchOpen(false);
+                      setMatchPos(null);
+                    }}
+                  />
+                )}
+                <LogView
+                  key={activeId ?? 0}
+                  lines={visibleLines}
+                  showTimestamps={showTimestamps}
+                  autoScroll={autoScroll && !paused}
+                  version={version}
+                  matches={new Set(matchIds)}
+                  currentMatch={currentMatch}
+                />
+              </div>
             ) : (
               <div className="log empty" role="log">
                 <p>{t.noSession}</p>

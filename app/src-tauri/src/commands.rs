@@ -409,6 +409,13 @@ impl AppState {
         Ok(signals_dto(&session))
     }
 
+    /// Encodes typed text for sending in a non-UTF-8 encoding (WHATWG
+    /// label such as `gbk`); fails on unknown labels and characters the
+    /// encoding lacks.
+    pub fn encode_text(&self, text: &str, encoding: &str) -> Result<Vec<u8>, String> {
+        serialx_core::encoding::encode_text(text, encoding).map_err(|e| e.to_string())
+    }
+
     /// Closes every session (on app exit).
     pub fn shutdown(&self) {
         self.manager.close_all();
@@ -628,6 +635,20 @@ mod tests {
             app.set_signals(1, Some(true), None)
                 .unwrap_err()
                 .contains("Disconnected")
+        );
+    }
+
+    #[test]
+    fn text_is_encoded_for_sending() {
+        let (app, _) = state();
+        assert_eq!(
+            app.encode_text("温度", "gbk").unwrap(),
+            [0xce, 0xc2, 0xb6, 0xc8]
+        );
+        assert!(
+            app.encode_text("x", "nope")
+                .unwrap_err()
+                .contains("unknown encoding")
         );
     }
 

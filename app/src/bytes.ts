@@ -41,7 +41,12 @@ export function parseHex(text: string): Uint8Array {
  */
 export function encodeInput(text: string, hex: boolean, ending: LineEnding): Uint8Array {
   if (hex) return parseHex(text);
+  return new TextEncoder().encode(withEndings(text, ending));
+}
+
+/** The text with the line ending after every line, as described above. */
+export function withEndings(text: string, ending: LineEnding): string {
   const end = ENDINGS[ending];
   const body = end === "" ? text : text.replace(/\r\n|\r|\n/g, end);
-  return new TextEncoder().encode(body + end);
+  return body + end;
 }
