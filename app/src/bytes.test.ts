@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { encodeInput, parseHex, toHex } from "./bytes";
+import { encodeInput, parseHex, toHex, withEndings } from "./bytes";
 
 describe("toHex", () => {
   it("formats lowercase pairs separated by spaces", () => {
@@ -42,6 +42,10 @@ describe("encodeInput", () => {
     expect(text(encodeInput("a\r\nb\rc", false, "lf"))).toBe("a\nb\nc\n");
     expect(text(encodeInput("a\nb", false, "none"))).toBe("a\nb");
     expect(Array.from(encodeInput("01\n02", true, "crlf"))).toEqual([1, 2]);
+  });
+
+  it("exposes the text with endings for other encodings", () => {
+    expect(withEndings("a\nb", "cr")).toBe("a\rb\r");
   });
 
   it("encodes text as UTF-8", () => {

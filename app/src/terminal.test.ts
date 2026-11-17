@@ -125,3 +125,72 @@ describe("Terminal limits", () => {
     expect(texts(t)).toEqual(["rx:new"]);
   });
 });
+
+describe("Terminal encodings", () => {
+  it("decodes GBK and re-renders when the encoding changes", () => {
+    const t = new Terminal();
+    t.push([entry("rx", [0xce, 0xc2, 0xb6, 0xc8, 0x0a]), entry("tx", [0xc4, 0xe3])]);
+    expect(texts(t)[0]).not.toContain("温");
+    t.setEncoding("gbk");
+    expect(t.encodingLabel).toBe("gbk");
+    expect(texts(t)).toEqual(["rx:温度", "tx:你"]);
+    t.setEncoding("gbk");
+    expect(() => t.setEncoding("klingon")).toThrow(RangeError);
+    expect(t.encodingLabel).toBe("gbk");
+  });
+
+  it("keeps a GBK character split across chunks", () => {
+    const t = new Terminal();
+    t.setEncoding("gbk");
+    t.push([entry("rx", [0xce]), entry("rx", [0xc2, 0x0a])]);
+    expect(texts(t)).toEqual(["rx:温"]);
+  });
+});
+
+describe("Terminal frame gap", () => {
+  const at = (ms: number, data: string | number[], kind: LogEntry["kind"] = "rx") =>
+    entry(kind, data, ms * 1000);
+
+  it("starts a new text line after a pause", () => {
+    const t = new Terminal();
+    t.push([at(0, "AB"), at(5, "CD"), at(50, "EF"), at(52, "GH\n")]);
+    expect(texts(t)).toEqual(["rx:ABCDEFGH"]);
+    t.setFrameGap(20);
+    expect(texts(t)).toEqual(["rx:ABCD", "rx:EFGH"]);
+    expect(t.view.map((l) => l.timestampUs)).toEqual([0, 50_000]);
+    t.setFrameGap(20);
+    t.setFrameGap(0);
+    expect(texts(t)).toEqual(["rx:ABCDEFGH"]);
+  });
+
+  it("does not lose a character cut by a pause", () => {
+    const t = new Terminal();
+    t.setFrameGap(10);
+    const bytes = Array.from(new TextEncoder().encode("é"));
+    t.push([at(0, "x"), at(100, bytes.slice(0, 1)), at(101, bytes.slice(1))]);
+    expect(texts(t)).toEqual(["rx:x", "rx:é"]);
+  });
+
+  it("joins hex frames that arrive close together", () => {
+    const t = new Terminal();
+    t.setHex(true);
+    t.push([at(0, [1, 2]), at(3, [3]), at(40, [4])]);
+    expect(texts(t)).toEqual(["rx:01 02", "rx:03", "rx:04"]);
+    t.setFrameGap(10);
+    expect(texts(t)).toEqual(["rx:01 02 03", "rx:04"]);
+    t.push([at(42, "x", "tx"), at(43, [5]), at(44, []), at(45, [6])]);
+    expect(texts(t).slice(-2)).toEqual(["tx:78", "rx:05 06"]);
+    t.push([entry("marker", "m"), at(46, [7])]);
+    expect(texts(t).slice(-2)).toEqual(["marker:m", "rx:07"]);
+  });
+
+  it("forgets a trimmed hex frame", () => {
+    const t = new Terminal({ maxLines: 1, maxRawBytes: 100 });
+    t.setHex(true);
+    t.setFrameGap(10);
+    t.push([at(0, [1])]);
+    t.info("x", 1);
+    t.push([at(2, [2])]);
+    expect(texts(t)).toEqual(["rx:02"]);
+  });
+});

@@ -16,6 +16,7 @@ thiserror = "2.0"
 proptest = "1.12"
 regex = "1.12"
 serialport = "4.10"
+encoding_rs = "0.8"
 serialx-core = { path = "crates/serialx-core" }
 serialx-mcp = { path = "crates/serialx-mcp" }
 rmcp = { version = "3.10", default-features = false }

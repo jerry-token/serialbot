@@ -6,6 +6,7 @@
 //! mode all talk to the device only through this crate.
 
 pub mod clock;
+pub mod encoding;
 pub mod log;
 pub mod manager;
 pub mod session;

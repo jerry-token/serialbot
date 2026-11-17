@@ -87,6 +87,15 @@ mod ipc {
     }
 
     #[tauri::command(async)]
+    pub(crate) fn encode_text(
+        state: tauri::State<'_, AppState>,
+        text: String,
+        encoding: String,
+    ) -> Result<Vec<u8>, String> {
+        state.encode_text(&text, &encoding)
+    }
+
+    #[tauri::command(async)]
     pub(crate) fn signals(
         state: tauri::State<'_, AppState>,
         id: u32,
@@ -216,6 +225,7 @@ pub fn run() -> Result<(), tauri::Error> {
             ipc::close_session,
             ipc::write_data,
             ipc::read_log,
+            ipc::encode_text,
             ipc::signals,
             ipc::set_signals,
             ipc::mcp_status,

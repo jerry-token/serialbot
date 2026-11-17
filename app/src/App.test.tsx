@@ -132,6 +132,11 @@ class FakeBackend implements Backend {
     return () => this.logListeners.delete(handler);
   }
 
+  async encodeText(text: string, encoding: string) {
+    if (text.includes("😀")) throw `'😀' cannot be encoded in ${encoding}`;
+    return Array.from(text).flatMap((c) => (c === "你" ? [0xc4, 0xe3] : [c.charCodeAt(0)]));
+  }
+
   async signals(id: number) {
     if (this.failSignals) throw "not supported by this transport: modem lines";
     return this.linesOf(id);
@@ -196,6 +201,15 @@ class FakeBackend implements Backend {
     this.append(id, "rx", Array.from(new TextEncoder().encode(text)));
   }
 
+  receiveBytes(id: number, data: number[]) {
+    this.append(id, "rx", data);
+  }
+
+  /** Received text with an explicit timestamp (microseconds). */
+  receiveAt(id: number, text: string, timestampUs: number) {
+    this.append(id, "rx", Array.from(new TextEncoder().encode(text)), timestampUs);
+  }
+
   setState(id: number, state: SessionStateName, error: string | null = null) {
     const session = this.sessions.get(id);
     if (!session) return;
@@ -203,12 +217,12 @@ class FakeBackend implements Backend {
     this.notify([id]);
   }
 
-  private append(id: number, kind: "rx" | "tx", data: number[]) {
+  private append(id: number, kind: "rx" | "tx", data: number[], timestampUs = Date.now() * 1000) {
     const session = this.sessions.get(id);
     if (!session) return;
     session.log.push({
       seq: session.log.length,
-      timestampUs: Date.now() * 1000,
+      timestampUs,
       kind,
       data,
       label: null,
@@ -537,6 +551,91 @@ describe("App", () => {
     // Setting fails once the session is no longer open on the backend side.
     await user.click(screen.getByRole("button", { name: /^DTR/ }));
     await waitFor(() => expect(status()).toHaveTextContent("session is Disconnected"));
+  });
+
+  it("decodes and encodes with the chosen encoding", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    act(() => backend.receiveBytes(1, [0xce, 0xc2, 0xb6, 0xc8, 0x0a]));
+    await waitFor(() => expect(status()).toHaveTextContent("RX 5"));
+    expect(log()).not.toHaveTextContent("温度");
+    await user.click(screen.getByRole("button", { name: "Display settings" }));
+    await user.selectOptions(screen.getByLabelText("Encoding"), "gbk");
+    expect(log()).toHaveTextContent("温度");
+
+    await user.type(screen.getByLabelText("Send"), "你{Enter}");
+    await waitFor(() => expect(backend.written).toEqual([[1, [0xc4, 0xe3, 13, 10]]]));
+    await user.type(screen.getByLabelText("Send"), "😀{Enter}");
+    await waitFor(() => expect(status()).toHaveTextContent("cannot be encoded in gbk"));
+    // Hex input ignores the text encoding.
+    await user.clear(screen.getByLabelText("Send"));
+    await user.click(screen.getByRole("checkbox", { name: "Hex" }));
+    await user.type(screen.getByLabelText("Send"), "ff{Enter}");
+    await waitFor(() => expect(backend.written[1]).toEqual([1, [0xff]]));
+  });
+
+  it("splits frames after a pause", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    act(() => {
+      backend.receiveAt(1, "AB", 1_000);
+      backend.receiveAt(1, "CD", 900_000);
+    });
+    await waitFor(() => expect(log()).toHaveTextContent("ABCD"));
+    await user.click(screen.getByRole("button", { name: "Display settings" }));
+    const gap = screen.getByLabelText("Frame gap (ms)");
+    await user.clear(gap);
+    await user.type(gap, "100");
+    await waitFor(() => expect(log().querySelectorAll(".line.rx")).toHaveLength(2));
+    await user.clear(gap);
+    await user.type(gap, "0");
+    await waitFor(() => expect(log().querySelectorAll(".line.rx")).toHaveLength(1));
+    expect(log()).toHaveTextContent("ABCD");
+  });
+
+  it("pauses the view while data keeps arriving", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    act(() => backend.receive(1, "one\n"));
+    await waitFor(() => expect(log()).toHaveTextContent("one"));
+    await user.click(screen.getByLabelText("Freeze the view; data is still received"));
+    act(() => backend.receive(1, "two\nthree\n"));
+    await waitFor(() => expect(screen.getByText("Paused · 2 new lines")).toBeInTheDocument());
+    expect(log()).not.toHaveTextContent("two");
+    await user.click(screen.getByLabelText("Freeze the view; data is still received"));
+    expect(log()).toHaveTextContent("three");
+  });
+
+  it("searches the log with Ctrl+F", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    act(() => backend.receive(1, "temp=21\nhum=40\nTEMP=22\ntemp=23\n"));
+    await waitFor(() => expect(log()).toHaveTextContent("temp=23"));
+    await user.keyboard("{Control>}f{/Control}");
+    const box = screen.getByRole("searchbox", { name: "Search" });
+    expect(box).toHaveFocus();
+    await user.type(box, "temp");
+    expect(screen.getByRole("search")).toHaveTextContent("3 / 3");
+    const current = () => log().querySelector(".line.current")?.textContent ?? "";
+    expect(current()).toContain("temp=23");
+    expect(log().querySelectorAll(".line.match")).toHaveLength(3);
+    await user.keyboard("{Enter}");
+    expect(current()).toContain("temp=21");
+    await user.keyboard("{Shift>}{Enter}{/Shift}");
+    expect(current()).toContain("temp=23");
+    await user.click(screen.getByRole("button", { name: "Previous match" }));
+    expect(current()).toContain("TEMP=22");
+    await user.click(screen.getByRole("button", { name: "Next match" }));
+    expect(screen.getByRole("search")).toHaveTextContent("3 / 3");
+    await user.clear(box);
+    await user.type(box, "nothing");
+    expect(screen.getByRole("search")).toHaveTextContent("No matches");
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("search")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    expect(screen.getByRole("search")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close search" }));
+    expect(screen.queryByRole("search")).not.toBeInTheDocument();
   });
 
   it("stops listening when closed", async () => {

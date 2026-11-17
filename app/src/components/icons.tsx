@@ -53,3 +53,24 @@ export const ClearIcon = (p: IconProps) => (
     <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" />
   </Svg>
 );
+
+export const SearchIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="11" cy="11" r="6" />
+    <path d="M20 20l-4.5-4.5" />
+  </Svg>
+);
+
+export const SlidersIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+    <circle cx="16" cy="7" r="2" />
+    <circle cx="10" cy="17" r="2" />
+  </Svg>
+);
+
+export const UpIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6 15l6-6 6 6" />
+  </Svg>
+);

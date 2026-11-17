@@ -72,6 +72,19 @@ const en = {
     cd: "CD (Carrier Detect)",
   },
   signalUnknown: "unknown",
+  displaySettings: "Display settings",
+  encoding: "Encoding",
+  frameGap: "Frame gap (ms)",
+  frameGapHint: "Received data after a pause this long starts a new line; 0 turns it off",
+  pause: "Pause",
+  pauseHint: "Freeze the view; data is still received",
+  paused: (n: number) => `Paused · ${n} new lines`,
+  search: "Search",
+  searchPlaceholder: "Search the log",
+  searchCount: (i: number, n: number) => (n === 0 ? "No matches" : `${i} / ${n}`),
+  previousMatch: "Previous match",
+  nextMatch: "Next match",
+  closeSearch: "Close search",
 };
 
 export type Strings = typeof en;
@@ -146,6 +159,19 @@ const zh: Strings = {
     cd: "CD（载波检测）",
   },
   signalUnknown: "未知",
+  displaySettings: "显示设置",
+  encoding: "编码",
+  frameGap: "自动断帧 (ms)",
+  frameGapHint: "接收停顿超过这个时长后另起一行；0 表示关闭",
+  pause: "暂停",
+  pauseHint: "冻结显示，数据仍在接收",
+  paused: (n: number) => `已暂停 · 新增 ${n} 行`,
+  search: "搜索",
+  searchPlaceholder: "在日志中搜索",
+  searchCount: (i: number, n: number) => (n === 0 ? "无结果" : `${i} / ${n}`),
+  previousMatch: "上一个",
+  nextMatch: "下一个",
+  closeSearch: "关闭搜索",
 };
 
 export function strings(lang: Lang): Strings {

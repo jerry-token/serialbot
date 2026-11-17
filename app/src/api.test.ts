@@ -47,6 +47,7 @@ describe("tauriBackend", () => {
     await tauriBackend.mcpStatus();
     await tauriBackend.mcpApply(settings);
     await tauriBackend.mcpRegenerateToken();
+    await tauriBackend.encodeText("你", "gbk");
     await tauriBackend.signals(1);
     await tauriBackend.setSignals(1, { dtr: true });
     await tauriBackend.setSignals(1, { rts: false });
@@ -60,6 +61,7 @@ describe("tauriBackend", () => {
       ["mcp_status"],
       ["mcp_apply", { settings }],
       ["mcp_regenerate_token"],
+      ["encode_text", { text: "你", encoding: "gbk" }],
       ["signals", { id: 1 }],
       ["set_signals", { id: 1, dtr: true, rts: null }],
       ["set_signals", { id: 1, dtr: null, rts: false }],
