@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -198,6 +198,7 @@ function setup(backend = new FakeBackend(), copy = vi.fn(async () => {})) {
   return { backend, user, copy, view };
 }
 
+const FRAME = "Data bits, parity, stop bits, flow control";
 const log = () => screen.getByRole("log");
 const status = () => screen.getByRole("status");
 const tabs = () => screen.queryAllByRole("tab").map((t) => t.textContent);
@@ -218,10 +219,14 @@ describe("App", () => {
     const baud = screen.getByLabelText("Baud");
     await user.clear(baud);
     await user.type(baud, "921600");
+    const frame = screen.getByRole("button", { name: FRAME });
+    expect(frame).toHaveTextContent("8N1");
+    await user.click(frame);
     await user.selectOptions(screen.getByLabelText("Data"), "7");
     await user.selectOptions(screen.getByLabelText("Parity"), "even");
     await user.selectOptions(screen.getByLabelText("Stop"), "2");
     await user.selectOptions(screen.getByLabelText("Flow"), "hardware");
+    expect(frame).toHaveTextContent("7E2 · RTS/CTS");
     await user.click(screen.getByRole("button", { name: "Open" }));
     await waitFor(() => expect(status()).toHaveTextContent("COM4 · Open"));
     expect(backend.opened).toEqual([
@@ -251,7 +256,7 @@ describe("App", () => {
     expect(log().textContent).toMatch(/\[\d\d:\d\d:\d\d\.\d{3}\] boot ok/);
     expect(status()).toHaveTextContent("RX 11 · TX 0");
 
-    await user.click(screen.getByLabelText("Timestamps"));
+    await user.click(screen.getByLabelText("Show timestamps"));
     expect(log().textContent).not.toMatch(/\[\d\d:/);
 
     await user.click(screen.getByLabelText("Hex view"));
@@ -259,7 +264,7 @@ describe("App", () => {
     await user.click(screen.getByLabelText("Hex view"));
     expect(log()).toHaveTextContent("boot ok");
 
-    await user.click(screen.getByLabelText("Auto-scroll"));
+    await user.click(screen.getByLabelText("Auto-scroll to new data"));
     await user.click(screen.getByRole("button", { name: "Clear" }));
     expect(log()).toBeEmptyDOMElement();
     expect(status()).toHaveTextContent("RX 0 · TX 0");
@@ -288,7 +293,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(backend.written[1]).toEqual([1, [65, 84, 10]]));
 
-    await user.click(screen.getByLabelText("Show sent"));
+    await user.click(screen.getByLabelText("Show sent data"));
     await waitFor(() => expect(log()).not.toHaveTextContent("→ AT"));
 
     await user.click(screen.getByRole("checkbox", { name: "Hex" }));
@@ -428,6 +433,36 @@ describe("App", () => {
     expect(options).toHaveLength(1);
   });
 
+  it("closes the frame popover on Escape and outside clicks", async () => {
+    const { user } = setup();
+    const frame = screen.getByRole("button", { name: FRAME });
+    await user.click(frame);
+    expect(screen.getByRole("dialog", { name: FRAME })).toBeInTheDocument();
+    await user.click(screen.getByLabelText("Data"));
+    expect(screen.getByRole("dialog", { name: FRAME })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await user.click(frame);
+    await user.click(log());
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(log()).toHaveTextContent("No open port");
+  });
+
+  it("sends several lines, with Shift+Enter for new lines", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    const input = screen.getByLabelText("Send");
+    await user.type(input, "a{Shift>}{Enter}{/Shift}b");
+    expect(input).toHaveValue("a\nb");
+    expect(backend.written).toEqual([]);
+    // Enter while an input method is composing belongs to the IME.
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    expect(backend.written).toEqual([]);
+    await user.type(input, "{Enter}");
+    await waitFor(() => expect(backend.written).toEqual([[1, [97, 13, 10, 98, 13, 10]]]));
+    await waitFor(() => expect(log()).toHaveTextContent(/→ a.*→ b/));
+  });
+
   it("stops listening when closed", async () => {
     const { backend, view } = setup();
     await waitFor(() => expect(backend.logListeners.size).toBe(1));
@@ -440,7 +475,7 @@ describe("App", () => {
 
 describe("MCP panel", () => {
   async function openPanel(user: ReturnType<typeof userEvent.setup>) {
-    await user.click(screen.getByRole("button", { name: "MCP" }));
+    await user.click(screen.getByRole("button", { name: "AI" }));
     return screen.getByRole("region", { name: /MCP server/ });
   }
 
@@ -460,8 +495,13 @@ describe("MCP panel", () => {
     expect(copy).toHaveBeenCalledWith(command);
     await waitFor(() => expect(within(panel).getByText("Copied")).toBeInTheDocument());
 
-    await user.click(screen.getByRole("button", { name: "MCP" }));
+    expect(status()).toHaveTextContent("MCP :9633");
+    await user.click(screen.getByRole("button", { name: "Terminal" }));
     expect(screen.queryByRole("region", { name: /MCP server/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Terminal" })).toHaveAttribute("aria-current", "page");
+    // The status bar entry leads back to the AI page.
+    await user.click(screen.getByRole("button", { name: "MCP :9633" }));
+    expect(screen.getByRole("region", { name: /MCP server/ })).toBeInTheDocument();
   });
 
   it("saves port and token, and regenerates the token", async () => {
