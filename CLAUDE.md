@@ -11,7 +11,8 @@ ports. Plan of record: the "AI 串口助手 · 开工前计划" doc.
 - Before every commit, all of these must pass locally:
   `cargo fmt --all --check`,
   `cargo clippy --workspace --all-targets -- -D warnings`,
-  `cargo test --workspace`.
+  `cargo test --workspace`, and for frontend changes the frontend gate
+  below.
 - Line coverage of the workspace must stay at or above 85% (CI enforces it
   with `cargo llvm-cov`).
 - No `unwrap()`/`expect()` outside tests; no `unsafe` (forbidden workspace-wide).
@@ -49,6 +50,12 @@ ports. Plan of record: the "AI 串口助手 · 开工前计划" doc.
   - `src/lib.rs` — `router`/`serve`: bearer token, Host allowlist, Origin rejected
   - `src/main.rs` — `serialx-mcp` binary on 127.0.0.1 for trying it before the app exists
   - `tests/http.rs` — real MCP client over HTTP against mock devices
+- `app/` — desktop app (Tauri 2 + React/TypeScript, Vite, Vitest)
+  - `src-tauri/src/commands.rs` — everything the UI can ask for, tested with mock devices;
+    `lib.rs` only forwards IPC calls to it
+  - `src/terminal.ts` — log entries to display lines (text/hex, line breaks, UTF-8)
+  - `src/App.tsx` + `src/components/` — UI; tests use a fake `Backend`
+  - Frontend gate: `npm run typecheck`, `npm run coverage` (≥ 85% lines), `npm run build`
 - `.github/workflows/ci.yml` — fmt, clippy, tests on Windows/macOS/Linux,
   MSRV, docs, coverage gate, license/advisory checks
 

@@ -1,11 +1,11 @@
 [workspace]
 resolver = "3"
-members = ["crates/serialx-core", "crates/serialx-mcp"]
+members = ["crates/serialx-core", "crates/serialx-mcp", "app/src-tauri"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.90"
 license = "GPL-3.0-only"
 repository = "https://github.com/jerry-token/serialx"
 publish = false
@@ -25,6 +25,8 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 schemars = "1.2"
 getrandom = "0.4"
+tauri = "2.12"
+tauri-build = "2.7"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

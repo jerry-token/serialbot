@@ -1,0 +1,81 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const invoke = vi.fn();
+vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => invoke(...args) }));
+
+const { errorMessage, portLabel, tauriBackend } = await import("./api");
+const { detectLang, strings } = await import("./i18n");
+const { formatTime } = await import("./timefmt");
+
+const port = {
+  path: "COM3",
+  kind: "usb" as const,
+  vid: 0x10c4,
+  pid: 0xea60,
+  manufacturer: "Silicon Labs",
+  product: "CP2102",
+  serialNumber: null,
+};
+
+describe("tauriBackend", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    invoke.mockResolvedValue("result");
+  });
+
+  it("maps calls to the Rust commands", async () => {
+    await tauriBackend.listPorts();
+    const request = {
+      port: "COM3",
+      baudRate: 9600,
+      dataBits: 8,
+      parity: "none" as const,
+      stopBits: 1,
+      flowControl: "none" as const,
+    };
+    await tauriBackend.openSession(request);
+    await tauriBackend.closeSession(1);
+    await tauriBackend.writeData(1, new Uint8Array([1, 2]));
+    await tauriBackend.readLog(1, 5, 100);
+    expect(invoke.mock.calls).toEqual([
+      ["list_ports"],
+      ["open_session", { request }],
+      ["close_session", { id: 1 }],
+      ["write_data", { id: 1, data: [1, 2] }],
+      ["read_log", { id: 1, cursor: 5, maxBytes: 100 }],
+    ]);
+  });
+});
+
+describe("helpers", () => {
+  it("labels ports with what is known", () => {
+    expect(portLabel(port)).toBe("COM3 — CP2102 (10c4:ea60)");
+    expect(portLabel({ ...port, product: null })).toBe("COM3 — Silicon Labs (10c4:ea60)");
+    expect(portLabel({ ...port, product: null, manufacturer: null })).toBe("COM3 (10c4:ea60)");
+    expect(portLabel({ ...port, vid: null, pid: null })).toBe("COM3 — CP2102");
+    expect(
+      portLabel({ ...port, kind: "unknown", vid: null, pid: null, product: null, manufacturer: null }),
+    ).toBe("COM3");
+  });
+
+  it("turns rejections into text", () => {
+    expect(errorMessage("port is busy")).toBe("port is busy");
+    expect(errorMessage(new Error("boom"))).toBe("boom");
+    expect(errorMessage(42)).toBe("42");
+  });
+
+  it("picks the language from the preferred system language", () => {
+    expect(detectLang(["zh-CN", "en"])).toBe("zh");
+    expect(detectLang(["en-US", "zh-CN"])).toBe("en");
+    expect(detectLang([])).toBe("en");
+    expect(strings("zh").open).toBe("打开");
+    expect(strings("en").open).toBe("Open");
+    expect(strings("zh").missed(3)).toContain("3");
+    expect(strings("en").missed(3)).toContain("3");
+  });
+
+  it("formats timestamps as local time with milliseconds", () => {
+    const local = new Date(2026, 10, 17, 9, 5, 7, 42).getTime();
+    expect(formatTime(local * 1000 + 999)).toBe("09:05:07.042");
+  });
+});
