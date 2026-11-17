@@ -37,6 +37,13 @@ describe("encodeInput", () => {
     expect(text(encodeInput("AT", false, "none"))).toBe("AT");
   });
 
+  it("uses the line ending between lines too", () => {
+    expect(text(encodeInput("a\nb", false, "crlf"))).toBe("a\r\nb\r\n");
+    expect(text(encodeInput("a\r\nb\rc", false, "lf"))).toBe("a\nb\nc\n");
+    expect(text(encodeInput("a\nb", false, "none"))).toBe("a\nb");
+    expect(Array.from(encodeInput("01\n02", true, "crlf"))).toEqual([1, 2]);
+  });
+
   it("encodes text as UTF-8", () => {
     expect(Array.from(encodeInput("é", false, "none"))).toEqual([0xc3, 0xa9]);
   });

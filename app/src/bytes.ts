@@ -34,10 +34,14 @@ export function parseHex(text: string): Uint8Array {
 }
 
 /**
- * Bytes to send for the send box: UTF-8 text plus the line ending, or the
- * parsed hex (the line ending is not added to hex data).
+ * Bytes to send for the send box: UTF-8 text with the line ending after
+ * every line (line breaks inside the text become that ending too; with no
+ * ending they stay "\n"), or the parsed hex (line breaks are just
+ * separators and no ending is added).
  */
 export function encodeInput(text: string, hex: boolean, ending: LineEnding): Uint8Array {
   if (hex) return parseHex(text);
-  return new TextEncoder().encode(text + ENDINGS[ending]);
+  const end = ENDINGS[ending];
+  const body = end === "" ? text : text.replace(/\r\n|\r|\n/g, end);
+  return new TextEncoder().encode(body + end);
 }

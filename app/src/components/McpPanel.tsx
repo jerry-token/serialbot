@@ -36,7 +36,7 @@ export function McpPanel({ t, status, onApply, onRegenerate, copy }: Props) {
   const command = status.url ? claudeCommand(status.url, status.settings.token) : null;
 
   return (
-    <section className="mcp-panel" aria-label={t.mcpTitle}>
+    <section className="card mcp-panel" aria-label={t.mcpTitle}>
       <h2>{t.mcpTitle}</h2>
       <label>
         <input

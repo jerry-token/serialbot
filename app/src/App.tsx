@@ -6,7 +6,9 @@ import { ConnectionBar, type PortSettings } from "./components/ConnectionBar";
 import { LogView } from "./components/LogView";
 import { McpPanel } from "./components/McpPanel";
 import { SendBar, type SendSettings } from "./components/SendBar";
-import { SessionTabs } from "./components/SessionTabs";
+import { SessionTabs, Toggle } from "./components/SessionTabs";
+import { type Page, Sidebar } from "./components/Sidebar";
+import { ClearIcon } from "./components/icons";
 import { type Lang, strings } from "./i18n";
 import { Terminal } from "./terminal";
 
@@ -58,7 +60,7 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
   const [showSent, setShowSent] = useState(true);
   const [autoScroll, setAutoScroll] = useState(true);
   const [mcp, setMcp] = useState<McpStatus | null>(null);
-  const [mcpOpen, setMcpOpen] = useState(false);
+  const [page, setPage] = useState<Page>("terminal");
   const views = useRef(new Map<number, SessionView>());
   const hexRef = useRef(false);
   const [version, setVersion] = useState(0);
@@ -269,107 +271,119 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
       }[active.state]
     : t.statusClosed;
 
+  const mcpPort = mcp?.running && mcp.url ? Number(new URL(mcp.url).port) : null;
+
   return (
-    <div className="app">
-      <ConnectionBar
-        t={t}
-        ports={ports}
-        settings={settings}
-        onChange={setSettings}
-        onRefresh={() => void refreshPorts()}
-        connected={portSession !== null}
-        busy={busy}
-        onOpen={() => void open()}
-        onClose={() => portSession && void close(portSession.id)}
-      />
-      <div className="bar options">
-        <label>
-          <input
-            type="checkbox"
-            checked={showTimestamps}
-            onChange={(e) => setShowTimestamps(e.target.checked)}
-          />
-          {t.showTimestamps}
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={hexView}
-            onChange={(e) => toggleHexView(e.target.checked)}
-          />
-          {t.hexView}
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={showSent}
-            onChange={(e) => setShowSent(e.target.checked)}
-          />
-          {t.showSent}
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={autoScroll}
-            onChange={(e) => setAutoScroll(e.target.checked)}
-          />
-          {t.autoScroll}
-        </label>
-        <button type="button" onClick={clear} disabled={!activeView}>
-          {t.clear}
-        </button>
-        <span className="spacer" />
-        <button
-          type="button"
-          className="mcp-toggle"
-          aria-expanded={mcpOpen}
-          onClick={() => setMcpOpen((o) => !o)}
-        >
-          <span className={`dot ${mcp?.running ? "open" : "closed"}`} aria-hidden="true" />
-          {t.mcp}
-        </button>
-      </div>
-      {mcpOpen && mcp && (
-        <McpPanel
-          t={t}
-          status={mcp}
-          onApply={(s: McpSettings) => void mcpCall(() => backend.mcpApply(s))}
-          onRegenerate={() => void mcpCall(() => backend.mcpRegenerateToken())}
-          copy={copy}
-        />
-      )}
-      <SessionTabs
-        t={t}
-        sessions={sessions}
-        activeId={activeId}
-        onSelect={setActiveId}
-        onClose={(id) => void close(id)}
-      />
-      <LogView
-        key={activeId ?? 0}
-        lines={activeView?.terminal.view ?? []}
-        showTimestamps={showTimestamps}
-        showSent={showSent}
-        autoScroll={autoScroll}
-        version={version}
-      />
-      <SendBar
-        t={t}
-        settings={send}
-        onChange={setSend}
-        enabled={active?.state === "open"}
-        onSend={() => void sendData()}
-      />
-      <div className="bar status" role="status">
-        <span className={`state ${active?.state ?? "closed"}`}>
-          {active ? `${active.port} · ` : ""}
-          {statusText}
-        </span>
-        <span>
-          {t.rxBytes} {activeView?.rx ?? 0} · {t.txBytes} {activeView?.tx ?? 0}
-        </span>
-        {error && <span className="error">{error}</span>}
-      </div>
+    <div className="shell">
+      <Sidebar t={t} page={page} onSelect={setPage} mcpRunning={mcpPort !== null} />
+      <main className="main">
+        {page === "terminal" ? (
+          <>
+            <ConnectionBar
+              t={t}
+              ports={ports}
+              settings={settings}
+              onChange={setSettings}
+              onRefresh={() => void refreshPorts()}
+              connected={portSession !== null}
+              busy={busy}
+              onOpen={() => void open()}
+              onClose={() => portSession && void close(portSession.id)}
+            />
+            <SessionTabs
+              t={t}
+              sessions={sessions}
+              activeId={activeId}
+              onSelect={setActiveId}
+              onClose={(id) => void close(id)}
+            >
+              <Toggle
+                label={t.showTimestamps}
+                hint={t.showTimestampsHint}
+                pressed={showTimestamps}
+                onChange={setShowTimestamps}
+              />
+              <Toggle
+                label={t.hexView}
+                hint={t.hexViewHint}
+                pressed={hexView}
+                onChange={toggleHexView}
+              />
+              <Toggle
+                label={t.showSent}
+                hint={t.showSentHint}
+                pressed={showSent}
+                onChange={setShowSent}
+              />
+              <Toggle
+                label={t.autoScroll}
+                hint={t.autoScrollHint}
+                pressed={autoScroll}
+                onChange={setAutoScroll}
+              />
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={t.clear}
+                title={t.clear}
+                onClick={clear}
+                disabled={!activeView}
+              >
+                <ClearIcon size={16} />
+              </button>
+            </SessionTabs>
+            {active ? (
+              <LogView
+                key={activeId ?? 0}
+                lines={activeView?.terminal.view ?? []}
+                showTimestamps={showTimestamps}
+                showSent={showSent}
+                autoScroll={autoScroll}
+                version={version}
+              />
+            ) : (
+              <div className="log empty" role="log">
+                <p>{t.noSession}</p>
+              </div>
+            )}
+            <SendBar
+              t={t}
+              settings={send}
+              onChange={setSend}
+              enabled={active?.state === "open"}
+              onSend={() => void sendData()}
+            />
+          </>
+        ) : (
+          <div className="page">
+            {mcp && (
+              <McpPanel
+                t={t}
+                status={mcp}
+                onApply={(s: McpSettings) => void mcpCall(() => backend.mcpApply(s))}
+                onRegenerate={() => void mcpCall(() => backend.mcpRegenerateToken())}
+                copy={copy}
+              />
+            )}
+            <p className="muted">{t.aiAssistantSoon}</p>
+          </div>
+        )}
+        <div className="statusbar" role="status">
+          <span className={`state ${active?.state ?? "closed"}`}>
+            {active ? `${active.port} · ` : ""}
+            {statusText}
+          </span>
+          <span>
+            {t.rxBytes} {activeView?.rx ?? 0} · {t.txBytes} {activeView?.tx ?? 0}
+          </span>
+          {error && <span className="error">{error}</span>}
+          <span className="spacer" />
+          <button type="button" className="link" onClick={() => setPage("ai")}>
+            <span className={`dot ${mcpPort !== null ? "open" : "closed"}`} aria-hidden="true" />
+            {t.mcpShort(mcpPort)}
+          </button>
+        </div>
+      </main>
     </div>
   );
 }

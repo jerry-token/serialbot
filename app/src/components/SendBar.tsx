@@ -15,34 +15,48 @@ interface Props {
   onSend: () => void;
 }
 
+/**
+ * Multi-line send box. Enter sends, Shift+Enter adds a line; Enter while an
+ * input method is composing (Chinese, Japanese, ...) is left to the IME.
+ * The box can be resized by dragging its lower edge.
+ */
 export function SendBar({ t, settings, onChange, enabled, onSend }: Props) {
+  const canSend = enabled && settings.text !== "";
   return (
     <form
-      className="bar send"
+      className="send-panel"
       onSubmit={(e) => {
         e.preventDefault();
-        if (enabled) onSend();
+        if (canSend) onSend();
       }}
     >
-      <input
+      <textarea
         aria-label={t.send}
         className="send-input"
+        rows={3}
         placeholder={t.sendPlaceholder}
         value={settings.text}
+        spellCheck={false}
         onChange={(e) => onChange({ ...settings, text: e.target.value })}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            if (canSend) onSend();
+          }
+        }}
       />
-      <label>
-        <input
-          type="checkbox"
-          checked={settings.hex}
-          onChange={(e) => onChange({ ...settings, hex: e.target.checked })}
-        />
-        {t.hexInput}
-      </label>
-      <label>
-        {t.lineEnding}
+      <div className="send-controls">
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={settings.hex}
+            onChange={(e) => onChange({ ...settings, hex: e.target.checked })}
+          />
+          {t.hexInput}
+        </label>
         <select
           aria-label={t.lineEnding}
+          title={t.lineEnding}
           value={settings.ending}
           disabled={settings.hex}
           onChange={(e) => onChange({ ...settings, ending: e.target.value as LineEnding })}
@@ -52,10 +66,10 @@ export function SendBar({ t, settings, onChange, enabled, onSend }: Props) {
           <option value="crlf">\r\n</option>
           <option value="cr">\r</option>
         </select>
-      </label>
-      <button type="submit" className="primary" disabled={!enabled || settings.text === ""}>
-        {t.send}
-      </button>
+        <button type="submit" className="primary send-button" disabled={!canSend}>
+          {t.send}
+        </button>
+      </div>
     </form>
   );
 }
