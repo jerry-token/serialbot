@@ -1,11 +1,11 @@
 [workspace]
 resolver = "3"
-members = ["crates/serialx-core"]
+members = ["crates/serialx-core", "crates/serialx-mcp"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 license = "GPL-3.0-only"
 repository = "https://github.com/jerry-token/serialx"
 publish = false
@@ -16,6 +16,15 @@ thiserror = "2.0"
 proptest = "1.12"
 regex = "1.12"
 serialport = "4.10"
+serialx-core = { path = "crates/serialx-core" }
+rmcp = { version = "3.10", default-features = false }
+axum = { version = "0.8", default-features = false }
+tokio = "1.54"
+tokio-util = "0.7"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+schemars = "1.2"
+getrandom = "0.4"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
