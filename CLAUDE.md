@@ -34,5 +34,7 @@ ports. Plan of record: the "AI 串口助手 · 开工前计划" doc.
 ## Layout
 
 - `crates/serialx-core` — log buffer, transports, sessions (Rust)
+  - `src/transport/mock.rs` — in-memory device for tests of everything above transports
+  - `tests/serial_socat.rs` — real serial code over socat virtual ports (Linux/macOS)
 - `.github/workflows/ci.yml` — fmt, clippy, tests on Windows/macOS/Linux,
   MSRV, docs, coverage gate, license/advisory checks
