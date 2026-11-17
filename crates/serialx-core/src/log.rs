@@ -213,12 +213,15 @@ impl LogBuffer {
         let missed = start.saturating_sub(cursor.0);
         let from = cursor.0.max(start);
         // Sequence numbers in the deque are contiguous, so the offset of
-        // `from` is a plain subtraction.
-        let offset = usize::try_from(from - start).unwrap_or(usize::MAX);
+        // `from` is a plain subtraction. `from <= next_seq`, hence
+        // `offset <= len` and `range` cannot panic; `range` also starts in
+        // O(1) instead of walking the skipped entries.
+        let offset =
+            usize::try_from(from - start).map_or(self.entries.len(), |o| o.min(self.entries.len()));
 
         let mut entries = Vec::new();
         let mut payload = 0usize;
-        for entry in self.entries.iter().skip(offset) {
+        for entry in self.entries.range(offset..) {
             let len = entry.kind.payload_len();
             if !entries.is_empty() && payload.saturating_add(len) > max_payload {
                 break;
