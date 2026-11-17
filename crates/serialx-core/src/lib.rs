@@ -5,9 +5,15 @@
 //! session manager. The desktop app, the MCP server and the command-line
 //! mode all talk to the device only through this crate.
 
+pub mod clock;
 pub mod log;
+pub mod manager;
+pub mod session;
 pub mod transport;
 
+pub use clock::{Clock, ManualClock, SystemClock};
 pub use log::{
     Cursor, Direction, ENTRY_OVERHEAD, Entry, EntryKind, LogBuffer, LogError, ReadResult,
 };
+pub use manager::{ManagerError, SessionManager, SessionSummary};
+pub use session::{Session, SessionError, SessionId, SessionOptions, SessionState, WaitMatch};
