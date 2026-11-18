@@ -5,17 +5,20 @@ import type {
   McpStatus,
   PortInfo,
   SessionInfo,
+  CaptureStatus,
+  ExportFormat,
   RepeatStatus,
   SignalsInfo,
   Unlisten,
 } from "./api";
-import { errorMessage } from "./api";
+import { errorMessage, formatBytes, saveFileName } from "./api";
 import { encodeInput, withEndings } from "./bytes";
 import { DisplaySettings } from "./components/DisplaySettings";
 import { SearchBar } from "./components/SearchBar";
 import { ConnectionBar, type PortSettings } from "./components/ConnectionBar";
 import { LogView } from "./components/LogView";
 import { McpPanel } from "./components/McpPanel";
+import { SaveMenu } from "./components/SaveMenu";
 import { SendBar, type SendSettings } from "./components/SendBar";
 import { SignalBar } from "./components/SignalBar";
 import { SessionTabs, Toggle } from "./components/SessionTabs";
@@ -32,6 +35,9 @@ export const HISTORY_SIZE = 50;
 
 /** How often the progress of running timed sends is refreshed. */
 export const REPEAT_POLL_MS = 500;
+
+/** How often the size of running captures is refreshed. */
+export const CAPTURE_POLL_MS = 1000;
 
 interface Props {
   backend: Backend;
@@ -81,6 +87,7 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
   });
   const [history, setHistory] = useState<string[]>([]);
   const [repeats, setRepeats] = useState<Record<number, RepeatStatus>>({});
+  const [captures, setCaptures] = useState<Record<number, CaptureStatus>>({});
   const [showTimestamps, setShowTimestamps] = useState(true);
   const [hexView, setHexView] = useState(false);
   const [showSent, setShowSent] = useState(true);
@@ -347,6 +354,53 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
     return () => clearInterval(timer);
   }, [backend, runningIds]);
 
+  const exportLog = async (format: ExportFormat): Promise<string | null> => {
+    if (!active) return null;
+    const path = await backend.chooseSaveFile(saveFileName(active.port, format), format);
+    if (!path) return null;
+    const { bytes } = await backend.exportLog(active.id, path, format);
+    return t.saved(formatBytes(bytes), path);
+  };
+
+  const startCapture = async (format: ExportFormat): Promise<string | null> => {
+    if (!active) return null;
+    const id = active.id;
+    const path = await backend.chooseSaveFile(saveFileName(active.port, format), format);
+    if (!path) return null;
+    const status = await backend.startCapture(id, path, format);
+    setCaptures((all) => ({ ...all, [id]: status }));
+    return null;
+  };
+
+  const stopCapture = async (): Promise<string | null> => {
+    if (!active) return null;
+    const id = active.id;
+    const status = await backend.stopCapture(id);
+    setCaptures((all) => ({ ...all, [id]: status }));
+    return status.path ? t.saved(formatBytes(status.bytes), status.path) : null;
+  };
+
+  // While captures run, refresh their size (and notice when they end).
+  const capturingIds = Object.entries(captures)
+    .filter(([, c]) => c.active)
+    .map(([id]) => Number(id))
+    .join(",");
+  useEffect(() => {
+    if (capturingIds === "") return undefined;
+    const timer = setInterval(() => {
+      for (const id of capturingIds.split(",").map(Number)) {
+        backend.captureStatus(id).then(
+          (status) => {
+            setCaptures((all) => ({ ...all, [id]: status }));
+            if (status.error) setError(status.error);
+          },
+          (e: unknown) => setError(errorMessage(e)),
+        );
+      }
+    }, CAPTURE_POLL_MS);
+    return () => clearInterval(timer);
+  }, [backend, capturingIds]);
+
   const toggleHexView = (hex: boolean) => {
     display.current.hex = hex;
     setHexView(hex);
@@ -499,6 +553,14 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
               >
                 <SearchIcon size={16} />
               </button>
+              <SaveMenu
+                t={t}
+                enabled={active !== null}
+                capture={active ? (captures[active.id] ?? null) : null}
+                onExport={exportLog}
+                onStartCapture={startCapture}
+                onStopCapture={stopCapture}
+              />
               <DisplaySettings
                 t={t}
                 encoding={encoding}
@@ -597,6 +659,15 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
               enabled={activeOpen}
               onSet={setLines}
             />
+          )}
+          {active && captures[active.id]?.active && (
+            <span className="capturing">
+              ●{" "}
+              {t.capturing(
+                (captures[active.id]?.path ?? "").split(/[\\/]/).pop() ?? "",
+                formatBytes(captures[active.id]?.bytes ?? 0),
+              )}
+            </span>
           )}
           {error && <span className="error">{error}</span>}
           <span className="spacer" />

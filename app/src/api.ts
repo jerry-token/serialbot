@@ -3,6 +3,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { save } from "@tauri-apps/plugin-dialog";
 
 export type Parity = "none" | "odd" | "even";
 export type FlowControl = "none" | "software" | "hardware";
@@ -66,6 +67,17 @@ export interface SignalsInfo {
   cd: boolean | null;
 }
 
+/** "raw": received bytes as they arrived; "log": timestamped readable lines. */
+export type ExportFormat = "raw" | "log";
+
+/** State of a session's live capture to a file. */
+export interface CaptureStatus {
+  active: boolean;
+  path: string | null;
+  bytes: number;
+  error: string | null;
+}
+
 /** Progress of a session's timed send. */
 export interface RepeatStatus {
   running: boolean;
@@ -100,6 +112,14 @@ export interface Backend {
   onSessionsChanged(handler: (sessions: SessionInfo[]) => void): Promise<Unlisten>;
   /** Called with the ids of sessions that have new log entries or a new state. */
   onLogChanged(handler: (ids: number[]) => void): Promise<Unlisten>;
+  /** Asks where to save; null when the user cancels. */
+  chooseSaveFile(defaultName: string, format: ExportFormat): Promise<string | null>;
+  /** Writes what the session's log holds now to `path`. */
+  exportLog(id: number, path: string, format: ExportFormat): Promise<{ bytes: number }>;
+  /** Saves the log to `path` and keeps appending new entries. */
+  startCapture(id: number, path: string, format: ExportFormat): Promise<CaptureStatus>;
+  stopCapture(id: number): Promise<CaptureStatus>;
+  captureStatus(id: number): Promise<CaptureStatus>;
   /** Sends `data` every `intervalMs`, `count` times or (null) until stopped. */
   startRepeat(
     id: number,
@@ -132,6 +152,20 @@ export const tauriBackend: Backend = {
   onSessionsChanged: (handler) =>
     listen<SessionInfo[]>("sessions-changed", (event) => handler(event.payload)),
   onLogChanged: (handler) => listen<number[]>("log-changed", (event) => handler(event.payload)),
+  chooseSaveFile: (defaultName, format) =>
+    save({
+      defaultPath: defaultName,
+      filters:
+        format === "log"
+          ? [{ name: "Log", extensions: ["log", "txt"] }]
+          : [{ name: "Raw data", extensions: ["bin", "txt"] }],
+    }),
+  exportLog: (id, path, format) =>
+    invoke("export_log", { id, path, format, utcOffsetMin: utcOffsetMin() }),
+  startCapture: (id, path, format) =>
+    invoke("start_capture", { id, path, format, utcOffsetMin: utcOffsetMin() }),
+  stopCapture: (id) => invoke("stop_capture", { id }),
+  captureStatus: (id) => invoke("capture_status", { id }),
   startRepeat: (id, data, intervalMs, count) =>
     invoke("start_repeat", { id, data: Array.from(data), intervalMs, count }),
   stopRepeat: (id) => invoke("stop_repeat", { id }),
@@ -146,6 +180,28 @@ export const tauriBackend: Backend = {
   mcpApply: (settings) => invoke("mcp_apply", { settings }),
   mcpRegenerateToken: () => invoke("mcp_regenerate_token"),
 };
+
+/** The local time zone in minutes east of UTC (as the backend expects). */
+export function utcOffsetMin(date = new Date()): number {
+  return -date.getTimezoneOffset();
+}
+
+/** A file name for saving a session's log, e.g. "ttyUSB0_20261118-101338.log". */
+export function saveFileName(port: string, format: ExportFormat, now = new Date()): string {
+  const base = port.split(/[\\/]/).pop()?.replace(/[^\w.-]/g, "_") || "serial";
+  const p = (n: number) => String(n).padStart(2, "0");
+  const stamp =
+    `${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}-` +
+    `${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`;
+  return `${base}_${stamp}.${format === "log" ? "log" : "bin"}`;
+}
+
+/** Human-readable size, e.g. "12.3 KB". */
+export function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
 
 /** The command that adds this server to Claude Code. */
 export function claudeCommand(url: string, token: string): string {

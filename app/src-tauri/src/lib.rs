@@ -10,6 +10,7 @@
 //! session.
 
 pub mod commands;
+pub mod export;
 pub mod mcp;
 pub mod repeat;
 pub mod settings;
@@ -40,6 +41,7 @@ const SIGNAL_TICKS: u32 = 6;
 )]
 mod ipc {
     use super::commands::{AppState, LogChunk, OpenRequest, PortDto, SessionDto, SignalsDto};
+    use super::export::{CaptureStatus, ExportFormat, ExportSummary};
     use super::mcp::{McpController, McpStatus};
     use super::repeat::RepeatStatus;
     use super::settings::McpSettings;
@@ -86,6 +88,44 @@ mod ipc {
         max_bytes: usize,
     ) -> Result<LogChunk, String> {
         state.read(id, cursor, max_bytes)
+    }
+
+    #[tauri::command(async)]
+    pub(crate) fn export_log(
+        state: tauri::State<'_, AppState>,
+        id: u32,
+        path: String,
+        format: ExportFormat,
+        utc_offset_min: i32,
+    ) -> Result<ExportSummary, String> {
+        state.export_log(id, &path, format, utc_offset_min)
+    }
+
+    #[tauri::command(async)]
+    pub(crate) fn start_capture(
+        state: tauri::State<'_, AppState>,
+        id: u32,
+        path: String,
+        format: ExportFormat,
+        utc_offset_min: i32,
+    ) -> Result<CaptureStatus, String> {
+        state.start_capture(id, &path, format, utc_offset_min)
+    }
+
+    #[tauri::command(async)]
+    pub(crate) fn stop_capture(
+        state: tauri::State<'_, AppState>,
+        id: u32,
+    ) -> Result<CaptureStatus, String> {
+        Ok(state.stop_capture(id))
+    }
+
+    #[tauri::command(async)]
+    pub(crate) fn capture_status(
+        state: tauri::State<'_, AppState>,
+        id: u32,
+    ) -> Result<CaptureStatus, String> {
+        Ok(state.capture_status(id))
     }
 
     #[tauri::command(async)]
@@ -245,6 +285,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 /// and all ports are closed on exit.
 pub fn run() -> Result<(), tauri::Error> {
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppState::with_serial_ports())
         .setup(setup)
         .invoke_handler(tauri::generate_handler![
@@ -255,6 +296,10 @@ pub fn run() -> Result<(), tauri::Error> {
             ipc::write_data,
             ipc::read_log,
             ipc::encode_text,
+            ipc::export_log,
+            ipc::start_capture,
+            ipc::stop_capture,
+            ipc::capture_status,
             ipc::start_repeat,
             ipc::stop_repeat,
             ipc::repeat_status,

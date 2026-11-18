@@ -691,3 +691,27 @@ button.signal.on:hover:not(:disabled) {
   left: 0;
   width: 100%;
 }
+
+/* ---- save menu --------------------------------------------------------- */
+
+.popover-stack {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.capture-path {
+  max-width: 320px;
+  white-space: normal;
+  word-break: break-all;
+  font-size: 12px;
+}
+
+.icon-button.recording {
+  color: var(--info);
+}
+
+.statusbar .capturing {
+  color: var(--info);
+}
