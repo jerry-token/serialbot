@@ -249,7 +249,18 @@ impl Session {
     }
 
     /// Drives RTS; remembered and logged like [`Session::set_dtr`].
+    ///
+    /// Refused with [`TransportError::Unsupported`] while hardware flow
+    /// control owns RTS (see [`Capabilities::manual_rts`]); the driver is not
+    /// asked.
+    ///
+    /// [`Capabilities::manual_rts`]: crate::transport::Capabilities::manual_rts
     pub fn set_rts(&self, level: bool) -> Result<(), SessionError> {
+        if !self.info.capabilities.manual_rts {
+            return Err(SessionError::Transport(TransportError::Unsupported(
+                "setting RTS while RTS/CTS hardware flow control is on",
+            )));
+        }
         self.with_control(|c| c.set_rts(level))?;
         lock(&self.outputs).rts = Some(level);
         self.mark(&format!("RTS={}", u8::from(level)));
@@ -794,6 +805,28 @@ mod tests {
             })
             .collect();
         assert_eq!(labels, ["DTR=0", "RTS=1"]);
+    }
+
+    #[test]
+    fn rts_is_refused_under_hardware_flow_control() {
+        let (mut conn, dev) = mock::connection("mock0", T);
+        conn.info.capabilities.manual_rts = false;
+        let s = Session::start(
+            SessionId(1),
+            conn,
+            Arc::new(ManualClock::new(0)),
+            SessionOptions::default(),
+        )
+        .unwrap();
+        let before = dev.rts();
+        let err = s.set_rts(!before).unwrap_err();
+        assert!(err.to_string().contains("hardware flow control"), "{err}");
+        assert_eq!(dev.rts(), before, "the driver was not asked");
+        assert_eq!(s.output_signals().rts, None);
+        assert_eq!(s.end(), Cursor(0), "nothing logged");
+        // DTR is unaffected.
+        s.set_dtr(false).unwrap();
+        assert!(!dev.dtr());
     }
 
     #[test]

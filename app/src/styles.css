@@ -657,3 +657,8 @@ button.signal.on:hover:not(:disabled) {
   color: var(--accent);
   background: var(--accent-soft);
 }
+
+.signal.locked {
+  border-style: solid;
+  text-decoration: line-through;
+}

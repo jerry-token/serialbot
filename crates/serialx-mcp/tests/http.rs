@@ -302,6 +302,7 @@ async fn signals_are_set_read_and_logged() {
     });
     let read = ok(&client, "io.signals", json!({"session": "s1"})).await;
     assert_eq!(read["dtr"], Value::Null, "never set");
+    assert_eq!(read["rts_manual"], true);
     assert_eq!(read["cts"], true);
     assert_eq!(read["cd"], true);
     assert_eq!(read["input_error"], Value::Null);

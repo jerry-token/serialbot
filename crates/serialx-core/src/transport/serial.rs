@@ -254,12 +254,7 @@ pub fn open(config: &SerialConfig) -> Result<Connection, TransportError> {
         info: TransportInfo {
             kind: TransportKind::Serial,
             name: config.path.clone(),
-            capabilities: Capabilities {
-                output_signals: true,
-                input_signals: true,
-                send_break: true,
-                live_baud_rate: true,
-            },
+            capabilities: capabilities(config),
         },
         reader: Box::new(SerialReader {
             port: reader_port,
@@ -331,6 +326,17 @@ fn map_error(e: serialport::Error) -> TransportError {
         serialport::ErrorKind::InvalidInput => TransportError::InvalidConfig(e.description),
         serialport::ErrorKind::Io(kind) => TransportError::Io(io::Error::new(kind, e.description)),
         serialport::ErrorKind::Unknown => TransportError::Io(io::Error::other(e.description)),
+    }
+}
+
+/// What a serial port opened with `config` can do.
+fn capabilities(config: &SerialConfig) -> Capabilities {
+    Capabilities {
+        output_signals: true,
+        manual_rts: config.flow_control != FlowControl::Hardware,
+        input_signals: true,
+        send_break: true,
+        live_baud_rate: true,
     }
 }
 
@@ -656,6 +662,18 @@ mod tests {
             map_modem_error(err(K::Unknown, "something else"), "setting DTR"),
             TransportError::Io(_)
         ));
+    }
+
+    #[test]
+    fn hardware_flow_control_owns_rts() {
+        let mut config = SerialConfig::new("COM3", 115_200);
+        assert!(capabilities(&config).manual_rts);
+        config.flow_control = FlowControl::Software;
+        assert!(capabilities(&config).manual_rts);
+        config.flow_control = FlowControl::Hardware;
+        let caps = capabilities(&config);
+        assert!(!caps.manual_rts);
+        assert!(caps.output_signals, "DTR stays available");
     }
 
     #[test]
