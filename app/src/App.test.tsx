@@ -811,6 +811,34 @@ describe("App", () => {
     await waitFor(() => expect(status()).toHaveTextContent("the file is empty"));
   });
 
+  it("resizes the send box from its top-right handle", async () => {
+    setup();
+    const box = screen.getByLabelText("Send");
+    const handle = screen.getByRole("separator", { name: /resize the send box/ });
+    const drag = (fromY: number, toY: number) => {
+      fireEvent.pointerDown(handle, { clientY: fromY });
+      act(() => {
+        window.dispatchEvent(new MouseEvent("pointermove", { clientY: toY }));
+        window.dispatchEvent(new MouseEvent("pointerup"));
+      });
+    };
+    // jsdom has no layout, so the box starts at the minimum height.
+    drag(500, 400);
+    expect(box).toHaveStyle({ height: "148px" });
+    // Released: later moves do nothing.
+    act(() => window.dispatchEvent(new MouseEvent("pointermove", { clientY: 0 })));
+    expect(box).toHaveStyle({ height: "148px" });
+    fireEvent.keyDown(handle, { key: "ArrowUp" });
+    expect(box).toHaveStyle({ height: "164px" });
+    fireEvent.keyDown(handle, { key: "ArrowDown" });
+    fireEvent.keyDown(handle, { key: "Enter" });
+    expect(box).toHaveStyle({ height: "148px" });
+    drag(1000, 0);
+    expect(box).toHaveStyle({ height: "480px" });
+    drag(0, 2000);
+    expect(box).toHaveStyle({ height: "48px" });
+  });
+
   it("shows the failure reason of a failed session", async () => {
     const { backend, user } = setup();
     await openPort(user);
