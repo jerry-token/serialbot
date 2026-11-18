@@ -35,6 +35,8 @@ export interface SessionInfo {
   port: string;
   state: SessionStateName;
   error: string | null;
+  /** Whether the port is reopened by itself after the device comes back. */
+  autoReconnect: boolean;
 }
 
 export interface LogEntry {
@@ -106,6 +108,11 @@ export interface Backend {
   listSessions(): Promise<SessionInfo[]>;
   openSession(request: OpenRequest): Promise<SessionInfo>;
   closeSession(id: number): Promise<void>;
+  /** Reopens the port of a disconnected or failed session; its log continues. */
+  reconnectSession(id: number): Promise<void>;
+  setAutoReconnect(id: number, on: boolean): Promise<void>;
+  /** Called with the new port list when a device is plugged in or removed. */
+  onPortsChanged(handler: (ports: PortInfo[]) => void): Promise<Unlisten>;
   writeData(id: number, data: Uint8Array): Promise<number>;
   readLog(id: number, cursor: number, maxBytes: number): Promise<LogChunk>;
   /** Called with the full list whenever sessions are opened, closed or change state. */
@@ -147,6 +154,10 @@ export const tauriBackend: Backend = {
   listSessions: () => invoke("list_sessions"),
   openSession: (request) => invoke("open_session", { request }),
   closeSession: (id) => invoke("close_session", { id }),
+  reconnectSession: (id) => invoke("reconnect", { id }),
+  setAutoReconnect: (id, on) => invoke("set_auto_reconnect", { id, on }),
+  onPortsChanged: (handler) =>
+    listen<PortInfo[]>("ports-changed", (event) => handler(event.payload)),
   writeData: (id, data) => invoke("write_data", { id, data: Array.from(data) }),
   readLog: (id, cursor, maxBytes) => invoke("read_log", { id, cursor, maxBytes }),
   onSessionsChanged: (handler) =>

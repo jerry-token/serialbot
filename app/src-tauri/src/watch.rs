@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 
 use serialx_core::SessionManager;
 
-use crate::commands::{SessionDto, SignalsDto, session_dto, signals_dto};
+use crate::commands::{PortDto, PortLister, SessionDto, SignalsDto, session_dto, signals_dto};
 
 /// Changes since the previous poll.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -36,6 +36,7 @@ pub struct ChangeDetector {
     sessions: Vec<SessionDto>,
     ends: BTreeMap<u32, (u64, &'static str)>,
     signals: BTreeMap<u32, SignalsDto>,
+    ports: Option<Vec<PortDto>>,
 }
 
 impl ChangeDetector {
@@ -62,6 +63,18 @@ impl ChangeDetector {
             sessions
         });
         Changes { sessions, logs }
+    }
+
+    /// The port list, if it changed since the previous call (a device was
+    /// plugged in or removed). The first call reports the list. Listing
+    /// errors are ignored; the next call tries again.
+    pub fn poll_ports(&mut self, lister: &PortLister) -> Option<Vec<PortDto>> {
+        let ports: Vec<PortDto> = lister().ok()?.into_iter().map(Into::into).collect();
+        if self.ports.as_ref() == Some(&ports) {
+            return None;
+        }
+        self.ports = Some(ports.clone());
+        Some(ports)
     }
 
     /// Line levels of open sessions that changed since the previous call
@@ -163,6 +176,45 @@ mod tests {
         let changes = detector.poll(&manager);
         assert_eq!(changes.sessions, Some(Vec::new()));
         assert!(changes.logs.is_empty());
+    }
+
+    #[test]
+    fn reports_port_list_changes() {
+        use serialx_core::transport::TransportError;
+        use serialx_core::transport::serial::{PortInfo, PortKind};
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::{Arc, Mutex};
+        let present = Arc::new(Mutex::new(vec!["COM3".to_owned()]));
+        let failing = Arc::new(AtomicBool::new(false));
+        let lister: Box<crate::commands::PortLister> = {
+            let present = Arc::clone(&present);
+            let failing = Arc::clone(&failing);
+            Box::new(move || {
+                if failing.load(Ordering::SeqCst) {
+                    return Err(TransportError::PermissionDenied("udev".into()));
+                }
+                Ok(present
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .map(|p| PortInfo {
+                        path: p.clone(),
+                        kind: PortKind::Unknown,
+                    })
+                    .collect())
+            })
+        };
+        let mut detector = ChangeDetector::default();
+        let first = detector.poll_ports(&lister).unwrap();
+        assert_eq!(first[0].path, "COM3");
+        assert_eq!(detector.poll_ports(&lister), None, "unchanged");
+        present.lock().unwrap().push("COM4".into());
+        assert_eq!(detector.poll_ports(&lister).unwrap().len(), 2, "plugged in");
+        failing.store(true, Ordering::SeqCst);
+        assert_eq!(detector.poll_ports(&lister), None, "errors are skipped");
+        failing.store(false, Ordering::SeqCst);
+        present.lock().unwrap().clear();
+        assert_eq!(detector.poll_ports(&lister), Some(Vec::new()), "unplugged");
     }
 
     #[test]

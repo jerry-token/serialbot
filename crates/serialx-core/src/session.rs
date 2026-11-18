@@ -102,6 +102,22 @@ impl Shared {
         self.inner.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
+    /// Back to `Open` after a reconnect, unless the session was closed.
+    /// Returns whether it reopened.
+    fn reopen(&self) -> bool {
+        let mut inner = self.lock();
+        let reopened = matches!(
+            inner.state,
+            SessionState::Disconnected | SessionState::Failed(_)
+        );
+        if reopened {
+            inner.state = SessionState::Open;
+        }
+        drop(inner);
+        self.changed.notify_all();
+        reopened
+    }
+
     /// Sets a terminal state unless one is already set, and wakes waiters.
     fn finish(&self, state: SessionState) {
         let mut inner = self.lock();
@@ -132,6 +148,7 @@ pub struct Session {
     shared: Arc<Shared>,
     control: Mutex<Box<dyn TransportControl>>,
     reader: Mutex<Option<JoinHandle<()>>>,
+    read_chunk: usize,
 }
 
 impl std::fmt::Debug for Session {
@@ -176,6 +193,7 @@ impl Session {
             shared,
             control: Mutex::new(connection.control),
             reader: Mutex::new(Some(handle)),
+            read_chunk: chunk,
         })
     }
 
@@ -365,6 +383,46 @@ impl Session {
         let from = self.end();
         self.write(data)?;
         self.wait_for(pattern, from, timeout, match_window)
+    }
+
+    /// Continues a disconnected or failed session over a new connection to
+    /// the same device (after an unplug, a reset that re-enumerates USB, or
+    /// a driver error), keeping the session id, alias and log, so cursors
+    /// held by the UI and agents stay valid.
+    ///
+    /// A `reconnected` marker is logged, and DTR/RTS become unknown again.
+    /// Fails with [`SessionError::NotOpen`] unless the session is
+    /// disconnected or failed; a closed session stays closed.
+    pub fn reattach(&self, connection: Connection) -> Result<(), SessionError> {
+        let mut reader = lock(&self.reader);
+        match self.state() {
+            SessionState::Disconnected | SessionState::Failed(_) => {}
+            other => return Err(SessionError::NotOpen(other)),
+        }
+        if let Some(old) = reader.take() {
+            // The old reader already returned (that is what ended the
+            // session); a panicked one has nothing left to clean up.
+            let _ = old.join();
+        }
+        *lock(&self.control) = connection.control;
+        *lock(&self.outputs) = OutputSignals::default();
+        let thread_shared = Arc::clone(&self.shared);
+        let chunk = self.read_chunk;
+        let source = connection.reader;
+        let handle = std::thread::Builder::new()
+            .name(format!("serialx-rx-{}", self.id))
+            .spawn(move || read_loop(&thread_shared, source, chunk))
+            .map_err(TransportError::Io)?;
+        *reader = Some(handle);
+        drop(reader);
+        if self.shared.reopen() {
+            self.mark("reconnected");
+            Ok(())
+        } else {
+            // Closed meanwhile: stop the new reader again.
+            self.close();
+            Err(SessionError::NotOpen(self.state()))
+        }
     }
 
     /// Stops the reader thread and closes the port. Idempotent; the log
@@ -900,6 +958,46 @@ mod tests {
         assert!(s.set_dtr(true).is_err());
         assert_eq!(s.output_signals(), OutputSignals::default());
         assert_eq!(s.end(), Cursor(0), "nothing logged");
+    }
+
+    #[test]
+    fn reattach_continues_a_disconnected_session() {
+        let (s, d, _c) = session();
+        s.set_dtr(true).unwrap();
+        d.send(b"before");
+        d.disconnect();
+        while s.state() == SessionState::Open {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        let before = s.end();
+        let (conn, d2) = mock::connection("mock0", T);
+        s.reattach(conn).unwrap();
+        assert_eq!(s.state(), SessionState::Open);
+        assert_eq!(
+            s.output_signals(),
+            OutputSignals::default(),
+            "levels unknown again"
+        );
+        let marker = s.read(before, usize::MAX).unwrap().entries;
+        assert!(matches!(&marker[0].kind, EntryKind::Marker { label } if label == "reconnected"));
+        d2.send(b"after");
+        let m = s
+            .wait_for(&re("after"), Cursor(0), Duration::from_secs(5), WIN)
+            .unwrap();
+        assert!(m.is_some(), "the new reader logs into the same log");
+        s.write(b"hi").unwrap();
+        assert_eq!(d2.take_written(), b"hi");
+        assert!(rx_bytes(&s).starts_with(b"before"), "the history is kept");
+    }
+
+    #[test]
+    fn reattach_needs_a_lost_session() {
+        let (s, _d, _c) = session();
+        let err = s.reattach(mock::connection("x", T).0).unwrap_err();
+        assert!(matches!(err, SessionError::NotOpen(SessionState::Open)));
+        s.close();
+        let err = s.reattach(mock::connection("x", T).0).unwrap_err();
+        assert!(matches!(err, SessionError::NotOpen(SessionState::Closed)));
     }
 
     #[test]

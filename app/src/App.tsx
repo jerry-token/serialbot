@@ -150,6 +150,8 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
           }
           if (chunk.missed > 0 || chunk.entries.length > 0) redraw();
           if (chunk.entries.length > 0) continue;
+          // After a reconnect, a later disconnect is reported again.
+          if (chunk.state === "open") view.ended = false;
           if (chunk.state !== "open" && !view.ended) {
             // Everything received before the port went away has been shown.
             view.ended = true;
@@ -185,18 +187,22 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
     [pull],
   );
 
+  // Keeps the selected port while it is still present.
+  const applyPorts = useCallback((list: PortInfo[]) => {
+    setPorts(list);
+    setSettings((s) =>
+      list.some((p) => p.path === s.port) ? s : { ...s, port: list[0]?.path ?? "" },
+    );
+  }, []);
+
   const refreshPorts = useCallback(async () => {
     try {
-      const list = await backend.listPorts();
-      setPorts(list);
-      setSettings((s) =>
-        list.some((p) => p.path === s.port) ? s : { ...s, port: list[0]?.path ?? "" },
-      );
+      applyPorts(await backend.listPorts());
       setError(null);
     } catch (e) {
       setError(errorMessage(e));
     }
-  }, [backend]);
+  }, [backend, applyPorts]);
 
   // Subscribe to backend changes, then load the current state.
   useEffect(() => {
@@ -212,6 +218,7 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
           }),
         );
         keep(await backend.onSignalsChanged(storeSignals));
+        keep(await backend.onPortsChanged(applyPorts));
         const list = await backend.listSessions();
         if (!disposed) applySessions(list);
         const status = await backend.mcpStatus();
@@ -226,7 +233,7 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
       disposed = true;
       for (const u of unlisteners) u();
     };
-  }, [backend, applySessions, pull, refreshPorts, storeSignals]);
+  }, [backend, applySessions, applyPorts, pull, refreshPorts, storeSignals]);
 
   const active = sessions.find((s) => s.id === activeId) ?? null;
   const activeOpen = active?.state === "open";
@@ -478,6 +485,17 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
     }
   };
 
+  // Changes arrive as sessions-changed events.
+  const sessionCall = async (call: (id: number) => Promise<void>) => {
+    if (activeId === null) return;
+    try {
+      await call(activeId);
+      setError(null);
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  };
+
   const statusText = active
     ? {
         open: t.statusOpen,
@@ -649,6 +667,28 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
             {active ? `${active.port} · ` : ""}
             {statusText}
           </span>
+          {active && (active.state === "disconnected" || active.state === "failed") && (
+            <button
+              type="button"
+              className="chip"
+              onClick={() => void sessionCall((id) => backend.reconnectSession(id))}
+            >
+              {t.reconnect}
+            </button>
+          )}
+          {active && active.state !== "closed" && (
+            <button
+              type="button"
+              className="chip"
+              aria-pressed={active.autoReconnect}
+              title={t.autoReconnectHint}
+              onClick={() =>
+                void sessionCall((id) => backend.setAutoReconnect(id, !active.autoReconnect))
+              }
+            >
+              {t.autoReconnect}
+            </button>
+          )}
           <span>
             {t.rxBytes} {activeView?.rx ?? 0} · {t.txBytes} {activeView?.tx ?? 0}
           </span>
