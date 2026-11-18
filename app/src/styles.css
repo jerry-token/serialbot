@@ -450,7 +450,23 @@ label.check {
 }
 
 .send-button {
+  flex: 1;
   padding: 6px 0;
+}
+
+.file-button {
+  padding: 6px 10px;
+}
+
+.statusbar .progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+}
+
+.popover-wide {
+  grid-column: 1 / -1;
 }
 
 /* ---- status bar -------------------------------------------------------- */
@@ -662,6 +678,11 @@ button.signal.on:hover:not(:disabled) {
 .popover.right {
   left: auto;
   right: 0;
+}
+
+.popover.up {
+  top: auto;
+  bottom: calc(100% + 4px);
 }
 
 .gap-input {

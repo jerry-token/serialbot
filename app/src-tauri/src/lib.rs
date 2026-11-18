@@ -13,6 +13,7 @@
 
 pub mod commands;
 pub mod export;
+pub mod filesend;
 pub mod mcp;
 pub mod repeat;
 pub mod settings;
@@ -51,6 +52,7 @@ const PORT_TICKS: u32 = 120;
 mod ipc {
     use super::commands::{AppState, LogChunk, OpenRequest, PortDto, SessionDto, SignalsDto};
     use super::export::{CaptureStatus, ExportFormat, ExportSummary};
+    use super::filesend::FileSendStatus;
     use super::mcp::{McpController, McpStatus};
     use super::repeat::RepeatStatus;
     use super::settings::McpSettings;
@@ -176,6 +178,33 @@ mod ipc {
         id: u32,
     ) -> Result<RepeatStatus, String> {
         Ok(state.repeat_status(id))
+    }
+
+    #[tauri::command(async)]
+    pub(crate) fn send_file(
+        state: tauri::State<'_, AppState>,
+        id: u32,
+        path: String,
+        chunk: usize,
+        delay_ms: u64,
+    ) -> Result<FileSendStatus, String> {
+        state.send_file(id, &path, chunk, delay_ms)
+    }
+
+    #[tauri::command(async)]
+    pub(crate) fn stop_file_send(
+        state: tauri::State<'_, AppState>,
+        id: u32,
+    ) -> Result<FileSendStatus, String> {
+        Ok(state.stop_file_send(id))
+    }
+
+    #[tauri::command(async)]
+    pub(crate) fn file_send_status(
+        state: tauri::State<'_, AppState>,
+        id: u32,
+    ) -> Result<FileSendStatus, String> {
+        Ok(state.file_send_status(id))
     }
 
     #[tauri::command(async)]
@@ -331,6 +360,9 @@ pub fn run() -> Result<(), tauri::Error> {
             ipc::close_session,
             ipc::write_data,
             ipc::read_log,
+            ipc::send_file,
+            ipc::stop_file_send,
+            ipc::file_send_status,
             ipc::encode_text,
             ipc::reconnect,
             ipc::set_auto_reconnect,

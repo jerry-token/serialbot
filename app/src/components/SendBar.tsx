@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { type ReactNode, useRef } from "react";
 import type { RepeatStatus } from "../api";
 import type { LineEnding } from "../bytes";
 import type { Strings } from "../i18n";
@@ -23,6 +23,8 @@ interface Props {
   onStopRepeat: () => void;
   /** Previously sent texts, oldest first. */
   history: readonly string[];
+  /** Shown left of the Send button (the file sender). */
+  extra?: ReactNode;
 }
 
 /**
@@ -41,6 +43,7 @@ export function SendBar({
   repeat,
   onStopRepeat,
   history,
+  extra,
 }: Props) {
   // Position in `history` while browsing it; null when editing new text.
   const browsing = useRef<number | null>(null);
@@ -143,15 +146,18 @@ export function SendBar({
           />
           <span className="muted">ms</span>
         </div>
-        {running ? (
-          <button type="submit" className="danger send-button">
-            {t.stopRepeat(repeat?.sent ?? 0)}
-          </button>
-        ) : (
-          <button type="submit" className="primary send-button" disabled={!canSend}>
-            {settings.repeat ? t.startRepeat : t.send}
-          </button>
-        )}
+        <div className="send-row">
+          {extra}
+          {running ? (
+            <button type="submit" className="danger send-button">
+              {t.stopRepeat(repeat?.sent ?? 0)}
+            </button>
+          ) : (
+            <button type="submit" className="primary send-button" disabled={!canSend}>
+              {settings.repeat ? t.startRepeat : t.send}
+            </button>
+          )}
+        </div>
       </div>
     </form>
   );

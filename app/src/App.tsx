@@ -7,6 +7,7 @@ import type {
   SessionInfo,
   CaptureStatus,
   ExportFormat,
+  FileSendStatus,
   RepeatStatus,
   SignalsInfo,
   Unlisten,
@@ -23,6 +24,7 @@ import {
 } from "./commands";
 import { CommandPanel, type RunProgress } from "./components/CommandPanel";
 import { DisplaySettings } from "./components/DisplaySettings";
+import { FileSend, type FileSendOptions } from "./components/FileSend";
 import { SearchBar } from "./components/SearchBar";
 import { ConnectionBar, type PortSettings } from "./components/ConnectionBar";
 import { LogView } from "./components/LogView";
@@ -105,6 +107,7 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
   const [history, setHistory] = useState<string[]>([]);
   const [repeats, setRepeats] = useState<Record<number, RepeatStatus>>({});
   const [captures, setCaptures] = useState<Record<number, CaptureStatus>>({});
+  const [fileSends, setFileSends] = useState<Record<number, FileSendStatus>>({});
   const [showTimestamps, setShowTimestamps] = useState(true);
   const [hexView, setHexView] = useState(false);
   const [showSent, setShowSent] = useState(true);
@@ -435,6 +438,50 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
     return () => clearInterval(timer);
   }, [backend, runningIds]);
 
+  // While files are being sent, refresh their progress like timed sends.
+  const sendingIds = Object.entries(fileSends)
+    .filter(([, f]) => f.running)
+    .map(([id]) => Number(id))
+    .join(",");
+  useEffect(() => {
+    if (sendingIds === "") return undefined;
+    const timer = setInterval(() => {
+      for (const id of sendingIds.split(",").map(Number)) {
+        backend.fileSendStatus(id).then(
+          (status) => {
+            setFileSends((all) => ({ ...all, [id]: status }));
+            if (status.error) setError(status.error);
+          },
+          (e: unknown) => setError(errorMessage(e)),
+        );
+      }
+    }, REPEAT_POLL_MS);
+    return () => clearInterval(timer);
+  }, [backend, sendingIds]);
+
+  const startFileSend = async ({ chunk, delayMs }: FileSendOptions) => {
+    if (!active) return;
+    const id = active.id;
+    try {
+      const path = await backend.chooseOpenFile();
+      if (!path) return;
+      const status = await backend.sendFile(id, path, chunk, delayMs);
+      setFileSends((all) => ({ ...all, [id]: status }));
+      setError(null);
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  };
+
+  const stopFileSend = async (id: number) => {
+    try {
+      const status = await backend.stopFileSend(id);
+      setFileSends((all) => ({ ...all, [id]: status }));
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  };
+
   const exportLog = async (format: ExportFormat): Promise<string | null> => {
     if (!active) return null;
     const path = await backend.chooseSaveFile(saveFileName(active.port, format), format);
@@ -569,6 +616,8 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
       setError(errorMessage(e));
     }
   };
+
+  const fileSend = active ? fileSends[active.id] : undefined;
 
   const statusText = active
     ? {
@@ -745,6 +794,13 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
               repeat={active ? (repeats[active.id] ?? null) : null}
               onStopRepeat={() => void stopRepeat()}
               history={history}
+              extra={
+                <FileSend
+                  t={t}
+                  enabled={activeOpen && !fileSend?.running}
+                  onStart={(options) => void startFileSend(options)}
+                />
+              }
             />
           </>
         ) : (
@@ -806,6 +862,19 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
                 (captures[active.id]?.path ?? "").split(/[\\/]/).pop() ?? "",
                 formatBytes(captures[active.id]?.bytes ?? 0),
               )}
+            </span>
+          )}
+          {active && fileSend?.running && (
+            <span className="progress">
+              {t.sendingFile(
+                fileSend.name ?? "",
+                fileSend.total > 0 ? Math.floor((fileSend.sent * 100) / fileSend.total) : 0,
+                formatBytes(fileSend.sent),
+                formatBytes(fileSend.total),
+              )}{" "}
+              <button type="button" className="chip" onClick={() => void stopFileSend(active.id)}>
+                {t.stopFile}
+              </button>
             </span>
           )}
           {error && <span className="error">{error}</span>}

@@ -12,6 +12,7 @@ import type {
   PortInfo,
   SessionInfo,
   CaptureStatus,
+  FileSendStatus,
   ExportFormat,
   RepeatStatus,
   SessionStateName,
@@ -229,6 +230,33 @@ class FakeBackend implements Backend {
   async repeatStatus(id: number) {
     const job = this.repeats.get(id);
     return { running: job?.running ?? false, sent: job?.sent ?? 0, error: job?.error ?? null };
+  }
+
+  openPath: string | null = "/home/me/fw.bin";
+  fileCalls: Array<[number, string, number, number]> = [];
+  file: FileSendStatus = { running: false, name: null, sent: 0, total: 0, error: null };
+  failFile: string | null = null;
+  fileStops = 0;
+
+  async chooseOpenFile() {
+    return this.openPath;
+  }
+
+  async sendFile(id: number, path: string, chunk: number, delayMs: number) {
+    if (this.failFile) throw this.failFile;
+    this.fileCalls.push([id, path, chunk, delayMs]);
+    this.file = { running: true, name: "fw.bin", sent: 0, total: 2048, error: null };
+    return this.file;
+  }
+
+  async stopFileSend(_id: number) {
+    this.fileStops += 1;
+    this.file = { ...this.file, running: false };
+    return this.file;
+  }
+
+  async fileSendStatus(_id: number) {
+    return this.file;
   }
 
   async encodeText(text: string, encoding: string) {
@@ -727,6 +755,60 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "Commands" }));
     expect(screen.queryByRole("complementary", { name: "Commands" })).toBeNull();
+  });
+
+  it("sends a file with the chosen chunk size and shows its progress", async () => {
+    const { backend, user } = setup();
+    const fileButton = () => screen.getByRole("button", { name: "Send a file" });
+    expect(fileButton()).toBeDisabled();
+    await openPort(user);
+    await user.click(fileButton());
+    const chunk = screen.getByLabelText("Chunk bytes");
+    await user.clear(chunk);
+    await user.type(chunk, "256");
+    const pause = screen.getByLabelText("Pause ms");
+    await user.clear(pause);
+    await user.type(pause, "5");
+    await user.click(screen.getByRole("button", { name: "Choose file and send…" }));
+    await waitFor(() => expect(backend.fileCalls).toEqual([[1, "/home/me/fw.bin", 256, 5]]));
+    expect(screen.queryByLabelText("Chunk bytes")).toBeNull();
+    await waitFor(() => expect(status()).toHaveTextContent("Sending fw.bin 0% (0 B / 2.0 KB)"));
+    expect(fileButton()).toBeDisabled();
+
+    backend.file = { ...backend.file, sent: 1024 };
+    await waitFor(() => expect(status()).toHaveTextContent("Sending fw.bin 50% (1.0 KB / 2.0 KB)"));
+    await user.click(within(status()).getByRole("button", { name: "Stop" }));
+    await waitFor(() => expect(status()).not.toHaveTextContent("Sending"));
+    expect(backend.fileStops).toBe(1);
+    expect(fileButton()).toBeEnabled();
+  });
+
+  it("handles a cancelled dialog, bad options and failed file sends", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    backend.openPath = null;
+    await user.click(screen.getByRole("button", { name: "Send a file" }));
+    await user.click(screen.getByRole("button", { name: "Choose file and send…" }));
+    await waitFor(() => expect(screen.queryByLabelText("Chunk bytes")).toBeNull());
+    expect(backend.fileCalls).toEqual([]);
+
+    backend.openPath = "/tmp/a.bin";
+    await user.click(screen.getByRole("button", { name: "Send a file" }));
+    fireEvent.change(screen.getByLabelText("Chunk bytes"), { target: { value: "999999" } });
+    fireEvent.change(screen.getByLabelText("Pause ms"), { target: { value: "" } });
+    await user.click(screen.getByRole("button", { name: "Choose file and send…" }));
+    await waitFor(() => expect(backend.fileCalls).toEqual([[1, "/tmp/a.bin", 65536, 0]]));
+
+    // The device went away during the send.
+    backend.file = { ...backend.file, running: false, error: "session is Disconnected" };
+    await waitFor(() => expect(status()).toHaveTextContent("session is Disconnected"));
+    expect(status()).not.toHaveTextContent("Sending");
+
+    backend.failFile = "the file is empty";
+    await user.click(screen.getByRole("button", { name: "Send a file" }));
+    expect(screen.getByLabelText("Chunk bytes")).toHaveValue(65536);
+    await user.click(screen.getByRole("button", { name: "Choose file and send…" }));
+    await waitFor(() => expect(status()).toHaveTextContent("the file is empty"));
   });
 
   it("shows the failure reason of a failed session", async () => {

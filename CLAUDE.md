@@ -55,6 +55,8 @@ ports. Plan of record: the "AI 串口助手 · 开工前计划" doc.
     `lib.rs` only forwards IPC calls to it
   - `src-tauri/src/mcp.rs` — embedded MCP server on the same `SessionManager`
     (127.0.0.1, port fallback, settings in `mcp.json` via `settings.rs`)
+  - `src-tauri/src/filesend.rs` / `repeat.rs` / `export.rs` — background jobs per session
+    (file send, timed send, save/capture), stopped when the session closes
   - `src-tauri/src/watch.rs` — change detection; the window gets `sessions-changed` /
     `log-changed` events and reads new entries itself (no IPC polling)
   - `src/terminal.ts` — log entries to display lines (text/hex, line breaks, UTF-8)
