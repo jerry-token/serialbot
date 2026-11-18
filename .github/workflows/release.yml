@@ -1,18 +1,27 @@
 # Builds installers for Windows, macOS and Linux and publishes them on the
-# GitHub release page when a version tag (v*) is pushed, e.g.
-#   git tag v0.1.0-alpha.1 && git push origin v0.1.0-alpha.1
-# Tags with a pre-release part (-alpha, -beta, -rc) are marked pre-release.
+# GitHub release page. Start it either way:
+#   - push a version tag:  git tag v0.1.0-alpha.1 && git push origin v0.1.0-alpha.1
+#   - Actions → Release → "Run workflow", entering the version; the tag is
+#     then created on the selected commit.
+# Versions with a pre-release part (-alpha, -beta, -rc) are marked pre-release.
 name: Release
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version tag to create and release, e.g. v0.1.0-alpha.1"
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 env:
   CARGO_TERM_COLOR: always
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   create-release:
@@ -26,11 +35,15 @@ jobs:
       - id: create
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
         run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'$TAG' is not a version tag like v0.1.0 or v0.1.0-alpha.1"
+            exit 1
+          fi
           prerelease=""
           if [[ "$TAG" == *-* ]]; then prerelease="--prerelease"; fi
-          gh release create "$TAG" --draft $prerelease --verify-tag \
+          # A pushed tag already exists; a manual run creates it on this commit.
+          gh release create "$TAG" --draft $prerelease --target "$GITHUB_SHA" \
             --title "serialx $TAG" --notes-file .github/release-notes.md
           id=$(gh api "repos/${{ github.repository }}/releases" \
             --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -n1)
@@ -101,4 +114,4 @@ jobs:
     steps:
       - env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release edit "${{ github.ref_name }}" --draft=false --repo "${{ github.repository }}"
+        run: gh release edit "$TAG" --draft=false --repo "${{ github.repository }}"
