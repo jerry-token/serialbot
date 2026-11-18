@@ -31,7 +31,7 @@ jobs:
     outputs:
       release_id: ${{ steps.create.outputs.release_id }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: create
         env:
           GH_TOKEN: ${{ github.token }}
@@ -40,13 +40,25 @@ jobs:
             echo "::error::'$TAG' is not a version tag like v0.1.0 or v0.1.0-alpha.1"
             exit 1
           fi
-          prerelease=""
-          if [[ "$TAG" == *-* ]]; then prerelease="--prerelease"; fi
-          # A pushed tag already exists; a manual run creates it on this commit.
-          gh release create "$TAG" --draft $prerelease --target "$GITHUB_SHA" \
-            --title "serialx $TAG" --notes-file .github/release-notes.md
-          id=$(gh api "repos/${{ github.repository }}/releases" \
-            --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -n1)
+          prerelease=false
+          if [[ "$TAG" == *-* ]]; then prerelease=true; fi
+          repo="${{ github.repository }}"
+          # Re-running a release reuses it (as a draft again) instead of failing.
+          id=$(gh api "repos/$repo/releases/tags/$TAG" --jq .id 2>/dev/null || true)
+          if [[ "$id" =~ ^[0-9]+$ ]]; then
+            gh api -X PATCH "repos/$repo/releases/$id" -F draft=true \
+              -F prerelease=$prerelease -F body=@.github/release-notes.md --jq .id
+          else
+            # A pushed tag already exists; a manual run creates it on this commit.
+            id=$(gh api "repos/$repo/releases" -f tag_name="$TAG" \
+              -f target_commitish="$GITHUB_SHA" -f name="serialx $TAG" \
+              -F draft=true -F prerelease=$prerelease \
+              -F body=@.github/release-notes.md --jq .id)
+          fi
+          if [[ ! "$id" =~ ^[0-9]+$ ]]; then
+            echo "::error::could not create or find the release for $TAG"
+            exit 1
+          fi
           echo "release_id=$id" >> "$GITHUB_OUTPUT"
 
   build:
@@ -71,7 +83,7 @@ jobs:
     runs-on: ${{ matrix.platform }}
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
@@ -87,7 +99,7 @@ jobs:
           rustup toolchain install
           rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
