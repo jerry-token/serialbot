@@ -6,8 +6,8 @@
 
 **A lightweight, cross-platform serial port assistant with a built-in MCP server, so AI agents can drive your serial ports too** 🔌🤖
 
-[![CI](https://github.com/jerry-token/SerialBot/actions/workflows/ci.yml/badge.svg)](https://github.com/jerry-token/SerialBot/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/jerry-token/SerialBot?include_prereleases&label=release&color=orange)](https://github.com/jerry-token/SerialBot/releases)
+[![CI](https://github.com/jerry-token/serialx/actions/workflows/ci.yml/badge.svg)](https://github.com/jerry-token/serialx/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/jerry-token/serialx?include_prereleases&label=release&color=orange)](https://github.com/jerry-token/serialx/releases)
 ![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green)](LICENSE)
 
@@ -20,7 +20,7 @@
 </div>
 
 > [!NOTE]
-> 🚧 **Alpha.** The basics work. Please try it and [report problems](https://github.com/jerry-token/SerialBot/issues).
+> 🚧 **Alpha.** The basics work. Please try it and [report problems](https://github.com/jerry-token/serialx/issues).
 
 ## ✨ Features
 
@@ -57,7 +57,7 @@
 
 ## 📦 Download
 
-Get the file for your system from [Releases](https://github.com/jerry-token/SerialBot/releases):
+Get the file for your system from [Releases](https://github.com/jerry-token/serialx/releases):
 
 | System | File | Notes |
 |---|---|---|
@@ -145,7 +145,7 @@ Every change ships with tests and must pass the format, clippy, test and coverag
 
 ## 🤝 Feedback
 
-Found a bug or have an idea? Open an [issue](https://github.com/jerry-token/SerialBot/issues) with:
+Found a bug or have an idea? Open an [issue](https://github.com/jerry-token/serialx/issues) with:
 
 - 📷 a screenshot
 - 💻 your OS

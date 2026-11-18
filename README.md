@@ -6,8 +6,8 @@
 
 **轻量、跨平台的串口调试助手，内置 MCP 服务，让 AI 也能直接操作串口** 🔌🤖
 
-[![CI](https://github.com/jerry-token/SerialBot/actions/workflows/ci.yml/badge.svg)](https://github.com/jerry-token/SerialBot/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/jerry-token/SerialBot?include_prereleases&label=release&color=orange)](https://github.com/jerry-token/SerialBot/releases)
+[![CI](https://github.com/jerry-token/serialx/actions/workflows/ci.yml/badge.svg)](https://github.com/jerry-token/serialx/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/jerry-token/serialx?include_prereleases&label=release&color=orange)](https://github.com/jerry-token/serialx/releases)
 ![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green)](LICENSE)
 
@@ -20,7 +20,7 @@
 </div>
 
 > [!NOTE]
-> 🚧 **当前是 Alpha 测试版**：基础功能可用，欢迎试用并[反馈问题](https://github.com/jerry-token/SerialBot/issues)。
+> 🚧 **当前是 Alpha 测试版**：基础功能可用，欢迎试用并[反馈问题](https://github.com/jerry-token/serialx/issues)。
 
 ## ✨ 特性
 
@@ -57,7 +57,7 @@
 
 ## 📦 下载安装
 
-到 [Releases 页面](https://github.com/jerry-token/SerialBot/releases) 下载对应系统的文件：
+到 [Releases 页面](https://github.com/jerry-token/serialx/releases) 下载对应系统的文件：
 
 | 系统 | 文件 | 说明 |
 |---|---|---|
@@ -145,7 +145,7 @@ cargo run -p serialbot-mcp                  # 不带界面，单独运行 MCP �
 
 ## 🤝 反馈
 
-发现 bug 或有功能建议，欢迎提 [Issue](https://github.com/jerry-token/SerialBot/issues)。请附上：
+发现 bug 或有功能建议，欢迎提 [Issue](https://github.com/jerry-token/serialx/issues)。请附上：
 
 - 📷 截图
 - 💻 操作系统

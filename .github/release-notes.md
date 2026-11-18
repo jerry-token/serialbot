@@ -1,6 +1,6 @@
-**Alpha build for testing.** Expect rough edges and please report problems in [Issues](https://github.com/jerry-token/SerialBot/issues) with screenshots, your OS and USB-serial chip (CH340 / CP2102 / FT232 / …).
+**Alpha build for testing.** Expect rough edges and please report problems in [Issues](https://github.com/jerry-token/serialx/issues) with screenshots, your OS and USB-serial chip (CH340 / CP2102 / FT232 / …).
 
-**Alpha 测试版。** 功能还不完整，欢迎试用并在 [Issues](https://github.com/jerry-token/SerialBot/issues) 反馈问题，请附截图、操作系统和串口芯片型号。
+**Alpha 测试版。** 功能还不完整，欢迎试用并在 [Issues](https://github.com/jerry-token/serialx/issues) 反馈问题，请附截图、操作系统和串口芯片型号。
 
 ### Downloads / 下载
 
