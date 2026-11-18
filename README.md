@@ -38,6 +38,7 @@ English · [简体中文](README.zh-CN.md)
 - 📋 **Command lists**: saved commands in groups; click one to send it, or run a group in order with a delay after each.
 - 📄 **Send a file** in chunks, with an optional pause between chunks for devices without flow control.
 - 💾 **Save the log** once or keep writing it to a file as data arrives.
+- 🌐 **TCP and UDP** besides serial ports: TCP client, TCP server (one client at a time, connects and leaves are logged) and UDP. Pick the type at the left of the connection bar; for AI agents, open `tcp://host:port`, `tcp-server://:port` or `udp://host:port?local=:port` like a port.
 - 🔁 **Auto-reconnect**: unplug and replug the adapter and the session carries on; the port list follows hot-plug.
 - 🎛️ **Signals**: DTR / RTS switches, CTS / DSR / RI / CD lamps, and every change is marked in the log.
 - 🤖 **AI-ready**: a built-in MCP server lets Claude Code and other agents
@@ -128,7 +129,7 @@ Get the file for your system from [Releases](https://github.com/jerry-token/seri
 - [x] Command lists (groups, run in order)
 - [x] Save received data to a file, export
 - [x] Hot-plug detection, auto-reconnect
-- [ ] TCP client / server, UDP
+- [x] TCP client / server, UDP
 - [ ] Built-in AI assistant "Bo"
 
 ## 🛠️ Build from source

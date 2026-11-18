@@ -237,6 +237,19 @@ label.check {
   width: 96px;
 }
 
+.kind-select {
+  flex: 0 0 auto;
+}
+
+.host {
+  flex: 0 1 200px;
+  min-width: 110px;
+}
+
+.net-port {
+  width: 108px;
+}
+
 .frame-button {
   display: inline-flex;
   align-items: center;

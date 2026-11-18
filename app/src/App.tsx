@@ -25,6 +25,7 @@ import {
 import { CommandPanel, type RunProgress } from "./components/CommandPanel";
 import { DisplaySettings } from "./components/DisplaySettings";
 import { FileSend, type FileSendOptions } from "./components/FileSend";
+import { endpointPath, isNetworkPath } from "./endpoint";
 import { SearchBar } from "./components/SearchBar";
 import { ConnectionBar, type PortSettings } from "./components/ConnectionBar";
 import { LogView } from "./components/LogView";
@@ -86,6 +87,10 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
   const runStop = useRef<AbortController | null>(null);
   const [ports, setPorts] = useState<PortInfo[]>([]);
   const [settings, setSettings] = useState<PortSettings>({
+    kind: "serial",
+    host: "",
+    netPort: "",
+    localPort: "",
     port: "",
     baudRate: "115200",
     dataBits: 8,
@@ -279,10 +284,25 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
       .then(storeSignals, (e: unknown) => setError(errorMessage(e)));
   };
   const activeView = activeId !== null ? views.current.get(activeId) : undefined;
-  const portSession = sessions.find((s) => s.port === settings.port) ?? null;
+  // What the bar would open: a serial port or a network endpoint URL.
+  const target =
+    settings.kind === "serial"
+      ? { path: settings.port }
+      : endpointPath(settings.kind, {
+          host: settings.host,
+          port: settings.netPort,
+          localPort: settings.localPort,
+        });
+  const portSession =
+    ("path" in target && sessions.find((s) => s.port === target.path)) || null;
 
   const open = async () => {
-    const baudRate = Number(settings.baudRate);
+    if ("error" in target) {
+      setError(t.endpointErrors[target.error]);
+      return;
+    }
+    // Network endpoints ignore the line settings.
+    const baudRate = settings.kind === "serial" ? Number(settings.baudRate) : 115200;
     if (!Number.isInteger(baudRate) || baudRate <= 0) {
       setError(t.invalidBaud);
       return;
@@ -290,7 +310,7 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
     setBusy(true);
     try {
       const opened = await backend.openSession({
-        port: settings.port,
+        port: target.path,
         baudRate,
         dataBits: settings.dataBits,
         parity: settings.parity,
@@ -847,7 +867,7 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
           <span>
             {t.rxBytes} {activeView?.rx ?? 0} · {t.txBytes} {activeView?.tx ?? 0}
           </span>
-          {active && (
+          {active && !isNetworkPath(active.port) && (
             <SignalBar
               t={t}
               signals={signals[active.id] ?? null}

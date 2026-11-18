@@ -839,6 +839,56 @@ describe("App", () => {
     expect(box).toHaveStyle({ height: "48px" });
   });
 
+  it("opens TCP clients, TCP servers and UDP endpoints", async () => {
+    const { backend, user } = setup();
+    await waitFor(() => expect(screen.getByLabelText("Port")).toHaveValue("COM3"));
+    const kind = screen.getByLabelText("Connection type");
+    await user.selectOptions(kind, "tcp");
+    expect(screen.queryByLabelText("Baud")).toBeNull();
+    const open = () => screen.getByRole("button", { name: "Open" });
+
+    await user.click(open());
+    expect(status()).toHaveTextContent("Enter the host (an IP address or name)");
+    await user.type(screen.getByLabelText("Host"), "192.168.1.10");
+    await user.click(open());
+    expect(status()).toHaveTextContent("Enter a port between 1 and 65535");
+    await user.type(screen.getByLabelText("Port"), "8080");
+    await user.click(open());
+    await waitFor(() => expect(status()).toHaveTextContent("tcp://192.168.1.10:8080 · Open"));
+    expect(backend.opened.at(-1)?.port).toBe("tcp://192.168.1.10:8080");
+    // No modem lines on a network link; the type is locked while connected.
+    expect(screen.queryByRole("button", { name: /^DTR/ })).toBeNull();
+    expect(kind).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Close" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(kind).toBeEnabled());
+
+    await user.selectOptions(kind, "tcp-server");
+    expect(screen.queryByLabelText("Host")).toBeNull();
+    await user.clear(screen.getByLabelText("Listen port"));
+    await user.type(screen.getByLabelText("Listen port"), "9000");
+    await user.click(open());
+    await waitFor(() => expect(backend.opened.at(-1)?.port).toBe("tcp-server://:9000"));
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(kind).toBeEnabled());
+
+    await user.selectOptions(kind, "udp");
+    await user.clear(screen.getByLabelText("Host"));
+    await user.clear(screen.getByLabelText("Port"));
+    await user.click(open());
+    expect(status()).toHaveTextContent("Enter a remote host and port, a local port");
+    await user.type(screen.getByLabelText("Local port"), "7000");
+    await user.click(open());
+    await waitFor(() => expect(backend.opened.at(-1)?.port).toBe("udp://?local=:7000"));
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(kind).toBeEnabled());
+
+    // Back to serial: the port list and line settings return.
+    await user.selectOptions(kind, "serial");
+    expect(screen.getByLabelText("Port")).toHaveValue("COM3");
+    expect(screen.getByLabelText("Baud")).toBeInTheDocument();
+  });
+
   it("shows the failure reason of a failed session", async () => {
     const { backend, user } = setup();
     await openPort(user);
