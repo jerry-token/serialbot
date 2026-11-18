@@ -44,6 +44,18 @@ describe("encodeInput", () => {
     expect(Array.from(encodeInput("01\n02", true, "crlf"))).toEqual([1, 2]);
   });
 
+  it("does not add a second ending after a typed line break", () => {
+    // Regression: Shift+Enter alone sent "\r\n\r\n" with the CRLF ending.
+    expect(text(encodeInput("\n", false, "crlf"))).toBe("\r\n");
+    expect(text(encodeInput("\n", false, "cr"))).toBe("\r");
+    expect(text(encodeInput("\n", false, "lf"))).toBe("\n");
+    expect(text(encodeInput("\n", false, "none"))).toBe("\n");
+    expect(text(encodeInput("AT\n", false, "crlf"))).toBe("AT\r\n");
+    expect(text(encodeInput("AT\r\n", false, "lf"))).toBe("AT\n");
+    // Each typed line break is still one line end.
+    expect(text(encodeInput("a\n\n", false, "crlf"))).toBe("a\r\n\r\n");
+  });
+
   it("exposes the text with endings for other encodings", () => {
     expect(withEndings("a\nb", "cr")).toBe("a\rb\r");
   });

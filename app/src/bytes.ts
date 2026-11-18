@@ -34,19 +34,25 @@ export function parseHex(text: string): Uint8Array {
 }
 
 /**
- * Bytes to send for the send box: UTF-8 text with the line ending after
- * every line (line breaks inside the text become that ending too; with no
- * ending they stay "\n"), or the parsed hex (line breaks are just
- * separators and no ending is added).
+ * Bytes to send for the send box: UTF-8 text where every line ends with the
+ * chosen line ending (see `withEndings`), or the parsed hex (line breaks are
+ * just separators and no ending is added).
  */
 export function encodeInput(text: string, hex: boolean, ending: LineEnding): Uint8Array {
   if (hex) return parseHex(text);
   return new TextEncoder().encode(withEndings(text, ending));
 }
 
-/** The text with the line ending after every line, as described above. */
+/**
+ * The text with every line ended by `ending`: each typed line break becomes
+ * the ending, and the ending is added after the last line unless the text
+ * already ends with a line break (so "AT⏎" and "AT" both send "AT\r\n" with
+ * CRLF, and a lone "⏎" sends one "\r\n"). With no ending the text is sent
+ * as typed.
+ */
 export function withEndings(text: string, ending: LineEnding): string {
   const end = ENDINGS[ending];
-  const body = end === "" ? text : text.replace(/\r\n|\r|\n/g, end);
-  return body + end;
+  if (end === "") return text;
+  const body = text.replace(/\r\n|\r|\n/g, end);
+  return /[\r\n]$/.test(text) ? body : body + end;
 }
