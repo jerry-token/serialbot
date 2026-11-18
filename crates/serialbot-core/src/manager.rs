@@ -117,10 +117,11 @@ impl SessionManager {
         }
     }
 
-    /// Creates a manager for real serial ports using the system clock.
+    /// Creates a manager for real serial ports and network endpoints (see
+    /// [`crate::transport::open`]) using the system clock.
     pub fn with_serial_ports() -> Self {
         Self::new(
-            Box::new(crate::transport::serial::open),
+            Box::new(crate::transport::open),
             Arc::new(crate::clock::SystemClock),
             SessionOptions::default(),
         )

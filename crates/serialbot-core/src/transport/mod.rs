@@ -10,6 +10,7 @@
 //! the session logic never needs real hardware in unit tests.
 
 pub mod mock;
+pub mod net;
 pub mod serial;
 
 use std::time::Duration;
@@ -54,6 +55,12 @@ pub enum TransportError {
 pub enum TransportKind {
     /// A serial port (UART, USB CDC, Bluetooth SPP, PTY).
     Serial,
+    /// A TCP connection to a server (`tcp://host:port`).
+    TcpClient,
+    /// A TCP server serving one client at a time (`tcp-server://addr:port`).
+    TcpServer,
+    /// UDP datagrams (`udp://host:port?local=addr:port`).
+    Udp,
     /// An in-memory mock used by tests.
     Mock,
 }
@@ -111,6 +118,13 @@ pub trait TransportReader: Send {
     /// was read, and [`TransportError::Disconnected`] once the device is
     /// gone (after which every further call returns the same error).
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, TransportError>;
+
+    /// Takes the oldest pending event worth noting in the log, such as a
+    /// client connecting to a TCP server. Called after every read; most
+    /// transports have none.
+    fn take_event(&mut self) -> Option<String> {
+        None
+    }
 }
 
 /// Sending and line-control half of a connection.
@@ -149,5 +163,16 @@ impl std::fmt::Debug for Connection {
         f.debug_struct("Connection")
             .field("info", &self.info)
             .finish_non_exhaustive()
+    }
+}
+
+/// Opens `config.path` with the transport its form calls for: a network URL
+/// (`tcp://`, `tcp-server://`, `udp://`, see [`net`]) or else a serial
+/// port. Network links ignore the serial line settings.
+pub fn open(config: &serial::SerialConfig) -> Result<Connection, TransportError> {
+    if net::is_network(&config.path) {
+        net::open(&config.path, config.read_timeout)
+    } else {
+        serial::open(config)
     }
 }
