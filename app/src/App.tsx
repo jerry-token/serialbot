@@ -81,7 +81,8 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
   const [encoding, setEncoding] = useState("utf-8");
   const [frameGapMs, setFrameGapMs] = useState(0);
   // Display settings also apply to sessions that appear later.
-  const display = useRef({ hex: false, encoding: "utf-8", frameGapMs: 0 });
+  const display = useRef({ hex: false, encoding: "utf-8", frameGapMs: 0, ansi: true });
+  const [ansi, setAnsi] = useState(true);
   const [frozen, setFrozen] = useState<{ id: number; lines: readonly Line[] } | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -97,6 +98,7 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
       terminal.setHex(display.current.hex);
       terminal.setEncoding(display.current.encoding);
       terminal.setFrameGap(display.current.frameGapMs);
+      terminal.setAnsi(display.current.ansi);
       view = { terminal, cursor: 0, rx: 0, tx: 0, reading: false, again: false, ended: false };
       views.current.set(id, view);
     }
@@ -307,6 +309,13 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
     redraw();
   };
 
+  const changeAnsi = (on: boolean) => {
+    display.current.ansi = on;
+    setAnsi(on);
+    for (const view of views.current.values()) view.terminal.setAnsi(on);
+    redraw();
+  };
+
   const togglePause = (pause: boolean) => {
     setFrozen(pause && activeView && activeId !== null
       ? { id: activeId, lines: activeView.terminal.view.slice() }
@@ -437,6 +446,8 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
                 onEncoding={changeEncoding}
                 frameGapMs={frameGapMs}
                 onFrameGap={changeFrameGap}
+                ansi={ansi}
+                onAnsi={changeAnsi}
               />
               <button
                 type="button"
