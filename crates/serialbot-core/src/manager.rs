@@ -747,7 +747,7 @@ mod tests {
         let path = if cfg!(windows) {
             "COM250"
         } else {
-            "/dev/serialx-does-not-exist"
+            "/dev/serialbot-does-not-exist"
         };
         assert!(matches!(
             m.open(&cfg(path), None),

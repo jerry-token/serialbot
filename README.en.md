@@ -1,13 +1,13 @@
 <div align="center">
 
-<img src="app/src-tauri/icons/128x128.png" width="96" alt="serialx logo">
+<img src="app/src-tauri/icons/128x128.png" width="96" alt="SerialBot logo">
 
-# serialx
+# SerialBot
 
 **A lightweight, cross-platform serial port assistant with a built-in MCP server, so AI agents can drive your serial ports too** 🔌🤖
 
-[![CI](https://github.com/jerry-token/serialx/actions/workflows/ci.yml/badge.svg)](https://github.com/jerry-token/serialx/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/jerry-token/serialx?include_prereleases&label=release&color=orange)](https://github.com/jerry-token/serialx/releases)
+[![CI](https://github.com/SerialAI/SerialBot/actions/workflows/ci.yml/badge.svg)](https://github.com/SerialAI/SerialBot/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/SerialAI/SerialBot?include_prereleases&label=release&color=orange)](https://github.com/SerialAI/SerialBot/releases)
 ![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green)](LICENSE)
 
@@ -20,8 +20,7 @@
 </div>
 
 > [!NOTE]
-> 🚧 **Alpha.** The basics work. Please try it and [report problems](https://github.com/jerry-token/serialx/issues).
-> "serialx" is a codename; the product name will be chosen before the public beta.
+> 🚧 **Alpha.** The basics work. Please try it and [report problems](https://github.com/SerialAI/SerialBot/issues).
 
 ## ✨ Features
 
@@ -58,22 +57,22 @@
 
 ## 📦 Download
 
-Get the file for your system from [Releases](https://github.com/jerry-token/serialx/releases):
+Get the file for your system from [Releases](https://github.com/SerialAI/SerialBot/releases):
 
 | System | File | Notes |
 |---|---|---|
-| 🪟 Windows 10/11 | `serialx_*_x64-setup.exe` | Installer, no admin rights needed |
-| 🪟 Windows 10/11 | `serialx_windows_x64.exe` | Portable, just run it |
-| 🍎 macOS 11+ | `serialx_*_universal.dmg` | Apple Silicon and Intel |
-| 🐧 Ubuntu / Debian | `serialx_*_amd64.deb` | `sudo apt install ./serialx_*.deb` |
-| 🐧 Other Linux | `serialx_*_amd64.AppImage` | `chmod +x`, then run |
+| 🪟 Windows 10/11 | `SerialBot_*_x64-setup.exe` | Installer, no admin rights needed |
+| 🪟 Windows 10/11 | `serialbot_windows_x64.exe` | Portable, just run it |
+| 🍎 macOS 11+ | `SerialBot_*_universal.dmg` | Apple Silicon and Intel |
+| 🐧 Ubuntu / Debian | `SerialBot_*_amd64.deb` | `sudo apt install ./SerialBot_*.deb` |
+| 🐧 Other Linux | `SerialBot_*_amd64.AppImage` | `chmod +x`, then run |
 
 <details>
 <summary>⚠️ Warning on first launch?</summary>
 
 - **macOS says the app "is damaged" or "can't be opened"**: the alpha is not notarized yet. Run once:
   ```sh
-  xattr -dr com.apple.quarantine /Applications/serialx.app
+  xattr -dr com.apple.quarantine /Applications/SerialBot.app
   ```
 - **Windows SmartScreen warns about an unknown publisher**: click "More info" → "Run anyway".
 - **Linux can't open a port (permission denied)**: run this, then log out and back in:
@@ -98,7 +97,7 @@ Get the file for your system from [Releases](https://github.com/jerry-token/seri
 1. Open **AI** on the left and tick **Enable MCP server**. It listens on `127.0.0.1` only and requires a token.
 2. Press **Copy** and run the command in a terminal, for example:
    ```sh
-   claude mcp add --transport http serialx http://127.0.0.1:9633/mcp \
+   claude mcp add --transport http serialbot http://127.0.0.1:9633/mcp \
      --header "Authorization: Bearer <your token>"
    ```
 3. Ask Claude Code: *"List the serial ports, open the ESP32 one and send `version`."* 🎉
@@ -139,14 +138,14 @@ sudo apt install libwebkit2gtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev
 cd app && npm ci && npm run tauri dev     # run the desktop app
 cargo test --workspace                    # Rust tests
 cd app && npm test                        # frontend tests
-cargo run -p serialx-mcp                  # MCP server only, without a window
+cargo run -p serialbot-mcp                  # MCP server only, without a window
 ```
 
 Every change ships with tests and must pass the format, clippy, test and coverage checks; see [CLAUDE.md](CLAUDE.md).
 
 ## 🤝 Feedback
 
-Found a bug or have an idea? Open an [issue](https://github.com/jerry-token/serialx/issues) with:
+Found a bug or have an idea? Open an [issue](https://github.com/SerialAI/SerialBot/issues) with:
 
 - 📷 a screenshot
 - 💻 your OS

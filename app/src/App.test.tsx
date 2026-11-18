@@ -1243,7 +1243,7 @@ describe("MCP panel", () => {
     );
     expect(backend.mcp.settings.enabled).toBe(true);
     const command =
-      'claude mcp add --transport http serialx http://127.0.0.1:9633/mcp --header "Authorization: Bearer token-0123456789abcdef"';
+      'claude mcp add --transport http serialbot http://127.0.0.1:9633/mcp --header "Authorization: Bearer token-0123456789abcdef"';
     expect(within(panel).getByText(command)).toBeInTheDocument();
     await user.click(within(panel).getByRole("button", { name: "Copy" }));
     expect(copy).toHaveBeenCalledWith(command);

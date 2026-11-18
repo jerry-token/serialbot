@@ -3282,6 +3282,50 @@ dependencies = [
 ]
 
 [[package]]
+name = "serialbot-app"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "serialbot-core",
+ "serialbot-mcp",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "serialbot-core"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "encoding_rs",
+ "proptest",
+ "regex",
+ "serialport",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "serialbot-mcp"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "getrandom 0.4.3",
+ "regex",
+ "rmcp",
+ "schemars 1.2.3",
+ "serde",
+ "serde_json",
+ "serialbot-core",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
 name = "serialize-to-javascript"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3320,50 +3364,6 @@ dependencies = [
  "scopeguard",
  "unescaper",
  "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "serialx-app"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "serialx-core",
- "serialx-mcp",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "serialx-core"
-version = "0.1.0"
-dependencies = [
- "bytes",
- "encoding_rs",
- "proptest",
- "regex",
- "serialport",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "serialx-mcp"
-version = "0.1.0"
-dependencies = [
- "axum",
- "getrandom 0.4.3",
- "regex",
- "rmcp",
- "schemars 1.2.3",
- "serde",
- "serde_json",
- "serialx-core",
- "thiserror 2.0.21",
- "tokio",
- "tokio-util",
 ]
 
 [[package]]

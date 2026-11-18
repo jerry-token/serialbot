@@ -1,7 +1,7 @@
 //! Standalone MCP server over the machine's real serial ports, for trying
-//! serialx with MCP clients before the desktop app exists.
+//! serialbot with MCP clients before the desktop app exists.
 //!
-//! Listens on 127.0.0.1 only. Usage: `serialx-mcp [--port N] [--token T]`.
+//! Listens on 127.0.0.1 only. Usage: `serialbot-mcp [--port N] [--token T]`.
 
 #![allow(
     clippy::print_stdout,
@@ -11,12 +11,12 @@
 
 use std::sync::Arc;
 
-use serialx_core::SessionManager;
-use serialx_core::transport::serial::list_ports;
-use serialx_mcp::{DEFAULT_PORT, MCP_PATH, McpOptions, SerialTools, generate_token};
+use serialbot_core::SessionManager;
+use serialbot_core::transport::serial::list_ports;
+use serialbot_mcp::{DEFAULT_PORT, MCP_PATH, McpOptions, SerialTools, generate_token};
 use tokio_util::sync::CancellationToken;
 
-const USAGE: &str = "usage: serialx-mcp [--port N] [--token T]";
+const USAGE: &str = "usage: serialbot-mcp [--port N] [--token T]";
 
 #[derive(Debug, PartialEq, Eq)]
 struct Args {
@@ -67,15 +67,15 @@ async fn run() -> Result<(), String> {
     let manager = Arc::new(SessionManager::with_serial_ports());
     let tools = SerialTools::new(Arc::clone(&manager), Arc::new(list_ports));
     let shutdown = CancellationToken::new();
-    let app = serialx_mcp::router(tools, &options, &shutdown);
+    let app = serialbot_mcp::router(tools, &options, &shutdown);
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", args.port))
         .await
         .map_err(|e| format!("cannot listen on 127.0.0.1:{}: {e}", args.port))?;
     let url = format!("http://127.0.0.1:{}{MCP_PATH}", args.port);
-    println!("serialx MCP server on {url}");
+    println!("serialbot MCP server on {url}");
     println!("token: {}", options.token());
     println!(
-        "Claude Code: claude mcp add --transport http serialx {url} --header \"Authorization: Bearer {}\"",
+        "Claude Code: claude mcp add --transport http serialbot {url} --header \"Authorization: Bearer {}\"",
         options.token()
     );
     let stop = shutdown.clone();
@@ -85,7 +85,7 @@ async fn run() -> Result<(), String> {
             stop.cancel();
         }
     });
-    let served = serialx_mcp::serve(listener, app, shutdown).await;
+    let served = serialbot_mcp::serve(listener, app, shutdown).await;
     manager.close_all();
     served.map_err(|e| format!("server error: {e}"))
 }

@@ -7,7 +7,7 @@
 //! macOS serial I/O is verified with hardware instead (see CLAUDE.md).
 //!
 //! If `socat` is missing the tests are skipped, unless the environment
-//! variable `SERIALX_REQUIRE_SOCAT` is set (CI sets it), in which case a
+//! variable `SERIALBOT_REQUIRE_SOCAT` is set (CI sets it), in which case a
 //! missing `socat` fails the run instead of silently skipping coverage.
 #![cfg(target_os = "linux")]
 #![allow(clippy::unwrap_used, clippy::print_stderr)]
@@ -16,8 +16,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-use serialx_core::transport::serial::{self, SerialConfig};
-use serialx_core::transport::{Connection, TransportError, TransportKind};
+use serialbot_core::transport::serial::{self, SerialConfig};
+use serialbot_core::transport::{Connection, TransportError, TransportKind};
 
 struct VirtualPair {
     child: Child,
@@ -42,7 +42,8 @@ impl TempDir {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let p = std::env::temp_dir().join(format!("serialx-{tag}-{}-{nanos}", std::process::id()));
+        let p =
+            std::env::temp_dir().join(format!("serialbot-{tag}-{}-{nanos}", std::process::id()));
         std::fs::create_dir_all(&p).unwrap();
         Self(p)
     }
@@ -67,8 +68,8 @@ fn socat_available() -> bool {
 fn virtual_pair(tag: &str) -> Option<VirtualPair> {
     if !socat_available() {
         assert!(
-            std::env::var_os("SERIALX_REQUIRE_SOCAT").is_none(),
-            "socat is required (SERIALX_REQUIRE_SOCAT is set) but not installed"
+            std::env::var_os("SERIALBOT_REQUIRE_SOCAT").is_none(),
+            "socat is required (SERIALBOT_REQUIRE_SOCAT is set) but not installed"
         );
         eprintln!("skipping: socat not installed");
         return None;

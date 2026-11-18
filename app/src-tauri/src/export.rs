@@ -20,7 +20,7 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use serialx_core::{Cursor, Direction, Entry, EntryKind, Session, SessionState};
+use serialbot_core::{Cursor, Direction, Entry, EntryKind, Session, SessionState};
 
 /// File format of an export or capture.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
@@ -358,8 +358,8 @@ impl Captures {
 mod tests {
     use std::time::Instant;
 
-    use serialx_core::transport::mock::{self, MockDevice};
-    use serialx_core::{ManualClock, SessionId, SessionOptions};
+    use serialbot_core::transport::mock::{self, MockDevice};
+    use serialbot_core::{ManualClock, SessionId, SessionOptions};
 
     use super::*;
     use crate::settings::tests::TempDir;
@@ -373,7 +373,7 @@ mod tests {
         let session = Session::start(
             SessionId(1),
             connection,
-            Arc::clone(&clock) as Arc<dyn serialx_core::Clock>,
+            Arc::clone(&clock) as Arc<dyn serialbot_core::Clock>,
             SessionOptions::default(),
         )
         .unwrap();

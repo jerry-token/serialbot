@@ -9,8 +9,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use serde::Serialize;
-use serialx_core::SessionManager;
-use serialx_mcp::{MCP_PATH, McpOptions, PortLister, SerialTools};
+use serialbot_core::SessionManager;
+use serialbot_mcp::{MCP_PATH, McpOptions, PortLister, SerialTools};
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
@@ -175,8 +175,8 @@ impl McpController {
         };
         let shutdown = CancellationToken::new();
         let tools = SerialTools::new(Arc::clone(&self.manager), Arc::clone(&self.list_ports));
-        let app = serialx_mcp::router(tools, &options, &shutdown);
-        let task = tokio::spawn(serialx_mcp::serve(listener, app, shutdown.clone()));
+        let app = serialbot_mcp::router(tools, &options, &shutdown);
+        let task = tokio::spawn(serialbot_mcp::serve(listener, app, shutdown.clone()));
         inner.running = Some(Running {
             port,
             shutdown,
@@ -216,8 +216,8 @@ async fn bind_from(first: u16) -> Option<TcpListener> {
 mod tests {
     use std::time::Duration;
 
-    use serialx_core::transport::TransportError;
-    use serialx_core::{SessionOptions, SystemClock};
+    use serialbot_core::transport::TransportError;
+    use serialbot_core::{SessionOptions, SystemClock};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     use super::*;
@@ -227,7 +227,7 @@ mod tests {
 
     fn controller(path: Option<PathBuf>) -> McpController {
         let manager = SessionManager::new(
-            Box::new(|_: &serialx_core::transport::serial::SerialConfig| {
+            Box::new(|_: &serialbot_core::transport::serial::SerialConfig| {
                 Err(TransportError::NotFound("none".into()))
             }),
             Arc::new(SystemClock),

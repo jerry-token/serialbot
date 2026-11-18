@@ -10,7 +10,7 @@
 
 use std::collections::BTreeMap;
 
-use serialx_core::SessionManager;
+use serialbot_core::SessionManager;
 
 use crate::commands::{PortDto, PortLister, SessionDto, SignalsDto, session_dto, signals_dto};
 
@@ -86,7 +86,7 @@ impl ChangeDetector {
         let mut seen = BTreeMap::new();
         let mut changed = Vec::new();
         for summary in manager.list() {
-            if summary.state != serialx_core::SessionState::Open {
+            if summary.state != serialbot_core::SessionState::Open {
                 continue;
             }
             let Ok(session) = manager.get(summary.id) else {
@@ -108,9 +108,9 @@ mod tests {
     use std::sync::Arc;
     use std::time::{Duration, Instant};
 
-    use serialx_core::transport::mock::{self, MockDevice};
-    use serialx_core::transport::serial::SerialConfig;
-    use serialx_core::{SessionId, SessionOptions, SystemClock};
+    use serialbot_core::transport::mock::{self, MockDevice};
+    use serialbot_core::transport::serial::SerialConfig;
+    use serialbot_core::{SessionId, SessionOptions, SystemClock};
 
     use super::*;
 
@@ -180,8 +180,8 @@ mod tests {
 
     #[test]
     fn reports_port_list_changes() {
-        use serialx_core::transport::TransportError;
-        use serialx_core::transport::serial::{PortInfo, PortKind};
+        use serialbot_core::transport::TransportError;
+        use serialbot_core::transport::serial::{PortInfo, PortKind};
         use std::sync::atomic::{AtomicBool, Ordering};
         use std::sync::{Arc, Mutex};
         let present = Arc::new(Mutex::new(vec!["COM3".to_owned()]));
@@ -231,7 +231,7 @@ mod tests {
         assert!(detector.poll_signals(&manager).is_empty());
 
         let dev = device.lock().unwrap().clone().unwrap();
-        dev.set_line_states(serialx_core::transport::LineStates {
+        dev.set_line_states(serialbot_core::transport::LineStates {
             cts: true,
             ..Default::default()
         });

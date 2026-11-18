@@ -1,5 +1,5 @@
-//! serialx desktop app: a Tauri shell whose window is one more view of the
-//! sessions owned by the core's [`serialx_core::SessionManager`]. The
+//! SerialBot desktop app: a Tauri shell whose window is one more view of the
+//! sessions owned by the core's [`serialbot_core::SessionManager`]. The
 //! embedded MCP server ([`mcp`]) is another view of the same sessions.
 //!
 //! The IPC commands below only forward to tested modules. They run off the
@@ -266,7 +266,7 @@ struct Watcher {
 impl Watcher {
     fn start(
         handle: tauri::AppHandle,
-        manager: Arc<serialx_core::SessionManager>,
+        manager: Arc<serialbot_core::SessionManager>,
         lister: Arc<commands::PortLister>,
     ) -> Self {
         let stop = Arc::new(AtomicBool::new(false));

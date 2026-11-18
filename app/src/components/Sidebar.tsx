@@ -26,7 +26,7 @@ export function Sidebar({ t, page, onSelect, mcpRunning }: Props) {
     </button>
   );
   return (
-    <nav className="sidebar" aria-label="serialx">
+    <nav className="sidebar" aria-label="SerialBot">
       {item("terminal", t.navTerminal, <TerminalIcon />)}
       {item("ai", t.navAi, <AiIcon />, mcpRunning)}
     </nav>

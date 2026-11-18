@@ -51,7 +51,7 @@ jobs:
           else
             # A pushed tag already exists; a manual run creates it on this commit.
             id=$(gh api "repos/$repo/releases" -f tag_name="$TAG" \
-              -f target_commitish="$GITHUB_SHA" -f name="serialx $TAG" \
+              -f target_commitish="$GITHUB_SHA" -f name="SerialBot $TAG" \
               -F draft=true -F prerelease=$prerelease \
               -F body=@.github/release-notes.md --jq .id)
           fi

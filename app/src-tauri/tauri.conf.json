@@ -1,9 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "serialx",
-  "mainBinaryName": "serialx",
+  "productName": "SerialBot",
+  "mainBinaryName": "serialbot",
   "version": "0.1.0",
-  "identifier": "cc.aiany.serialx",
+  "identifier": "cc.aiany.serialbot",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "serialx",
+        "title": "SerialBot",
         "width": 1000,
         "height": 700,
         "minWidth": 640,
