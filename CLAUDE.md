@@ -68,8 +68,9 @@ ports. Plan of record: the "AI 串口助手 · 开工前计划" doc.
 - `.github/workflows/release.yml` builds Windows (NSIS installer + portable
   exe), macOS (universal .dmg/.app, ad-hoc signed, not notarized) and Linux
   (.deb, .AppImage) and publishes them on the GitHub release page.
-- Release by pushing a tag from `main`: `git tag v0.1.0-alpha.2 && git push
-  origin v0.1.0-alpha.2`. Tags with `-alpha`/`-beta`/`-rc` are pre-releases.
+- Release by pushing a tag from `main` (`git tag v0.1.0-alpha.2 && git push
+  origin v0.1.0-alpha.2`) or with Actions → Release → "Run workflow" on
+  `main`, entering the tag. Tags with `-alpha`/`-beta`/`-rc` are pre-releases.
   The notes come from `.github/release-notes.md`.
 - Check locally on Linux first: `cd app && npm run tauri build -- --bundles deb`.
 
