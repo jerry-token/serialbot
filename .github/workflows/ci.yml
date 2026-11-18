@@ -20,7 +20,7 @@ env:
   RUSTFLAGS: -D warnings
   RUSTDOCFLAGS: -D warnings
   # Virtual-port tests must run in CI, never silently skip.
-  SERIALX_REQUIRE_SOCAT: "1"
+  SERIALBOT_REQUIRE_SOCAT: "1"
   # The toolchain comes from rust-toolchain.toml (rustup installs it on first use).
   # udev for port listing, socat for virtual-port tests, the rest for Tauri.
   LINUX_DEPS: libudev-dev socat libwebkit2gtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev

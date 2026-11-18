@@ -1,6 +1,6 @@
 [package]
-name = "serialx-app"
-description = "Desktop app: Tauri shell around the serialx core."
+name = "serialbot-app"
+description = "Desktop app: Tauri shell around the serialbot core."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,15 +9,15 @@ repository.workspace = true
 publish.workspace = true
 
 [lib]
-name = "serialx_app"
+name = "serialbot_app"
 
 [[bin]]
-name = "serialx"
+name = "serialbot"
 path = "src/main.rs"
 
 [dependencies]
-serialx-core.workspace = true
-serialx-mcp.workspace = true
+serialbot-core.workspace = true
+serialbot-mcp.workspace = true
 tauri.workspace = true
 tauri-plugin-dialog.workspace = true
 serde.workspace = true

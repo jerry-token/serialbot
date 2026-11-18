@@ -182,7 +182,7 @@ impl Session {
         let reader = connection.reader;
         let chunk = options.read_chunk.max(1);
         let handle = std::thread::Builder::new()
-            .name(format!("serialx-rx-{id}"))
+            .name(format!("serialbot-rx-{id}"))
             .spawn(move || read_loop(&thread_shared, reader, chunk))
             .map_err(TransportError::Io)?;
         Ok(Self {
@@ -417,7 +417,7 @@ impl Session {
         let chunk = self.read_chunk;
         let source = connection.reader;
         match std::thread::Builder::new()
-            .name(format!("serialx-rx-{}", self.id))
+            .name(format!("serialbot-rx-{}", self.id))
             .spawn(move || read_loop(&thread_shared, source, chunk))
         {
             Ok(handle) => {

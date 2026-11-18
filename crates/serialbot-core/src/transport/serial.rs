@@ -541,7 +541,7 @@ mod tests {
         let path = if cfg!(windows) {
             "COM250"
         } else {
-            "/dev/serialx-does-not-exist"
+            "/dev/serialbot-does-not-exist"
         };
         let e = open(&SerialConfig::new(path, 9600)).unwrap_err();
         assert!(
@@ -624,7 +624,7 @@ mod tests {
         assert_eq!(normalize_port_name(r"\\.\com10"), "COM10");
         assert_eq!(normalize_port_name("COM3"), "COM3");
         assert_eq!(normalize_port_name("/dev/ttyUSB0"), "/DEV/TTYUSB0");
-        assert!(!is_listed("serialx-no-such-port"));
+        assert!(!is_listed("serialbot-no-such-port"));
     }
 
     #[test]

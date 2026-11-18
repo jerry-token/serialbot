@@ -16,11 +16,11 @@ use rmcp::service::{RoleClient, RunningService};
 use rmcp::transport::StreamableHttpClientTransport;
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use serde_json::{Value, json};
-use serialx_core::transport::mock::{self, MockDevice};
-use serialx_core::transport::serial::{PortInfo, PortKind};
-use serialx_core::transport::{Connection, TransportError};
-use serialx_core::{SessionManager, SessionOptions, SystemClock};
-use serialx_mcp::{McpOptions, SerialTools, router, serve};
+use serialbot_core::transport::mock::{self, MockDevice};
+use serialbot_core::transport::serial::{PortInfo, PortKind};
+use serialbot_core::transport::{Connection, TransportError};
+use serialbot_core::{SessionManager, SessionOptions, SystemClock};
+use serialbot_mcp::{McpOptions, SerialTools, router, serve};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
 
@@ -40,7 +40,7 @@ impl Harness {
     async fn start() -> Self {
         let devices: Devices = Arc::default();
         let registry = Arc::clone(&devices);
-        let opener = move |config: &serialx_core::transport::serial::SerialConfig| -> Result<Connection, TransportError> {
+        let opener = move |config: &serialbot_core::transport::serial::SerialConfig| -> Result<Connection, TransportError> {
             if !config.path.starts_with("mock") {
                 return Err(TransportError::NotFound(config.path.clone()));
             }
@@ -294,7 +294,7 @@ async fn signals_are_set_read_and_logged() {
     let client = h.client().await;
     ok(&client, "session.open", json!({"port": "mock0"})).await;
     let device = h.device("mock0");
-    device.set_line_states(serialx_core::transport::LineStates {
+    device.set_line_states(serialbot_core::transport::LineStates {
         cts: true,
         dsr: false,
         ri: false,
@@ -550,7 +550,7 @@ async fn tools_report_unknown_and_disconnected_sessions() {
 #[tokio::test(flavor = "multi_thread")]
 async fn port_listing_errors_are_reported() {
     let manager = Arc::new(SessionManager::new(
-        Box::new(|_: &serialx_core::transport::serial::SerialConfig| {
+        Box::new(|_: &serialbot_core::transport::serial::SerialConfig| {
             Err(TransportError::NotFound("x".into()))
         }),
         Arc::new(SystemClock),

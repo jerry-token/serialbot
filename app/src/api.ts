@@ -239,7 +239,7 @@ export function formatBytes(n: number): string {
 
 /** The command that adds this server to Claude Code. */
 export function claudeCommand(url: string, token: string): string {
-  return `claude mcp add --transport http serialx ${url} --header "Authorization: Bearer ${token}"`;
+  return `claude mcp add --transport http serialbot ${url} --header "Authorization: Bearer ${token}"`;
 }
 
 /** Text for a rejected backend call (Tauri rejects with plain strings). */

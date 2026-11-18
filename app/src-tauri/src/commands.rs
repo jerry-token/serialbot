@@ -8,14 +8,14 @@
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
-use serialx_core::transport::TransportError;
-use serialx_core::transport::serial::{
+use serialbot_core::transport::TransportError;
+use serialbot_core::transport::serial::{
     DataBits, FlowControl, Parity, PortInfo, PortKind, SerialConfig, StopBits,
 };
-use serialx_core::{
+use serialbot_core::{
     Cursor, Direction, EntryKind, Session, SessionId, SessionManager, SessionState, SessionSummary,
 };
-pub use serialx_mcp::PortLister;
+pub use serialbot_mcp::PortLister;
 
 use crate::export::{CaptureStatus, Captures, ExportFormat, ExportSummary};
 use crate::filesend::{FileSendStatus, FileSends};
@@ -304,7 +304,7 @@ impl AppState {
     pub fn with_serial_ports() -> Self {
         Self::new(
             Arc::new(SessionManager::with_serial_ports()),
-            Arc::new(serialx_core::transport::serial::list_ports),
+            Arc::new(serialbot_core::transport::serial::list_ports),
         )
     }
 
@@ -452,7 +452,7 @@ impl AppState {
     /// label such as `gbk`); fails on unknown labels and characters the
     /// encoding lacks.
     pub fn encode_text(&self, text: &str, encoding: &str) -> Result<Vec<u8>, String> {
-        serialx_core::encoding::encode_text(text, encoding).map_err(|e| e.to_string())
+        serialbot_core::encoding::encode_text(text, encoding).map_err(|e| e.to_string())
     }
 
     /// Closes every session (on app exit).
@@ -565,8 +565,8 @@ mod tests {
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
 
-    use serialx_core::transport::mock::{self, MockDevice};
-    use serialx_core::{SessionOptions, SystemClock};
+    use serialbot_core::transport::mock::{self, MockDevice};
+    use serialbot_core::{SessionOptions, SystemClock};
 
     use super::*;
 
@@ -730,7 +730,7 @@ mod tests {
         let (app, devices) = state();
         app.open(&request("mock0")).unwrap();
         let device = devices.lock().unwrap()["mock0"].clone();
-        device.set_line_states(serialx_core::transport::LineStates {
+        device.set_line_states(serialbot_core::transport::LineStates {
             cts: true,
             dsr: true,
             ri: false,

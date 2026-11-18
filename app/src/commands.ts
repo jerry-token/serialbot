@@ -22,7 +22,7 @@ export interface CommandGroup {
 }
 
 /** Key in the webview's local storage. */
-export const STORAGE_KEY = "serialx.commands.v1";
+export const STORAGE_KEY = "serialbot.commands.v1";
 
 const ENDINGS: readonly LineEnding[] = ["none", "lf", "crlf", "cr"];
 const MAX_DELAY_MS = 86_400_000;

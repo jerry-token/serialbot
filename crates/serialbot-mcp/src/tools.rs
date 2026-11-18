@@ -16,11 +16,11 @@ use rmcp::model::{Implementation, ServerCapabilities, ServerConfig};
 use rmcp::{ServerHandler, tool, tool_handler, tool_router};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serialx_core::transport::serial::{
+use serialbot_core::transport::serial::{
     DataBits, FlowControl, Parity, PortInfo, PortKind, SerialConfig, StopBits,
 };
-use serialx_core::transport::{TransportError, TransportKind};
-use serialx_core::{
+use serialbot_core::transport::{TransportError, TransportKind};
+use serialbot_core::{
     Cursor, Direction, EntryKind, Session, SessionId, SessionManager, SessionState, SessionSummary,
     WaitMatch,
 };
@@ -43,7 +43,7 @@ pub const DEFAULT_MATCH_WINDOW: usize = 64 * 1024;
 /// Largest regex the wait tools compile, in bytes of compiled program.
 const REGEX_SIZE_LIMIT: usize = 1 << 20;
 
-const INSTRUCTIONS: &str = "Drives serial ports opened in serialx. \
+const INSTRUCTIONS: &str = "Drives serial ports opened in serialbot. \
 Use port.list to find ports, session.open to open one (or session.list to \
 reuse an open session), then io.write / io.read / io.wait_for / \
 io.send_and_expect, and io.signals for DTR/RTS. Every log entry has a sequence number; pass the \
@@ -51,7 +51,7 @@ io.send_and_expect, and io.signals for DTR/RTS. Every log entry has a sequence n
 io.write returns the cursor taken just before sending: pass it to \
 io.wait_for to catch replies that arrive very fast.";
 
-/// MCP handler exposing serialx sessions as tools.
+/// MCP handler exposing serialbot sessions as tools.
 #[derive(Clone)]
 pub struct SerialTools {
     manager: Arc<SessionManager>,
@@ -737,7 +737,7 @@ impl SerialTools {
 impl ServerHandler for SerialTools {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
-            .with_server_info(Implementation::new("serialx", env!("CARGO_PKG_VERSION")))
+            .with_server_info(Implementation::new("serialbot", env!("CARGO_PKG_VERSION")))
             .with_instructions(INSTRUCTIONS)
     }
 }

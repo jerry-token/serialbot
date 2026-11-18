@@ -13,7 +13,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use serialx_core::Session;
+use serialbot_core::Session;
 
 /// Shortest accepted interval.
 pub const MIN_INTERVAL_MS: u64 = 1;
@@ -189,8 +189,8 @@ fn run(
 mod tests {
     use std::time::Duration;
 
-    use serialx_core::transport::mock::{self, MockDevice};
-    use serialx_core::{SessionId, SessionOptions, SystemClock};
+    use serialbot_core::transport::mock::{self, MockDevice};
+    use serialbot_core::{SessionId, SessionOptions, SystemClock};
 
     use super::*;
 
@@ -270,7 +270,7 @@ mod tests {
     fn stops_with_the_error_when_a_write_fails() {
         let (s, device) = session();
         device.disconnect();
-        wait_until(|| s.state() != serialx_core::SessionState::Open);
+        wait_until(|| s.state() != serialbot_core::SessionState::Open);
         let r = Repeaters::default();
         r.start(1, s, b"x".to_vec(), 5, None).unwrap();
         wait_until(|| !r.status(1).running);

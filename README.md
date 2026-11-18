@@ -1,13 +1,13 @@
 <div align="center">
 
-<img src="app/src-tauri/icons/128x128.png" width="96" alt="serialx logo">
+<img src="app/src-tauri/icons/128x128.png" width="96" alt="SerialBot logo">
 
-# serialx
+# SerialBot
 
 **轻量、跨平台的串口调试助手，内置 MCP 服务，让 AI 也能直接操作串口** 🔌🤖
 
-[![CI](https://github.com/jerry-token/serialx/actions/workflows/ci.yml/badge.svg)](https://github.com/jerry-token/serialx/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/jerry-token/serialx?include_prereleases&label=release&color=orange)](https://github.com/jerry-token/serialx/releases)
+[![CI](https://github.com/SerialAI/SerialBot/actions/workflows/ci.yml/badge.svg)](https://github.com/SerialAI/SerialBot/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/SerialAI/SerialBot?include_prereleases&label=release&color=orange)](https://github.com/SerialAI/SerialBot/releases)
 ![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green)](LICENSE)
 
@@ -20,8 +20,7 @@
 </div>
 
 > [!NOTE]
-> 🚧 **当前是 Alpha 测试版**：基础功能可用，欢迎试用并[反馈问题](https://github.com/jerry-token/serialx/issues)。
-> serialx 是开发代号，正式名称会在公开 Beta 前确定。
+> 🚧 **当前是 Alpha 测试版**：基础功能可用，欢迎试用并[反馈问题](https://github.com/SerialAI/SerialBot/issues)。
 
 ## ✨ 特性
 
@@ -58,22 +57,22 @@
 
 ## 📦 下载安装
 
-到 [Releases 页面](https://github.com/jerry-token/serialx/releases) 下载对应系统的文件：
+到 [Releases 页面](https://github.com/SerialAI/SerialBot/releases) 下载对应系统的文件：
 
 | 系统 | 文件 | 说明 |
 |---|---|---|
-| 🪟 Windows 10/11 | `serialx_*_x64-setup.exe` | 安装版，不需要管理员权限 |
-| 🪟 Windows 10/11 | `serialx_windows_x64.exe` | 免安装版，双击直接运行 |
-| 🍎 macOS 11+ | `serialx_*_universal.dmg` | Apple Silicon 和 Intel 通用 |
-| 🐧 Ubuntu / Debian | `serialx_*_amd64.deb` | `sudo apt install ./serialx_*.deb` |
-| 🐧 其他 Linux | `serialx_*_amd64.AppImage` | `chmod +x` 后直接运行 |
+| 🪟 Windows 10/11 | `SerialBot_*_x64-setup.exe` | 安装版，不需要管理员权限 |
+| 🪟 Windows 10/11 | `serialbot_windows_x64.exe` | 免安装版，双击直接运行 |
+| 🍎 macOS 11+ | `SerialBot_*_universal.dmg` | Apple Silicon 和 Intel 通用 |
+| 🐧 Ubuntu / Debian | `SerialBot_*_amd64.deb` | `sudo apt install ./SerialBot_*.deb` |
+| 🐧 其他 Linux | `SerialBot_*_amd64.AppImage` | `chmod +x` 后直接运行 |
 
 <details>
 <summary>⚠️ 首次打开遇到提示？</summary>
 
 - **macOS 提示「已损坏」或「无法打开」**：Alpha 版还没做苹果公证，在终端执行一次：
   ```sh
-  xattr -dr com.apple.quarantine /Applications/serialx.app
+  xattr -dr com.apple.quarantine /Applications/SerialBot.app
   ```
 - **Windows 提示「未知发布者」**：点「更多信息」→「仍要运行」。
 - **Linux 打不开串口（权限不够）**：执行下面这条，然后重新登录：
@@ -98,7 +97,7 @@
 1. 点左侧 **AI** → 勾选 **启用 MCP 服务**。服务只监听本机 `127.0.0.1`，访问需要 token。
 2. 点 **复制**，在终端里运行复制下来的命令，例如：
    ```sh
-   claude mcp add --transport http serialx http://127.0.0.1:9633/mcp \
+   claude mcp add --transport http serialbot http://127.0.0.1:9633/mcp \
      --header "Authorization: Bearer <你的 token>"
    ```
 3. 在 Claude Code 里直接说：*「列出串口，打开 ESP32 那个口，发送 `version` 看看固件版本」* 🎉
@@ -139,14 +138,14 @@ sudo apt install libwebkit2gtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev
 cd app && npm ci && npm run tauri dev     # 运行桌面版
 cargo test --workspace                    # Rust 测试
 cd app && npm test                        # 前端测试
-cargo run -p serialx-mcp                  # 不带界面，单独运行 MCP 服务
+cargo run -p serialbot-mcp                  # 不带界面，单独运行 MCP 服务
 ```
 
 每次改动都要附带测试，并通过格式、clippy、测试和覆盖率检查，详见 [CLAUDE.md](CLAUDE.md)。
 
 ## 🤝 反馈
 
-发现 bug 或有功能建议，欢迎提 [Issue](https://github.com/jerry-token/serialx/issues)。请附上：
+发现 bug 或有功能建议，欢迎提 [Issue](https://github.com/SerialAI/SerialBot/issues)。请附上：
 
 - 📷 截图
 - 💻 操作系统

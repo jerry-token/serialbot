@@ -1,4 +1,4 @@
-//! MCP server for serialx.
+//! MCP server for serialbot.
 //!
 //! Serves the curated tool set of [`SerialTools`] over MCP Streamable HTTP
 //! at `/mcp`. Every request must carry `Authorization: Bearer <token>`;
@@ -10,12 +10,12 @@
 //! ```no_run
 //! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
 //! use std::sync::Arc;
-//! use serialx_core::SessionManager;
-//! use serialx_mcp::{McpOptions, SerialTools, generate_token, router, serve};
+//! use serialbot_core::SessionManager;
+//! use serialbot_mcp::{McpOptions, SerialTools, generate_token, router, serve};
 //! use tokio_util::sync::CancellationToken;
 //!
 //! let manager = Arc::new(SessionManager::with_serial_ports());
-//! let tools = SerialTools::new(manager, Arc::new(serialx_core::transport::serial::list_ports));
+//! let tools = SerialTools::new(manager, Arc::new(serialbot_core::transport::serial::list_ports));
 //! let options = McpOptions::new(generate_token()?)?;
 //! let shutdown = CancellationToken::new();
 //! let app = router(tools, &options, &shutdown);

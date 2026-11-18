@@ -135,7 +135,7 @@ describe("helpers", () => {
 
   it("builds the Claude Code command", () => {
     expect(claudeCommand("http://127.0.0.1:9633/mcp", "abc")).toBe(
-      'claude mcp add --transport http serialx http://127.0.0.1:9633/mcp --header "Authorization: Bearer abc"',
+      'claude mcp add --transport http serialbot http://127.0.0.1:9633/mcp --header "Authorization: Bearer abc"',
     );
   });
 

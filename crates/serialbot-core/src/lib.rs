@@ -1,4 +1,4 @@
-//! Core engine of serialx.
+//! Core engine of serialbot.
 //!
 //! This crate holds everything that does not depend on a user interface:
 //! the timestamped log buffer, transports (serial, TCP, UDP, ...) and the

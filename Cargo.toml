@@ -1,13 +1,13 @@
 [workspace]
 resolver = "3"
-members = ["crates/serialx-core", "crates/serialx-mcp", "app/src-tauri"]
+members = ["crates/serialbot-core", "crates/serialbot-mcp", "app/src-tauri"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.90"
 license = "GPL-3.0-only"
-repository = "https://github.com/jerry-token/serialx"
+repository = "https://github.com/SerialAI/SerialBot"
 publish = false
 
 [workspace.dependencies]
@@ -17,8 +17,8 @@ proptest = "1.12"
 regex = "1.12"
 serialport = "4.10"
 encoding_rs = "0.8"
-serialx-core = { path = "crates/serialx-core" }
-serialx-mcp = { path = "crates/serialx-mcp" }
+serialbot-core = { path = "crates/serialbot-core" }
+serialbot-mcp = { path = "crates/serialbot-mcp" }
 rmcp = { version = "3.10", default-features = false }
 axum = { version = "0.8", default-features = false }
 tokio = "1.54"

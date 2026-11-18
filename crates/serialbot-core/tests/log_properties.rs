@@ -4,7 +4,7 @@
 
 use bytes::Bytes;
 use proptest::prelude::*;
-use serialx_core::{Cursor, Direction, ENTRY_OVERHEAD, EntryKind, LogBuffer};
+use serialbot_core::{Cursor, Direction, ENTRY_OVERHEAD, EntryKind, LogBuffer};
 
 #[derive(Debug, Clone)]
 enum Op {

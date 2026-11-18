@@ -13,7 +13,7 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use serde::Serialize;
-use serialx_core::Session;
+use serialbot_core::Session;
 
 /// Largest file accepted (64 MiB); serial links rarely carry more and the
 /// whole file is read into memory.
@@ -224,8 +224,8 @@ fn run(
 mod tests {
     use std::time::{Duration, Instant};
 
-    use serialx_core::transport::mock::{self, MockDevice};
-    use serialx_core::{Cursor, Direction, EntryKind, SessionId, SessionOptions, SystemClock};
+    use serialbot_core::transport::mock::{self, MockDevice};
+    use serialbot_core::{Cursor, Direction, EntryKind, SessionId, SessionOptions, SystemClock};
 
     use super::*;
     use crate::settings::tests::TempDir;
