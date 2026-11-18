@@ -99,7 +99,10 @@ pub(crate) enum FlowControlArg {
 #[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct OpenArgs {
     /// OS name of the port as listed by port.list, e.g. "COM3" or
-    /// "/dev/ttyUSB0".
+    /// "/dev/ttyUSB0"; or a network endpoint: "tcp://host:port",
+    /// "tcp-server://addr:port" (one client at a time) or
+    /// "udp://host:port?local=addr:port". Line settings are ignored for
+    /// network endpoints.
     pub port: String,
     /// Baud rate (default 115200).
     #[serde(default = "default_baud_rate")]
@@ -251,6 +254,9 @@ impl From<SessionSummary> for SessionOut {
             port: s.info.name,
             transport: match s.info.kind {
                 TransportKind::Serial => "serial",
+                TransportKind::TcpClient => "tcp",
+                TransportKind::TcpServer => "tcp-server",
+                TransportKind::Udp => "udp",
                 TransportKind::Mock => "mock",
             }
             .into(),
@@ -525,7 +531,7 @@ impl SerialTools {
 
     #[tool(
         name = "session.open",
-        description = "Open a serial port in a new session. Fails if the port is already open; reuse that session instead.",
+        description = "Open a serial port, or a network endpoint (tcp://host:port, tcp-server://addr:port, udp://host:port?local=addr:port), in a new session. Fails if it is already open; reuse that session instead.",
         annotations(
             read_only_hint = false,
             destructive_hint = false,

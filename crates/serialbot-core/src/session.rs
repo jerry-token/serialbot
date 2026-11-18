@@ -473,7 +473,13 @@ fn lock<T: ?Sized>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 fn read_loop(shared: &Shared, mut reader: Box<dyn TransportReader>, chunk: usize) {
     let mut buf = vec![0u8; chunk];
     while !shared.stop.load(Ordering::SeqCst) {
-        match reader.read(&mut buf) {
+        let result = reader.read(&mut buf);
+        while let Some(event) = reader.take_event() {
+            let now = shared.clock.now_us();
+            shared.lock().log.push_marker(now, &event);
+            shared.changed.notify_all();
+        }
+        match result {
             Ok(0) => {}
             Ok(n) => {
                 let now = shared.clock.now_us();
