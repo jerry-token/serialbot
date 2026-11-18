@@ -406,22 +406,29 @@ impl Session {
         }
         *lock(&self.control) = connection.control;
         *lock(&self.outputs) = OutputSignals::default();
+        // Reopen before the new reader runs: a reader that fails at once
+        // must find the session open, or its end would be lost.
+        if !self.shared.reopen() {
+            // Closed meanwhile; the connection is dropped unused.
+            return Err(SessionError::NotOpen(self.state()));
+        }
+        self.mark("reconnected");
         let thread_shared = Arc::clone(&self.shared);
         let chunk = self.read_chunk;
         let source = connection.reader;
-        let handle = std::thread::Builder::new()
+        match std::thread::Builder::new()
             .name(format!("serialx-rx-{}", self.id))
             .spawn(move || read_loop(&thread_shared, source, chunk))
-            .map_err(TransportError::Io)?;
-        *reader = Some(handle);
-        drop(reader);
-        if self.shared.reopen() {
-            self.mark("reconnected");
-            Ok(())
-        } else {
-            // Closed meanwhile: stop the new reader again.
-            self.close();
-            Err(SessionError::NotOpen(self.state()))
+        {
+            Ok(handle) => {
+                *reader = Some(handle);
+                Ok(())
+            }
+            Err(e) => {
+                let e = TransportError::Io(e);
+                self.shared.finish(SessionState::Failed(e.to_string()));
+                Err(e.into())
+            }
         }
     }
 
@@ -958,6 +965,24 @@ mod tests {
         assert!(s.set_dtr(true).is_err());
         assert_eq!(s.output_signals(), OutputSignals::default());
         assert_eq!(s.end(), Cursor(0), "nothing logged");
+    }
+
+    #[test]
+    fn reattach_reports_a_device_that_drops_again_at_once() {
+        let (s, d, _c) = session();
+        d.disconnect();
+        while s.state() == SessionState::Open {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        let (conn, d2) = mock::connection("mock0", T);
+        d2.disconnect();
+        s.reattach(conn).unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while s.state() == SessionState::Open {
+            assert!(std::time::Instant::now() < deadline, "second drop lost");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert_eq!(s.state(), SessionState::Disconnected);
     }
 
     #[test]
