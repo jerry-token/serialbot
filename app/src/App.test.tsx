@@ -11,6 +11,8 @@ import type {
   OpenRequest,
   PortInfo,
   SessionInfo,
+  CaptureStatus,
+  ExportFormat,
   RepeatStatus,
   SessionStateName,
   SignalsInfo,
@@ -131,6 +133,37 @@ class FakeBackend implements Backend {
   async onLogChanged(handler: (ids: number[]) => void) {
     this.logListeners.add(handler);
     return () => this.logListeners.delete(handler);
+  }
+
+  saveTo: string | null = "/home/me/out.log";
+  exports: Array<[number, string, ExportFormat]> = [];
+  capture: CaptureStatus = { active: false, path: null, bytes: 0, error: null };
+  failExport: string | null = null;
+
+  async chooseSaveFile(defaultName: string, format: ExportFormat) {
+    this.lastSaveName = `${defaultName}|${format}`;
+    return this.saveTo;
+  }
+  lastSaveName = "";
+
+  async exportLog(id: number, path: string, format: ExportFormat) {
+    if (this.failExport) throw this.failExport;
+    this.exports.push([id, path, format]);
+    return { bytes: 2048 };
+  }
+
+  async startCapture(_id: number, path: string, _format: ExportFormat) {
+    this.capture = { active: true, path, bytes: 0, error: null };
+    return this.capture;
+  }
+
+  async stopCapture(_id: number) {
+    this.capture = { ...this.capture, active: false };
+    return this.capture;
+  }
+
+  async captureStatus(_id: number) {
+    return this.capture;
   }
 
   repeats = new Map<number, RepeatStatus & { data: number[]; intervalMs: number }>();
@@ -789,6 +822,61 @@ describe("App", () => {
     await user.type(input, "xy");
     await user.keyboard("{ArrowUp}");
     expect(input).toHaveValue("xy");
+  });
+
+  it("saves the current log to a chosen file", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Save current log…" }));
+    await waitFor(() => expect(screen.getByText("Saved 2.0 KB to /home/me/out.log")).toBeInTheDocument());
+    expect(backend.exports).toEqual([[1, "/home/me/out.log", "log"]]);
+    expect(backend.lastSaveName).toMatch(/^COM3_\d{8}-\d{6}\.log\|log$/);
+
+    await user.selectOptions(screen.getByLabelText("Format"), "raw");
+    backend.saveTo = null; // The user cancels the dialog.
+    await user.click(screen.getByRole("button", { name: "Save current log…" }));
+    await waitFor(() => expect(backend.lastSaveName).toMatch(/\.bin\|raw$/));
+    expect(backend.exports).toHaveLength(1);
+
+    backend.saveTo = "/x.bin";
+    backend.failExport = "cannot write /x.bin: permission denied";
+    await user.click(screen.getByRole("button", { name: "Save current log…" }));
+    await waitFor(() => expect(screen.getByText(/permission denied/)).toBeInTheDocument());
+  });
+
+  it("keeps saving until stopped", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    backend.saveTo = "/logs/board.bin";
+    await user.click(screen.getByRole("button", { name: "Keep saving…" }));
+    await waitFor(() => expect(status()).toHaveTextContent("Saving to board.bin · 0 B"));
+    expect(screen.getByLabelText("Format")).toBeDisabled();
+    backend.capture = { ...backend.capture, bytes: 3 * 1024 * 1024 };
+    await waitFor(() => expect(status()).toHaveTextContent("Saving to board.bin · 3.0 MB"), {
+      timeout: 3000,
+    });
+    await user.click(screen.getByRole("button", { name: "Stop saving" }));
+    await waitFor(() => expect(screen.getByText("Saved 3.0 MB to /logs/board.bin")).toBeInTheDocument());
+    expect(status()).not.toHaveTextContent("Saving to");
+  });
+
+  it("reports a capture that stopped with an error", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    backend.saveTo = null;
+    await user.click(screen.getByRole("button", { name: "Keep saving…" }));
+    expect(status()).not.toHaveTextContent("Saving to");
+    backend.saveTo = "/full/disk.log";
+    await user.click(screen.getByRole("button", { name: "Keep saving…" }));
+    await waitFor(() => expect(status()).toHaveTextContent("Saving to disk.log"));
+    backend.capture = { ...backend.capture, active: false, error: "No space left on device" };
+    await waitFor(() => expect(status()).toHaveTextContent("No space left on device"), {
+      timeout: 3000,
+    });
+    expect(status()).not.toHaveTextContent("Saving to");
   });
 
   it("stops listening when closed", async () => {

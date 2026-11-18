@@ -17,6 +17,7 @@ use serialx_core::{
 };
 pub use serialx_mcp::PortLister;
 
+use crate::export::{CaptureStatus, Captures, ExportFormat, ExportSummary};
 use crate::repeat::{RepeatStatus, Repeaters};
 
 /// Largest payload one [`AppState::read`] returns.
@@ -267,6 +268,7 @@ pub struct AppState {
     manager: Arc<SessionManager>,
     list_ports: Arc<PortLister>,
     repeaters: Repeaters,
+    captures: Captures,
 }
 
 impl std::fmt::Debug for AppState {
@@ -284,6 +286,7 @@ impl AppState {
             manager,
             list_ports,
             repeaters: Repeaters::default(),
+            captures: Captures::default(),
         }
     }
 
@@ -337,6 +340,7 @@ impl AppState {
     /// Closes a session and forgets it; the frontend keeps what it shows.
     pub fn close(&self, id: u32) -> Result<(), String> {
         self.repeaters.stop(id);
+        self.captures.remove(id);
         self.manager
             .remove(SessionId(id))
             .map_err(|e| e.to_string())
@@ -427,7 +431,51 @@ impl AppState {
     /// Closes every session (on app exit).
     pub fn shutdown(&self) {
         self.repeaters.stop_all();
+        self.captures.stop_all();
         self.manager.close_all();
+    }
+
+    /// Saves what the session's log holds now to `path` (replacing it).
+    /// `utc_offset_min` is the local time zone, minutes east of UTC.
+    pub fn export_log(
+        &self,
+        id: u32,
+        path: &str,
+        format: ExportFormat,
+        utc_offset_min: i32,
+    ) -> Result<ExportSummary, String> {
+        let session = self.manager.get(SessionId(id)).map_err(|e| e.to_string())?;
+        crate::export::export(&session, std::path::Path::new(path), format, utc_offset_min)
+    }
+
+    /// Starts saving the session's log to `path` as it grows, beginning
+    /// with what it already holds.
+    pub fn start_capture(
+        &self,
+        id: u32,
+        path: &str,
+        format: ExportFormat,
+        utc_offset_min: i32,
+    ) -> Result<CaptureStatus, String> {
+        let session = self.manager.get(SessionId(id)).map_err(|e| e.to_string())?;
+        self.captures.start(
+            id,
+            session,
+            std::path::Path::new(path),
+            format,
+            utc_offset_min,
+        )
+    }
+
+    /// Stops the session's live capture, keeping its final status.
+    pub fn stop_capture(&self, id: u32) -> CaptureStatus {
+        self.captures.stop(id);
+        self.captures.status(id)
+    }
+
+    /// State of the session's live capture.
+    pub fn capture_status(&self, id: u32) -> CaptureStatus {
+        self.captures.status(id)
     }
 
     /// Starts sending `data` every `interval_ms` (`count` times, or until
@@ -711,6 +759,48 @@ mod tests {
         app.close(1).unwrap();
         assert!(!app.repeat_status(1).running, "closing stops the job");
         app.shutdown();
+    }
+
+    #[test]
+    fn logs_are_exported_and_captured() {
+        let (app, devices) = state();
+        let dir = crate::settings::tests::TempDir::new("commands-export");
+        let path = dir.0.join("x.bin");
+        let path = path.to_str().unwrap();
+        assert!(
+            app.export_log(1, path, ExportFormat::Raw, 0)
+                .unwrap_err()
+                .contains("no session")
+        );
+        assert!(app.start_capture(1, path, ExportFormat::Raw, 0).is_err());
+        app.open(&request("mock0")).unwrap();
+        devices.lock().unwrap()["mock0"].send(b"hi");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while app.read(1, 0, 16).unwrap().entries.is_empty() {
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        assert_eq!(
+            app.export_log(1, path, ExportFormat::Raw, 0).unwrap().bytes,
+            2
+        );
+        let live = dir.0.join("live.bin");
+        assert!(
+            app.start_capture(1, live.to_str().unwrap(), ExportFormat::Raw, 0)
+                .unwrap()
+                .active
+        );
+        while app.capture_status(1).bytes < 2 {
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        assert!(!app.stop_capture(1).active);
+        app.close(1).unwrap();
+        assert_eq!(
+            app.capture_status(1),
+            CaptureStatus::default(),
+            "closing forgets it"
+        );
     }
 
     #[test]

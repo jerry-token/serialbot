@@ -7,8 +7,11 @@ const listen = vi.fn(async (_name: string, _handler: Handler) => () => {});
 vi.mock("@tauri-apps/api/event", () => ({
   listen: (name: string, handler: Handler) => listen(name, handler),
 }));
+const save = vi.fn(async (_options: unknown) => "/picked.log");
+vi.mock("@tauri-apps/plugin-dialog", () => ({ save: (o: unknown) => save(o) }));
 
-const { claudeCommand, errorMessage, portLabel, tauriBackend } = await import("./api");
+const { claudeCommand, errorMessage, formatBytes, portLabel, saveFileName, tauriBackend, utcOffsetMin } =
+  await import("./api");
 const { detectLang, strings } = await import("./i18n");
 const { formatTime } = await import("./timefmt");
 
@@ -47,6 +50,10 @@ describe("tauriBackend", () => {
     await tauriBackend.mcpStatus();
     await tauriBackend.mcpApply(settings);
     await tauriBackend.mcpRegenerateToken();
+    await tauriBackend.exportLog(1, "/a.log", "log");
+    await tauriBackend.startCapture(1, "/b.bin", "raw");
+    await tauriBackend.stopCapture(1);
+    await tauriBackend.captureStatus(1);
     await tauriBackend.startRepeat(1, new Uint8Array([7]), 100, null);
     await tauriBackend.stopRepeat(1);
     await tauriBackend.repeatStatus(1);
@@ -64,6 +71,10 @@ describe("tauriBackend", () => {
       ["mcp_status"],
       ["mcp_apply", { settings }],
       ["mcp_regenerate_token"],
+      ["export_log", { id: 1, path: "/a.log", format: "log", utcOffsetMin: utcOffsetMin() }],
+      ["start_capture", { id: 1, path: "/b.bin", format: "raw", utcOffsetMin: utcOffsetMin() }],
+      ["stop_capture", { id: 1 }],
+      ["capture_status", { id: 1 }],
       ["start_repeat", { id: 1, data: [7], intervalMs: 100, count: null }],
       ["stop_repeat", { id: 1 }],
       ["repeat_status", { id: 1 }],
@@ -71,6 +82,15 @@ describe("tauriBackend", () => {
       ["signals", { id: 1 }],
       ["set_signals", { id: 1, dtr: true, rts: null }],
       ["set_signals", { id: 1, dtr: null, rts: false }],
+    ]);
+  });
+
+  it("asks where to save with a filter for the format", async () => {
+    expect(await tauriBackend.chooseSaveFile("a.log", "log")).toBe("/picked.log");
+    await tauriBackend.chooseSaveFile("a.bin", "raw");
+    expect(save.mock.calls).toEqual([
+      [{ defaultPath: "a.log", filters: [{ name: "Log", extensions: ["log", "txt"] }] }],
+      [{ defaultPath: "a.bin", filters: [{ name: "Raw data", extensions: ["bin", "txt"] }] }],
     ]);
   });
 
@@ -96,6 +116,23 @@ describe("tauriBackend", () => {
 });
 
 describe("helpers", () => {
+  it("names save files after the port and the time", () => {
+    const at = new Date(2026, 10, 18, 9, 5, 7);
+    expect(saveFileName("/dev/ttyUSB0", "log", at)).toBe("ttyUSB0_20261118-090507.log");
+    expect(saveFileName("COM3", "raw", at)).toBe("COM3_20261118-090507.bin");
+    expect(saveFileName("\\\\.\\COM10", "raw", at)).toBe("COM10_20261118-090507.bin");
+    expect(saveFileName("/tmp/my port!", "log", at)).toBe("my_port__20261118-090507.log");
+    expect(saveFileName("/", "log", at)).toBe("serial_20261118-090507.log");
+  });
+
+  it("formats sizes and the time zone", () => {
+    expect(formatBytes(512)).toBe("512 B");
+    expect(formatBytes(1536)).toBe("1.5 KB");
+    expect(formatBytes(5 * 1024 * 1024)).toBe("5.0 MB");
+    const date = new Date();
+    expect(utcOffsetMin(date)).toBe(-date.getTimezoneOffset());
+  });
+
   it("builds the Claude Code command", () => {
     expect(claudeCommand("http://127.0.0.1:9633/mcp", "abc")).toBe(
       'claude mcp add --transport http serialx http://127.0.0.1:9633/mcp --header "Authorization: Bearer abc"',

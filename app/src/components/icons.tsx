@@ -74,3 +74,10 @@ export const UpIcon = (p: IconProps) => (
     <path d="M6 15l6-6 6 6" />
   </Svg>
 );
+
+export const SaveIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M5 4h11l3 3v13H5z" />
+    <path d="M8 4v5h7V4M8 20v-6h8v6" />
+  </Svg>
+);

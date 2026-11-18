@@ -19,6 +19,7 @@ path = "src/main.rs"
 serialx-core.workspace = true
 serialx-mcp.workspace = true
 tauri.workspace = true
+tauri-plugin-dialog.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["net", "sync", "time"] }
