@@ -13,6 +13,15 @@ import type {
 } from "./api";
 import { errorMessage, formatBytes, saveFileName } from "./api";
 import { encodeInput, withEndings } from "./bytes";
+import {
+  type Command,
+  type CommandGroup,
+  browserStorage,
+  loadGroups,
+  runSequence,
+  saveGroups,
+} from "./commands";
+import { CommandPanel, type RunProgress } from "./components/CommandPanel";
 import { DisplaySettings } from "./components/DisplaySettings";
 import { SearchBar } from "./components/SearchBar";
 import { ConnectionBar, type PortSettings } from "./components/ConnectionBar";
@@ -23,7 +32,7 @@ import { SendBar, type SendSettings } from "./components/SendBar";
 import { SignalBar } from "./components/SignalBar";
 import { SessionTabs, Toggle } from "./components/SessionTabs";
 import { type Page, Sidebar } from "./components/Sidebar";
-import { ClearIcon, SearchIcon } from "./components/icons";
+import { ClearIcon, ListIcon, SearchIcon } from "./components/icons";
 import { type Lang, strings } from "./i18n";
 import { type Line, Terminal } from "./terminal";
 
@@ -44,6 +53,8 @@ interface Props {
   lang: Lang;
   /** Clipboard writer (replaceable in tests). */
   copy?: (text: string) => Promise<void>;
+  /** Where saved commands are kept (replaceable in tests). */
+  storage?: Storage | null;
 }
 
 /** What the window keeps per session: its rendered log and read position. */
@@ -63,8 +74,14 @@ const nowUs = () => Date.now() * 1000;
 
 const defaultCopy = (text: string) => navigator.clipboard.writeText(text);
 
-export function App({ backend, lang, copy = defaultCopy }: Props) {
+export function App({ backend, lang, copy = defaultCopy, storage = browserStorage() }: Props) {
   const t = strings(lang);
+  const [groups, setGroups] = useState<CommandGroup[]>(() =>
+    loadGroups(storage, t.defaultGroup),
+  );
+  const [showCommands, setShowCommands] = useState(false);
+  const [run, setRun] = useState<RunProgress | null>(null);
+  const runStop = useRef<AbortController | null>(null);
   const [ports, setPorts] = useState<PortInfo[]>([]);
   const [settings, setSettings] = useState<PortSettings>({
     port: "",
@@ -235,6 +252,13 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
     };
   }, [backend, applySessions, applyPorts, pull, refreshPorts, storeSignals]);
 
+  useEffect(() => {
+    saveGroups(storage, groups);
+  }, [storage, groups]);
+
+  // A run does not outlive the window.
+  useEffect(() => () => runStop.current?.abort(), []);
+
   const active = sessions.find((s) => s.id === activeId) ?? null;
   const activeOpen = active?.state === "open";
 
@@ -327,6 +351,56 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
       setHistory((h) => [...h.filter((x) => x !== text), text].slice(-HISTORY_SIZE));
     } catch (e) {
       setError(errorMessage(e));
+    }
+  };
+
+  // Saved commands are sent like the send box, with their own settings.
+  const commandBytes = async (c: Command): Promise<Uint8Array> => {
+    if (c.hex) {
+      try {
+        return encodeInput(c.text, true, "none");
+      } catch {
+        throw t.invalidHex;
+      }
+    }
+    if (encoding !== "utf-8") {
+      return Uint8Array.from(await backend.encodeText(withEndings(c.text, c.ending), encoding));
+    }
+    return encodeInput(c.text, false, c.ending);
+  };
+
+  const sendCommand = async (c: Command) => {
+    if (!active) return;
+    try {
+      await backend.writeData(active.id, await commandBytes(c));
+      setError(null);
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  };
+
+  // Runs a group on the session selected when it starts.
+  const runGroup = async (group: CommandGroup) => {
+    if (!active || runStop.current) return;
+    const id = active.id;
+    const stop = new AbortController();
+    runStop.current = stop;
+    const total = group.commands.length;
+    try {
+      await runSequence(
+        group.commands,
+        async (c) => {
+          await backend.writeData(id, await commandBytes(c));
+        },
+        stop.signal,
+        (i) => setRun({ groupId: group.id, index: i + 1, total }),
+      );
+      setError(null);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      runStop.current = null;
+      setRun(null);
     }
   };
 
@@ -564,6 +638,16 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
               <button
                 type="button"
                 className="icon-button"
+                aria-label={t.commands}
+                title={t.commandsHint}
+                aria-pressed={showCommands}
+                onClick={() => setShowCommands((o) => !o)}
+              >
+                <ListIcon size={16} />
+              </button>
+              <button
+                type="button"
+                className="icon-button"
                 aria-label={t.search}
                 title={`${t.search} (Ctrl+F)`}
                 aria-pressed={searchOpen}
@@ -599,44 +683,59 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
                 <ClearIcon size={16} />
               </button>
             </SessionTabs>
-            {active ? (
-              <div className="log-area">
-                {searchOpen && (
-                  <SearchBar
-                    t={t}
-                    query={query}
-                    onQuery={(q) => {
-                      setQuery(q);
-                      setMatchPos(null);
-                    }}
-                    current={matchIndex + 1}
-                    total={matchIds.length}
-                    onStep={(delta) =>
-                      setMatchPos(
-                        (matchIndex + delta + matchIds.length) % matchIds.length,
-                      )
-                    }
-                    onClose={() => {
-                      setSearchOpen(false);
-                      setMatchPos(null);
-                    }}
+            <div className="work">
+              {active ? (
+                <div className="log-area">
+                  {searchOpen && (
+                    <SearchBar
+                      t={t}
+                      query={query}
+                      onQuery={(q) => {
+                        setQuery(q);
+                        setMatchPos(null);
+                      }}
+                      current={matchIndex + 1}
+                      total={matchIds.length}
+                      onStep={(delta) =>
+                        setMatchPos(
+                          (matchIndex + delta + matchIds.length) % matchIds.length,
+                        )
+                      }
+                      onClose={() => {
+                        setSearchOpen(false);
+                        setMatchPos(null);
+                      }}
+                    />
+                  )}
+                  <LogView
+                    key={activeId ?? 0}
+                    lines={visibleLines}
+                    showTimestamps={showTimestamps}
+                    autoScroll={autoScroll && !paused}
+                    version={version}
+                    matches={new Set(matchIds)}
+                    currentMatch={currentMatch}
                   />
-                )}
-                <LogView
-                  key={activeId ?? 0}
-                  lines={visibleLines}
-                  showTimestamps={showTimestamps}
-                  autoScroll={autoScroll && !paused}
-                  version={version}
-                  matches={new Set(matchIds)}
-                  currentMatch={currentMatch}
+                </div>
+              ) : (
+                <div className="log empty" role="log">
+                  <p>{t.noSession}</p>
+                </div>
+              )}
+              {showCommands && (
+                <CommandPanel
+                  t={t}
+                  groups={groups}
+                  onChange={setGroups}
+                  enabled={activeOpen}
+                  onSend={(c) => void sendCommand(c)}
+                  run={run}
+                  onRun={(g) => void runGroup(g)}
+                  onStop={() => runStop.current?.abort()}
+                  defaultEnding={send.ending}
                 />
-              </div>
-            ) : (
-              <div className="log empty" role="log">
-                <p>{t.noSession}</p>
-              </div>
-            )}
+              )}
+            </div>
             <SendBar
               t={t}
               settings={send}
