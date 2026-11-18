@@ -58,6 +58,8 @@ export interface SignalsInfo {
   id: number;
   dtr: boolean | null;
   rts: boolean | null;
+  /** False while RTS/CTS hardware flow control drives RTS. */
+  rtsManual: boolean;
   cts: boolean | null;
   dsr: boolean | null;
   ri: boolean | null;

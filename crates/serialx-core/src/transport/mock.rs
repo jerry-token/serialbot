@@ -51,6 +51,7 @@ pub fn connection(name: &str, read_timeout: Duration) -> (Connection, MockDevice
         name: name.to_owned(),
         capabilities: Capabilities {
             output_signals: true,
+            manual_rts: true,
             input_signals: true,
             send_break: true,
             live_baud_rate: true,

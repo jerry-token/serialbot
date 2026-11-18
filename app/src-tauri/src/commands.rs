@@ -231,6 +231,8 @@ pub struct SignalsDto {
     pub dtr: Option<bool>,
     /// RTS level last set (`null`: not set in this session).
     pub rts: Option<bool>,
+    /// Whether RTS can be set by hand (false under RTS/CTS flow control).
+    pub rts_manual: bool,
     /// Clear To Send (`null`: the port cannot report input lines).
     pub cts: Option<bool>,
     /// Data Set Ready.
@@ -250,6 +252,7 @@ pub fn signals_dto(session: &Session) -> SignalsDto {
         id: session.id().0,
         dtr: outputs.dtr,
         rts: outputs.rts,
+        rts_manual: session.info().capabilities.manual_rts,
         cts: lines.map(|l| l.cts),
         dsr: lines.map(|l| l.dsr),
         ri: lines.map(|l| l.ri),
@@ -605,6 +608,7 @@ mod tests {
                 id: 1,
                 dtr: None,
                 rts: None,
+                rts_manual: true,
                 cts: Some(true),
                 dsr: Some(true),
                 ri: Some(false),

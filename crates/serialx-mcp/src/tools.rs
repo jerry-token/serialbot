@@ -340,6 +340,9 @@ pub(crate) struct SignalsOut {
     pub dtr: Option<bool>,
     /// RTS level last set in this session (null: never set).
     pub rts: Option<bool>,
+    /// False while RTS/CTS hardware flow control drives RTS; setting it is
+    /// then refused.
+    pub rts_manual: bool,
     /// Clear To Send (null: cannot be read on this port).
     pub cts: Option<bool>,
     /// Data Set Ready.
@@ -690,6 +693,7 @@ impl SerialTools {
             Ok(Json(SignalsOut {
                 dtr: outputs.dtr,
                 rts: outputs.rts,
+                rts_manual: session.info().capabilities.manual_rts,
                 cts: lines.map(|l| l.cts),
                 dsr: lines.map(|l| l.dsr),
                 ri: lines.map(|l| l.ri),

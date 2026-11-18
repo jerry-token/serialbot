@@ -64,6 +64,10 @@ pub enum TransportKind {
 pub struct Capabilities {
     /// DTR/RTS can be driven.
     pub output_signals: bool,
+    /// RTS can be driven by hand. False while RTS/CTS hardware flow control
+    /// owns the line: drivers then refuse or silently override changes
+    /// (WCH's CH9344 driver answers `EINVAL`).
+    pub manual_rts: bool,
     /// CTS/DSR/RI/CD can be read.
     pub input_signals: bool,
     /// A BREAK condition can be sent.

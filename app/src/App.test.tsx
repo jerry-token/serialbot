@@ -166,7 +166,16 @@ class FakeBackend implements Backend {
 
   private linesOf(id: number): SignalsInfo {
     return (
-      this.lines[id] ?? { id, dtr: null, rts: null, cts: false, dsr: false, ri: false, cd: null }
+      this.lines[id] ?? {
+        id,
+        dtr: null,
+        rts: null,
+        rtsManual: true,
+        cts: false,
+        dsr: false,
+        ri: false,
+        cd: null,
+      }
     );
   }
 
@@ -538,6 +547,26 @@ describe("App", () => {
 
     act(() => backend.setState(1, "disconnected"));
     await waitFor(() => expect(dtr).toBeDisabled());
+  });
+
+  it("locks RTS while hardware flow control drives it", async () => {
+    const backend = new FakeBackend();
+    backend.lines[1] = {
+      id: 1,
+      dtr: null,
+      rts: null,
+      rtsManual: false,
+      cts: false,
+      dsr: false,
+      ri: false,
+      cd: false,
+    };
+    const { user } = setup(backend);
+    await openPort(user);
+    const rts = screen.getByRole("button", { name: /^RTS/ });
+    await waitFor(() => expect(rts).toBeDisabled());
+    expect(rts).toHaveAttribute("title", expect.stringContaining("hardware flow control"));
+    expect(screen.getByRole("button", { name: /^DTR/ })).toBeEnabled();
   });
 
   it("reports modem line errors", async () => {
