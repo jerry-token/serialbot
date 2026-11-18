@@ -7,7 +7,7 @@
 | System | File | Notes |
 |---|---|---|
 | Windows 10/11 x64 | `serialx_*_x64-setup.exe` | Installer (no admin needed). 安装版，无需管理员权限 |
-| Windows 10/11 x64 | `serialx*.exe` (without `setup`) | Portable, no install. 免安装版，直接运行（需系统自带的 WebView2） |
+| Windows 10/11 x64 | `serialx_windows_x64.exe` | Portable, no install. 免安装版，直接运行（需系统自带的 WebView2） |
 | macOS 11+ (Apple Silicon & Intel) | `serialx_*_universal.dmg` | See note below. 见下方说明 |
 | Linux x64 | `serialx_*_amd64.AppImage` | `chmod +x` then run. 加执行权限后直接运行 |
 | Debian / Ubuntu x64 | `serialx_*_amd64.deb` | `sudo apt install ./serialx_*.deb` |
