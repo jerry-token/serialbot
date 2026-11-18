@@ -1,4 +1,4 @@
-import { type ReactNode, useRef } from "react";
+import { type PointerEvent as ReactPointerEvent, type ReactNode, useRef, useState } from "react";
 import type { RepeatStatus } from "../api";
 import type { LineEnding } from "../bytes";
 import type { Strings } from "../i18n";
@@ -34,6 +34,13 @@ interface Props {
  * at the end newer ones. With "timed" on, Send starts sending every N ms
  * until stopped. The box can be resized by dragging its lower edge.
  */
+/** Height limits of the send box in pixels, and the step of one arrow key. */
+export const SEND_BOX_MIN = 48;
+export const SEND_BOX_MAX = 480;
+const KEY_STEP = 16;
+
+const clampHeight = (h: number) => Math.min(Math.max(Math.round(h), SEND_BOX_MIN), SEND_BOX_MAX);
+
 export function SendBar({
   t,
   settings,
@@ -47,6 +54,26 @@ export function SendBar({
 }: Props) {
   // Position in `history` while browsing it; null when editing new text.
   const browsing = useRef<number | null>(null);
+  const box = useRef<HTMLTextAreaElement>(null);
+  // Height set by dragging the handle; null keeps the default (3 rows).
+  const [height, setHeight] = useState<number | null>(null);
+
+  // The box sits at the bottom of the window, so the handle is at its top
+  // edge: dragging up makes it taller.
+  const startResize = (e: ReactPointerEvent) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startHeight = box.current?.offsetHeight || SEND_BOX_MIN;
+    const move = (ev: PointerEvent) => setHeight(clampHeight(startHeight + startY - ev.clientY));
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+  const resizeBy = (delta: number) =>
+    setHeight((h) => clampHeight((h ?? (box.current?.offsetHeight || SEND_BOX_MIN)) + delta));
   const running = repeat?.running === true;
   const canSend = enabled && settings.text !== "";
   const set = (patch: Partial<SendSettings>) => onChange({ ...settings, ...patch });
@@ -68,41 +95,63 @@ export function SendBar({
         }
       }}
     >
-      <textarea
-        aria-label={t.send}
-        className="send-input"
-        rows={3}
-        placeholder={t.sendPlaceholder}
-        value={settings.text}
-        spellCheck={false}
-        onChange={(e) => {
-          browsing.current = null;
-          set({ text: e.target.value });
-        }}
-        onKeyDown={(e) => {
-          const el = e.currentTarget;
-          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-            e.preventDefault();
-            if (canSend && !running) {
-              browsing.current = null;
-              onSend();
+      <div className="send-input-wrap">
+        <textarea
+          ref={box}
+          style={height === null ? undefined : { height }}
+          aria-label={t.send}
+          className="send-input"
+          rows={3}
+          placeholder={t.sendPlaceholder}
+          value={settings.text}
+          spellCheck={false}
+          onChange={(e) => {
+            browsing.current = null;
+            set({ text: e.target.value });
+          }}
+          onKeyDown={(e) => {
+            const el = e.currentTarget;
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              if (canSend && !running) {
+                browsing.current = null;
+                onSend();
+              }
+            } else if (e.key === "ArrowUp" && el.selectionStart === 0 && el.selectionEnd === 0) {
+              if (history.length === 0) return;
+              e.preventDefault();
+              const at = browsing.current ?? history.length;
+              recall(Math.max(0, at - 1));
+            } else if (
+              e.key === "ArrowDown" &&
+              browsing.current !== null &&
+              el.selectionStart === el.value.length
+            ) {
+              e.preventDefault();
+              const next = browsing.current + 1;
+              recall(next < history.length ? next : null);
             }
-          } else if (e.key === "ArrowUp" && el.selectionStart === 0 && el.selectionEnd === 0) {
-            if (history.length === 0) return;
-            e.preventDefault();
-            const at = browsing.current ?? history.length;
-            recall(Math.max(0, at - 1));
-          } else if (
-            e.key === "ArrowDown" &&
-            browsing.current !== null &&
-            el.selectionStart === el.value.length
-          ) {
-            e.preventDefault();
-            const next = browsing.current + 1;
-            recall(next < history.length ? next : null);
-          }
-        }}
-      />
+          }}
+        />
+        <div
+          className="resize-handle"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label={t.resizeSendBox}
+          title={t.resizeSendBox}
+          tabIndex={0}
+          onPointerDown={startResize}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowUp") {
+              e.preventDefault();
+              resizeBy(KEY_STEP);
+            } else if (e.key === "ArrowDown") {
+              e.preventDefault();
+              resizeBy(-KEY_STEP);
+            }
+          }}
+        />
+      </div>
       <div className="send-controls">
         <div className="send-row">
           <label className="check">

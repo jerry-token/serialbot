@@ -417,19 +417,51 @@ label.check {
   border-top: 1px solid var(--border);
 }
 
+.send-input-wrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+}
+
 .send-input {
   flex: 1;
-  min-height: 64px;
+  min-height: 48px;
   max-height: 50vh;
-  resize: vertical;
+  resize: none;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   line-height: 1.4;
+}
+
+/* Options stay at the top, the buttons at the bottom, however tall the box. */
+.send-controls > .send-row:last-child {
+  margin-top: auto;
+}
+
+/* Drag handle at the top-right corner: the box grows upward. */
+.resize-handle {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 14px;
+  height: 14px;
+  cursor: ns-resize;
+  touch-action: none;
+  border-radius: 3px;
+  background:
+    linear-gradient(45deg, transparent 45%, var(--muted) 45% 52%, transparent 52%),
+    linear-gradient(45deg, transparent 70%, var(--muted) 70% 77%, transparent 77%);
+  opacity: 0.6;
+}
+
+.resize-handle:hover,
+.resize-handle:focus-visible {
+  opacity: 1;
 }
 
 .send-controls {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 6px;
   width: 168px;
 }
