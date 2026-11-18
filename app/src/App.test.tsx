@@ -574,6 +574,25 @@ describe("App", () => {
     await waitFor(() => expect(backend.written[1]).toEqual([1, [0xff]]));
   });
 
+  it("shows ANSI colors and can show the raw codes instead", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    act(() => backend.receive(1, "\u001b[1;32muart:~$ \u001b[m\r\n\u001b[7minv\u001b[m\n"));
+    await waitFor(() => expect(log()).toHaveTextContent("uart:~$"));
+    const prompt = within(log()).getByText("uart:~$");
+    expect(prompt.tagName).toBe("SPAN");
+    // jsdom cannot resolve CSS variables, so check the inline style itself.
+    expect(prompt.getAttribute("style")).toBe("color: var(--ansi-2); font-weight: 600;");
+    expect(within(log()).getByText("inv").getAttribute("style")).toBe(
+      "color: var(--log-bg); background-color: var(--rx);",
+    );
+    expect(log()).not.toHaveTextContent("[1;32m");
+
+    await user.click(screen.getByRole("button", { name: "Display settings" }));
+    await user.click(screen.getByLabelText("ANSI colors"));
+    expect(log()).toHaveTextContent("\u241b[1;32muart:~$");
+  });
+
   it("splits frames after a pause", async () => {
     const { backend, user } = setup();
     await openPort(user);

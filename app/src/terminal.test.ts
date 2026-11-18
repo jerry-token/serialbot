@@ -194,3 +194,51 @@ describe("Terminal frame gap", () => {
     expect(texts(t)).toEqual(["rx:02"]);
   });
 });
+
+describe("Terminal ANSI colors", () => {
+  // The exact bytes from a Zephyr shell reported from Ubuntu testing.
+  const zephyr = [
+    0x0d, 0x0a, 0x1b, 0x5b, 0x31, 0x3b, 0x33, 0x32, 0x6d, 0x75, 0x61, 0x72, 0x74, 0x3a, 0x7e,
+    0x24, 0x20, 0x1b, 0x5b, 0x6d, 0x0d, 0x0a, 0x1b, 0x5b, 0x31, 0x3b, 0x33, 0x32, 0x6d, 0x75,
+    0x61, 0x72, 0x74, 0x3a, 0x7e, 0x24, 0x20, 0x1b, 0x5b, 0x6d,
+  ];
+
+  it("shows a colored prompt instead of escape codes", () => {
+    const t = new Terminal();
+    expect(t.ansiColors).toBe(true);
+    t.push([entry("rx", zephyr.slice(0, 12)), entry("rx", zephyr.slice(12))]);
+    expect(texts(t)).toEqual(["rx:", "rx:uart:~$ ", "rx:uart:~$ "]);
+    expect(t.view[1]?.parts).toEqual([
+      { text: "uart:~$ ", style: { bold: true, fg: "var(--ansi-2)" } },
+    ]);
+    expect(t.view[0]?.parts).toBeUndefined();
+  });
+
+  it("shows raw escape codes when turned off", () => {
+    const t = new Terminal();
+    t.push([entry("rx", zephyr)]);
+    t.setAnsi(false);
+    expect(texts(t)[1]).toBe("rx:\u241b[1;32muart:~$ \u241b[m");
+    t.setAnsi(false);
+    t.setAnsi(true);
+    expect(texts(t)[1]).toBe("rx:uart:~$ ");
+  });
+
+  it("mixes plain and styled text on one line", () => {
+    const t = new Terminal();
+    t.push([entry("rx", "a\u001b[31mb"), entry("rx", "c\u001b[0md\n")]);
+    expect(texts(t)).toEqual(["rx:abcd"]);
+    expect(t.view[0]?.parts).toEqual([
+      { text: "a", style: null },
+      { text: "bc", style: { fg: "var(--ansi-1)" } },
+      { text: "d", style: null },
+    ]);
+  });
+
+  it("styles a flushed cut-off character and lines started after a gap", () => {
+    const t = new Terminal();
+    t.setFrameGap(10);
+    t.push([entry("rx", "\u001b[32mok\n", 0), entry("rx", [0xe6], 100_000), entry("tx", "x")]);
+    expect(t.view[1]?.parts?.[0]?.style).toEqual({ fg: "var(--ansi-2)" });
+  });
+});

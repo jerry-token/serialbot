@@ -15,11 +15,15 @@
 // Encoding: text is decoded with any WHATWG encoding (UTF-8 by default; GBK,
 // GB18030, Big5, Shift_JIS, ...). Sent data uses the same encoding.
 //
+// ANSI colors: on by default, escape sequences in received text become
+// styled parts of the line (see ansi.ts) instead of "␛[1;32m" noise.
+//
 // Frame gap: when set, received data that arrives after a pause longer than
 // the gap starts a new line (text view), and received entries closer than
 // the gap are joined into one line (hex view), so binary protocol frames
 // line up.
 
+import { AnsiParser, type Part, type Style, sameStyle } from "./ansi";
 import type { LogEntry } from "./api";
 import { toHex } from "./bytes";
 
@@ -29,7 +33,10 @@ export interface Line {
   id: number;
   kind: LineKind;
   timestampUs: number;
+  /** Plain text (escape sequences removed), used for search. */
   text: string;
+  /** Styled runs of `text`, present only when some of it is styled. */
+  parts?: Part[];
 }
 
 export interface TerminalLimits {
@@ -73,6 +80,8 @@ export class Terminal {
   private decoder = new TextDecoder("utf-8");
   private hex = false;
   private frameGapUs = 0;
+  private ansi = true;
+  private parser = new AnsiParser();
   private lastRxUs = 0;
   private pendingCr = false;
 
@@ -99,6 +108,17 @@ export class Terminal {
     new TextDecoder(label); // Validates the label before changing anything.
     if (label === this.encoding) return;
     this.encoding = label;
+    this.rebuild();
+  }
+
+  get ansiColors(): boolean {
+    return this.ansi;
+  }
+
+  /** Turns interpretation of ANSI escape sequences on or off and re-renders. */
+  setAnsi(on: boolean): void {
+    if (on === this.ansi) return;
+    this.ansi = on;
     this.rebuild();
   }
 
@@ -157,6 +177,7 @@ export class Terminal {
     this.pendingCr = false;
     this.lastRxUs = 0;
     this.decoder = new TextDecoder(this.encoding);
+    this.parser.reset();
   }
 
   private rebuild(): void {
@@ -165,19 +186,28 @@ export class Terminal {
     this.trimLines();
   }
 
-  private add(kind: LineKind, timestampUs: number, text: string): Line {
-    const line = { id: this.nextId++, kind, timestampUs, text };
+  private add(kind: LineKind, timestampUs: number, text: string, style: Style | null = null): Line {
+    const line: Line = { id: this.nextId++, kind, timestampUs, text };
+    if (style) line.parts = [{ text, style }];
     this.lines.push(line);
     return line;
   }
 
+  /** Splits decoded received text into styled parts (or one plain part). */
+  private styled(text: string): Part[] {
+    if (this.ansi) return this.parser.feed(text);
+    return text ? [{ text, style: null }] : [];
+  }
+
   private closeRx(): void {
     // Flush a multi-byte character cut off by the end of the received data.
-    const rest = visible(this.decoder.decode());
-    if (this.openRx) {
-      this.appendRx(rest);
-    } else if (rest) {
-      this.add("rx", this.lastRxUs, rest);
+    for (const part of this.styled(this.decoder.decode())) {
+      const text = visible(part.text);
+      if (this.openRx) {
+        this.appendRx(text, part.style);
+      } else {
+        this.openRx = this.add("rx", this.lastRxUs, text, part.style);
+      }
     }
     this.openRx = null;
     this.openHex = null;
@@ -190,17 +220,29 @@ export class Terminal {
     return this.frameGapUs > 0 && timestampUs - this.lastRxUs > this.frameGapUs;
   }
 
-  private replaceLine(line: Line, text: string): Line {
+  private replaceLine(line: Line, text: string, parts?: Part[]): Line {
     // Replace the object so React sees the changed line.
-    const updated = { ...line, text };
+    const updated: Line = { ...line, text };
+    if (parts) updated.parts = parts;
     const index = this.lines.lastIndexOf(line);
     if (index >= 0) this.lines[index] = updated;
     return updated;
   }
 
-  private appendRx(text: string): void {
-    if (!this.openRx || !text) return;
-    this.openRx = this.replaceLine(this.openRx, this.openRx.text + text);
+  private appendRx(text: string, style: Style | null): void {
+    const line = this.openRx;
+    if (!line || !text) return;
+    let parts = line.parts;
+    if (parts || style) {
+      parts = parts ? parts.slice() : [{ text: line.text, style: null }];
+      const last = parts.at(-1);
+      if (last && sameStyle(last.style, style)) {
+        parts[parts.length - 1] = { text: last.text + text, style: last.style };
+      } else {
+        parts.push({ text, style });
+      }
+    }
+    this.openRx = this.replaceLine(line, line.text + text, parts);
   }
 
   private render(item: RawItem): void {
@@ -235,7 +277,7 @@ export class Terminal {
       this.pendingCr = false;
     }
     this.lastRxUs = entry.timestampUs;
-    this.renderRx(this.decoder.decode(bytes, { stream: true }), entry.timestampUs);
+    this.renderRx(this.styled(this.decoder.decode(bytes, { stream: true })), entry.timestampUs);
   }
 
   private renderHex(kind: "rx" | "tx", timestampUs: number, bytes: Uint8Array): void {
@@ -256,24 +298,27 @@ export class Terminal {
     }
   }
 
-  private renderRx(received: string, timestampUs: number): void {
-    let text = received;
-    // A "\r\n" split across chunks: the "\r" already ended the line.
-    if (this.pendingCr) {
-      this.pendingCr = false;
-      if (text.startsWith("\n")) text = text.slice(1);
-    }
-    if (text.endsWith("\r")) this.pendingCr = true;
-    const parts = text.split(/\r\n|\r|\n/);
-    parts.forEach((part, i) => {
-      const last = i === parts.length - 1;
-      if (this.openRx) {
-        this.appendRx(visible(part));
-      } else if (!last || part.length > 0) {
-        this.openRx = this.add("rx", timestampUs, visible(part));
+  private renderRx(parts: Part[], timestampUs: number): void {
+    for (const part of parts) {
+      let text = part.text;
+      if (text === "") continue;
+      // A "\r\n" split across chunks: the "\r" already ended the line.
+      if (this.pendingCr) {
+        this.pendingCr = false;
+        if (text.startsWith("\n")) text = text.slice(1);
       }
-      if (!last) this.openRx = null;
-    });
+      if (text.endsWith("\r")) this.pendingCr = true;
+      const pieces = text.split(/\r\n|\r|\n/);
+      pieces.forEach((piece, i) => {
+        const last = i === pieces.length - 1;
+        if (this.openRx) {
+          this.appendRx(visible(piece), part.style);
+        } else if (!last || piece.length > 0) {
+          this.openRx = this.add("rx", timestampUs, visible(piece), part.style);
+        }
+        if (!last) this.openRx = null;
+      });
+    }
   }
 
   private trimLines(): void {

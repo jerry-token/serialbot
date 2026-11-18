@@ -16,6 +16,23 @@
   --accent: #1a73e8;
   --accent-soft: rgba(26, 115, 232, 0.12);
   --radius: 6px;
+  /* ANSI 16-color palette for the light theme. */
+  --ansi-0: #000000;
+  --ansi-1: #cd3131;
+  --ansi-2: #107c10;
+  --ansi-3: #949800;
+  --ansi-4: #0451a5;
+  --ansi-5: #bc05bc;
+  --ansi-6: #0598bc;
+  --ansi-7: #555555;
+  --ansi-8: #666666;
+  --ansi-9: #e51400;
+  --ansi-10: #14a314;
+  --ansi-11: #b5ba00;
+  --ansi-12: #0a6ed1;
+  --ansi-13: #d01ad0;
+  --ansi-14: #0ab0d8;
+  --ansi-15: #8a8a8a;
   font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-size: 13px;
 }
@@ -37,6 +54,23 @@
     --ok: #4cc27a;
     --accent: #5b9dff;
     --accent-soft: rgba(91, 157, 255, 0.16);
+    /* ANSI 16-color palette for the dark theme. */
+    --ansi-0: #5a5a5a;
+    --ansi-1: #f14c4c;
+    --ansi-2: #23d18b;
+    --ansi-3: #e5e510;
+    --ansi-4: #3b8eea;
+    --ansi-5: #d670d6;
+    --ansi-6: #29b8db;
+    --ansi-7: #cccccc;
+    --ansi-8: #767676;
+    --ansi-9: #f14c4c;
+    --ansi-10: #23d18b;
+    --ansi-11: #f5f543;
+    --ansi-12: #3b8eea;
+    --ansi-13: #d670d6;
+    --ansi-14: #29b8db;
+    --ansi-15: #e5e5e5;
   }
 }
 
