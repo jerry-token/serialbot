@@ -340,15 +340,24 @@ fn map_error(e: serialport::Error) -> TransportError {
 /// these ioctls with `ENOTTY`. `serialport` keeps only the errno's text, so
 /// it is recognised by the fixed English descriptions `nix` uses for it
 /// (these are compile-time strings, not localized OS messages).
-fn map_modem_error(e: serialport::Error) -> TransportError {
-    let not_a_tty = matches!(
-        e.description.as_str(),
-        "Not a typewriter" | "Inappropriate ioctl for device"
-    );
-    if matches!(e.kind, serialport::ErrorKind::Unknown) && not_a_tty {
-        TransportError::Unsupported("modem control lines (DTR/RTS/CTS/DSR/RI/CD)")
-    } else {
-        map_error(e)
+///
+/// A driver that has the lines but refuses a request (`EINVAL`,
+/// `EOPNOTSUPP`; seen with WCH's CH9344 driver) is reported as
+/// [`TransportError::DriverRejected`] naming `what` was attempted, instead of
+/// a bare "Invalid argument".
+fn map_modem_error(e: serialport::Error, what: &'static str) -> TransportError {
+    if !matches!(e.kind, serialport::ErrorKind::Unknown) {
+        return map_error(e);
+    }
+    match e.description.as_str() {
+        "Not a typewriter" | "Inappropriate ioctl for device" => {
+            TransportError::Unsupported("modem control lines (DTR/RTS/CTS/DSR/RI/CD)")
+        }
+        "Invalid argument" | "Operation not supported" => TransportError::DriverRejected {
+            what,
+            reason: e.description,
+        },
+        _ => map_error(e),
     }
 }
 
@@ -431,21 +440,22 @@ impl TransportControl for SerialControl {
     fn set_dtr(&mut self, level: bool) -> Result<(), TransportError> {
         self.port
             .write_data_terminal_ready(level)
-            .map_err(map_modem_error)
+            .map_err(|e| map_modem_error(e, "setting DTR"))
     }
 
     fn set_rts(&mut self, level: bool) -> Result<(), TransportError> {
         self.port
             .write_request_to_send(level)
-            .map_err(map_modem_error)
+            .map_err(|e| map_modem_error(e, "setting RTS"))
     }
 
     fn line_states(&mut self) -> Result<LineStates, TransportError> {
+        let read = |e| map_modem_error(e, "reading the modem lines");
         Ok(LineStates {
-            cts: self.port.read_clear_to_send().map_err(map_modem_error)?,
-            dsr: self.port.read_data_set_ready().map_err(map_modem_error)?,
-            ri: self.port.read_ring_indicator().map_err(map_modem_error)?,
-            cd: self.port.read_carrier_detect().map_err(map_modem_error)?,
+            cts: self.port.read_clear_to_send().map_err(read)?,
+            dsr: self.port.read_data_set_ready().map_err(read)?,
+            ri: self.port.read_ring_indicator().map_err(read)?,
+            cd: self.port.read_carrier_detect().map_err(read)?,
         })
     }
 
@@ -633,19 +643,32 @@ mod tests {
         use serialport::ErrorKind as K;
         for desc in ["Not a typewriter", "Inappropriate ioctl for device"] {
             assert!(matches!(
-                map_modem_error(err(K::Unknown, desc)),
+                map_modem_error(err(K::Unknown, desc), "setting DTR"),
                 TransportError::Unsupported(_)
             ));
         }
         // Other failures keep their normal classification.
         assert!(matches!(
-            map_modem_error(err(K::NoDevice, "")),
+            map_modem_error(err(K::NoDevice, ""), "setting DTR"),
             TransportError::Disconnected
         ));
         assert!(matches!(
-            map_modem_error(err(K::Unknown, "something else")),
+            map_modem_error(err(K::Unknown, "something else"), "setting DTR"),
             TransportError::Io(_)
         ));
+    }
+
+    #[test]
+    fn modem_requests_refused_by_the_driver_say_so() {
+        use serialport::ErrorKind as K;
+        // Seen with WCH's CH9344 driver on Ubuntu: TIOCMBIS failed with EINVAL.
+        for desc in ["Invalid argument", "Operation not supported"] {
+            let e = map_modem_error(err(K::Unknown, desc), "setting DTR");
+            assert_eq!(
+                e.to_string(),
+                format!("the port's driver rejected setting DTR ({desc})")
+            );
+        }
     }
 
     #[test]

@@ -32,6 +32,15 @@ pub enum TransportError {
     /// The transport cannot do this (for example DTR on a TCP socket).
     #[error("not supported by this transport: {0}")]
     Unsupported(&'static str),
+    /// The port's driver refused a request it should support, for example
+    /// a DTR change answered with `EINVAL`.
+    #[error("the port's driver rejected {what} ({reason})")]
+    DriverRejected {
+        /// What was attempted, e.g. "setting DTR".
+        what: &'static str,
+        /// The OS error text.
+        reason: String,
+    },
     /// The requested settings are invalid.
     #[error("invalid configuration: {0}")]
     InvalidConfig(String),
