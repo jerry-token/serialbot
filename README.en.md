@@ -34,7 +34,7 @@
   - encodings: UTF-8, GBK, GB18030, Big5, Shift_JIS and more
   - auto frame split, pause, `Ctrl/Cmd+F` search
   - stays smooth with tens of thousands of lines
-- ✍️ **Send**: multi-line text or HEX, with a choice of line ending. `Enter` sends, `Shift+Enter` adds a line.
+- ✍️ **Send**: multi-line text or HEX, with a choice of line ending. `Enter` sends, `Shift+Enter` adds a line, `↑` recalls history; timed send.
 - 🎛️ **Signals**: DTR / RTS switches, CTS / DSR / RI / CD lamps, and every change is marked in the log.
 - 🤖 **AI-ready**: a built-in MCP server lets Claude Code and other agents
   - list and open ports
@@ -119,7 +119,8 @@ Get the file for your system from [Releases](https://github.com/jerry-token/seri
 - [x] DTR / RTS and line states
 - [x] Built-in MCP server
 - [x] Installers for all three platforms, published automatically
-- [ ] Timed / repeated send, send history, send a file
+- [x] Timed send, send history
+- [ ] Send a file
 - [ ] Command lists (groups, run in order)
 - [ ] Save received data to a file, export
 - [ ] Hot-plug detection, auto-reconnect
