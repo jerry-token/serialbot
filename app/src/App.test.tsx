@@ -358,10 +358,52 @@ class FakeBackend implements Backend {
   }
 }
 
-function setup(backend = new FakeBackend(), copy = vi.fn(async () => {})) {
+/** Local storage stand-in, so tests do not share saved commands. */
+function memoryStorage(): Storage {
+  const data = new Map<string, string>();
+  return {
+    get length() {
+      return data.size;
+    },
+    clear: () => data.clear(),
+    getItem: (k) => data.get(k) ?? null,
+    key: (i) => [...data.keys()][i] ?? null,
+    removeItem: (k) => void data.delete(k),
+    setItem: (k, v) => void data.set(k, v),
+  };
+}
+
+function setup(
+  backend = new FakeBackend(),
+  copy = vi.fn(async () => {}),
+  storage: Storage = memoryStorage(),
+) {
   const user = userEvent.setup();
-  const view = render(<App backend={backend} lang="en" copy={copy} />);
-  return { backend, user, copy, view };
+  const view = render(<App backend={backend} lang="en" copy={copy} storage={storage} />);
+  return { backend, user, copy, view, storage };
+}
+
+const panel = () => within(screen.getByRole("complementary", { name: "Commands" }));
+
+/** Adds a command to the shown group through the editor. */
+async function addCommand(
+  user: ReturnType<typeof userEvent.setup>,
+  name: string,
+  text: string,
+  options: { hex?: boolean; delayMs?: number } = {},
+) {
+  await user.click(panel().getByRole("button", { name: "+ Add" }));
+  const name_ = panel().getByLabelText("Name");
+  await user.clear(name_);
+  await user.type(name_, name);
+  await user.type(panel().getByLabelText("Content"), text);
+  if (options.hex) await user.click(panel().getByRole("checkbox", { name: "Hex" }));
+  if (options.delayMs !== undefined) {
+    fireEvent.change(panel().getByLabelText("Delay ms"), {
+      target: { value: String(options.delayMs) },
+    });
+  }
+  await user.click(panel().getByRole("button", { name: "Done" }));
 }
 
 const FRAME = "Data bits, parity, stop bits, flow control";
@@ -572,6 +614,119 @@ describe("App", () => {
     expect(screen.queryByRole("option", { name: /^COM3/ })).toBeNull();
     act(() => backend.changePorts([com7]));
     await waitFor(() => expect(screen.getByLabelText("Port")).toHaveValue("COM7"));
+  });
+
+  it("keeps commands, sends one and runs a group in order", async () => {
+    const { backend, user, storage, view } = setup();
+    await openPort(user);
+    await user.click(screen.getByRole("button", { name: "Commands" }));
+    expect(panel().getByText("No commands yet")).toBeInTheDocument();
+    expect(panel().getByRole("button", { name: "▶ Run all" })).toBeDisabled();
+    await addCommand(user, "version", "AT+GMR", { delayMs: 0 });
+    await addCommand(user, "raw", "01 02", { hex: true, delayMs: 0 });
+
+    await user.click(panel().getByRole("button", { name: "Send version" }));
+    const gmr = [...new TextEncoder().encode("AT+GMR\r\n")];
+    await waitFor(() => expect(backend.written).toEqual([[1, gmr]]));
+    await user.click(panel().getByRole("button", { name: "▶ Run all" }));
+    await waitFor(() => expect(backend.written).toHaveLength(3));
+    expect(backend.written.slice(1)).toEqual([
+      [1, gmr],
+      [1, [1, 2]],
+    ]);
+    await waitFor(() => expect(panel().getByRole("button", { name: "▶ Run all" })).toBeEnabled());
+
+    // Saved for the next start.
+    view.unmount();
+    setup(new FakeBackend(), undefined, storage);
+    await user.click(screen.getByRole("button", { name: "Commands" }));
+    expect(panel().getByRole("button", { name: "Send version" })).toBeDisabled();
+    expect(panel().getByRole("button", { name: "Send raw" })).toHaveTextContent("rawhex 01 02");
+  });
+
+  it("stops a run and reports a failed send", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    await user.click(screen.getByRole("button", { name: "Commands" }));
+    await addCommand(user, "first", "a", { delayMs: 60_000 });
+    await addCommand(user, "second", "b");
+    await user.click(panel().getByRole("button", { name: "▶ Run all" }));
+    const stop = await panel().findByRole("button", { name: "Stop 1/2" });
+    expect(panel().getByRole("button", { name: "Send first" })).toBeDisabled();
+    await user.click(stop);
+    await waitFor(() => expect(panel().getByRole("button", { name: "▶ Run all" })).toBeEnabled());
+    expect(backend.written).toHaveLength(1);
+
+    backend.failWrite = true;
+    await user.click(panel().getByRole("button", { name: "▶ Run all" }));
+    await waitFor(() => expect(status()).toHaveTextContent("session is Disconnected"));
+    expect(panel().getByRole("button", { name: "▶ Run all" })).toBeEnabled();
+    await user.click(panel().getByRole("button", { name: "Send second" }));
+    expect(status()).toHaveTextContent("session is Disconnected");
+  });
+
+  it("checks hex commands and uses the chosen text encoding", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    await user.click(screen.getByRole("button", { name: "Commands" }));
+    await addCommand(user, "bad", "0g", { hex: true });
+    await user.click(panel().getByRole("button", { name: "Send bad" }));
+    await waitFor(() => expect(status()).toHaveTextContent("Invalid hex"));
+    await addCommand(user, "hi", "你");
+    await user.click(screen.getByRole("button", { name: "Display settings" }));
+    await user.selectOptions(screen.getByLabelText("Encoding"), "gbk");
+    await user.click(panel().getByRole("button", { name: "Send hi" }));
+    await waitFor(() => expect(backend.written).toEqual([[1, [0xc4, 0xe3, 13, 10]]]));
+  });
+
+  it("edits, orders and deletes commands and groups", async () => {
+    const { user } = setup();
+    await user.click(screen.getByRole("button", { name: "Commands" }));
+    await addCommand(user, "one", "1");
+    await addCommand(user, "two", "2");
+    const names = () =>
+      panel()
+        .queryAllByRole("button", { name: /^Send / })
+        .map((b) => b.querySelector(".command-name")?.textContent);
+    expect(names()).toEqual(["one", "two"]);
+
+    await user.click(panel().getByRole("button", { name: "Edit two" }));
+    expect(panel().getByRole("button", { name: "Down" })).toBeDisabled();
+    await user.selectOptions(panel().getByLabelText("Line ending"), "lf");
+    await user.click(panel().getByRole("button", { name: "Up" }));
+    await user.click(panel().getByRole("button", { name: "Done" }));
+    expect(names()).toEqual(["two", "one"]);
+    await user.click(panel().getByRole("button", { name: "Edit two" }));
+    expect(panel().getByLabelText("Line ending")).toHaveValue("lf");
+    await user.click(panel().getByRole("button", { name: "Down" }));
+    await user.click(panel().getByRole("button", { name: "Delete" }));
+    await user.click(panel().getByRole("button", { name: "Click again to delete" }));
+    expect(names()).toEqual(["one"]);
+
+    // A new group starts in rename mode.
+    await user.click(panel().getByRole("button", { name: "+" }));
+    const groupName = panel().getByLabelText("Group name");
+    expect(groupName).toHaveValue("Group 2");
+    await user.clear(groupName);
+    await user.type(groupName, "ESP32{Enter}");
+    expect(panel().getByLabelText("Group")).toHaveDisplayValue("ESP32");
+    expect(names()).toEqual([]);
+    await user.selectOptions(panel().getByLabelText("Group"), "Default");
+    expect(names()).toEqual(["one"]);
+
+    // Deleting needs a second click; the last group is replaced by an empty one.
+    await user.click(panel().getByRole("button", { name: "Edit" }));
+    await user.click(panel().getByRole("button", { name: "Delete group" }));
+    await user.click(panel().getByRole("button", { name: "Click again to delete" }));
+    expect(panel().getByLabelText("Group")).toHaveDisplayValue("ESP32");
+    await user.click(panel().getByRole("button", { name: "Edit" }));
+    await user.click(panel().getByRole("button", { name: "Delete group" }));
+    await user.click(panel().getByRole("button", { name: "Click again to delete" }));
+    expect(panel().getByLabelText("Group")).toHaveDisplayValue("Default");
+    expect(names()).toEqual([]);
+
+    await user.click(screen.getByRole("button", { name: "Commands" }));
+    expect(screen.queryByRole("complementary", { name: "Commands" })).toBeNull();
   });
 
   it("shows the failure reason of a failed session", async () => {

@@ -58,6 +58,7 @@ ports. Plan of record: the "AI 串口助手 · 开工前计划" doc.
   - `src-tauri/src/watch.rs` — change detection; the window gets `sessions-changed` /
     `log-changed` events and reads new entries itself (no IPC polling)
   - `src/terminal.ts` — log entries to display lines (text/hex, line breaks, UTF-8)
+  - `src/commands.ts` — saved command groups (local storage) and the in-order runner
   - `src/App.tsx` + `src/components/` — UI; tests use a fake `Backend`
   - Frontend gate: `npm run typecheck`, `npm run coverage` (≥ 85% lines), `npm run build`
 - `.github/workflows/ci.yml` — fmt, clippy, tests, MSRV, docs, coverage gate,
