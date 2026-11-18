@@ -18,6 +18,7 @@ use serialx_core::{
 pub use serialx_mcp::PortLister;
 
 use crate::export::{CaptureStatus, Captures, ExportFormat, ExportSummary};
+use crate::filesend::{FileSendStatus, FileSends};
 use crate::repeat::{RepeatStatus, Repeaters};
 
 /// Largest payload one [`AppState::read`] returns.
@@ -276,6 +277,7 @@ pub struct AppState {
     list_ports: Arc<PortLister>,
     repeaters: Repeaters,
     captures: Captures,
+    file_sends: FileSends,
 }
 
 impl std::fmt::Debug for AppState {
@@ -294,6 +296,7 @@ impl AppState {
             list_ports,
             repeaters: Repeaters::default(),
             captures: Captures::default(),
+            file_sends: FileSends::default(),
         }
     }
 
@@ -363,6 +366,7 @@ impl AppState {
     /// Closes a session and forgets it; the frontend keeps what it shows.
     pub fn close(&self, id: u32) -> Result<(), String> {
         self.repeaters.stop(id);
+        self.file_sends.remove(id);
         self.captures.remove(id);
         self.manager
             .remove(SessionId(id))
@@ -454,6 +458,7 @@ impl AppState {
     /// Closes every session (on app exit).
     pub fn shutdown(&self) {
         self.repeaters.stop_all();
+        self.file_sends.stop_all();
         self.captures.stop_all();
         self.manager.close_all();
     }
@@ -525,6 +530,32 @@ impl AppState {
     /// Progress of the session's repeat job.
     pub fn repeat_status(&self, id: u32) -> RepeatStatus {
         self.repeaters.status(id)
+    }
+
+    /// Starts writing the file at `path` in chunks of `chunk` bytes with
+    /// `delay_ms` after each, replacing the session's previous file job
+    /// (see [`FileSends::start`] for the limits).
+    pub fn send_file(
+        &self,
+        id: u32,
+        path: &str,
+        chunk: usize,
+        delay_ms: u64,
+    ) -> Result<FileSendStatus, String> {
+        let session = self.manager.get(SessionId(id)).map_err(|e| e.to_string())?;
+        self.file_sends
+            .start(id, session, std::path::Path::new(path), chunk, delay_ms)
+    }
+
+    /// Stops the session's file job, if any; returns its final progress.
+    pub fn stop_file_send(&self, id: u32) -> FileSendStatus {
+        self.file_sends.stop(id);
+        self.file_sends.status(id)
+    }
+
+    /// Progress of the session's current or last file job.
+    pub fn file_send_status(&self, id: u32) -> FileSendStatus {
+        self.file_sends.status(id)
     }
 }
 
@@ -782,6 +813,38 @@ mod tests {
         app.start_repeat(1, b"y".to_vec(), 60_000, None).unwrap();
         app.close(1).unwrap();
         assert!(!app.repeat_status(1).running, "closing stops the job");
+        app.shutdown();
+    }
+
+    #[test]
+    fn files_are_sent_stopped_and_end_with_the_session() {
+        let (app, devices) = state();
+        let dir = crate::settings::tests::TempDir::new("commands-file");
+        let path = dir.0.join("fw.bin");
+        std::fs::write(&path, b"hello").unwrap();
+        let path = path.to_str().unwrap();
+        assert!(
+            app.send_file(1, path, 2, 0)
+                .unwrap_err()
+                .contains("no session")
+        );
+        app.open(&request("mock0")).unwrap();
+        let device = devices.lock().unwrap()["mock0"].clone();
+        let started = app.send_file(1, path, 2, 0).unwrap();
+        assert_eq!((started.running, started.total), (true, 5));
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while app.file_send_status(1).running {
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        assert_eq!(device.take_written(), b"hello");
+        app.send_file(1, path, 1, 60_000).unwrap();
+        let stopped = app.stop_file_send(1);
+        assert!(!stopped.running);
+        assert!(stopped.sent < 5);
+        app.send_file(1, path, 1, 60_000).unwrap();
+        app.close(1).unwrap();
+        assert_eq!(app.file_send_status(1), FileSendStatus::default());
         app.shutdown();
     }
 

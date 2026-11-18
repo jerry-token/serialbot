@@ -8,14 +8,26 @@ interface Props {
   className?: string;
   /** Open the panel aligned to the button's right edge (for controls near the window edge). */
   alignRight?: boolean;
-  children: ReactNode;
+  /** Open the panel above the button (for controls near the bottom edge). */
+  up?: boolean;
+  disabled?: boolean;
+  /** The panel's content; a function gets a callback that closes the panel. */
+  children: ReactNode | ((close: () => void) => ReactNode);
 }
 
 /**
  * A button that opens a small panel below it. The panel closes on Escape
  * and on clicks outside it.
  */
-export function Popover({ label, button, className = "", alignRight = false, children }: Props) {
+export function Popover({
+  label,
+  button,
+  className = "",
+  alignRight = false,
+  up = false,
+  disabled = false,
+  children,
+}: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -43,13 +55,18 @@ export function Popover({ label, button, className = "", alignRight = false, chi
         aria-label={label}
         title={label}
         aria-expanded={open}
+        disabled={disabled}
         onClick={() => setOpen((o) => !o)}
       >
         {button}
       </button>
       {open && (
-        <div className={`popover${alignRight ? " right" : ""}`} role="dialog" aria-label={label}>
-          {children}
+        <div
+          className={`popover${alignRight ? " right" : ""}${up ? " up" : ""}`}
+          role="dialog"
+          aria-label={label}
+        >
+          {typeof children === "function" ? children(() => setOpen(false)) : children}
         </div>
       )}
     </div>

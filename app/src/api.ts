@@ -3,7 +3,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { save } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 
 export type Parity = "none" | "odd" | "even";
 export type FlowControl = "none" | "software" | "hardware";
@@ -87,6 +87,16 @@ export interface RepeatStatus {
   error: string | null;
 }
 
+/** Progress of a session's file send. */
+export interface FileSendStatus {
+  running: boolean;
+  /** File name of the current or last send. */
+  name: string | null;
+  sent: number;
+  total: number;
+  error: string | null;
+}
+
 export interface McpSettings {
   enabled: boolean;
   /** Preferred port; the next free one of the following nine is used if taken. */
@@ -121,6 +131,12 @@ export interface Backend {
   onLogChanged(handler: (ids: number[]) => void): Promise<Unlisten>;
   /** Asks where to save; null when the user cancels. */
   chooseSaveFile(defaultName: string, format: ExportFormat): Promise<string | null>;
+  /** Asks for a file to open; null when the user cancels. */
+  chooseOpenFile(): Promise<string | null>;
+  /** Writes the file at `path` in chunks of `chunk` bytes, pausing `delayMs` after each. */
+  sendFile(id: number, path: string, chunk: number, delayMs: number): Promise<FileSendStatus>;
+  stopFileSend(id: number): Promise<FileSendStatus>;
+  fileSendStatus(id: number): Promise<FileSendStatus>;
   /** Writes what the session's log holds now to `path`. */
   exportLog(id: number, path: string, format: ExportFormat): Promise<{ bytes: number }>;
   /** Saves the log to `path` and keeps appending new entries. */
@@ -171,6 +187,13 @@ export const tauriBackend: Backend = {
           ? [{ name: "Log", extensions: ["log", "txt"] }]
           : [{ name: "Raw data", extensions: ["bin", "txt"] }],
     }),
+  chooseOpenFile: async () => {
+    const path = await open({ multiple: false, directory: false });
+    return typeof path === "string" ? path : null;
+  },
+  sendFile: (id, path, chunk, delayMs) => invoke("send_file", { id, path, chunk, delayMs }),
+  stopFileSend: (id) => invoke("stop_file_send", { id }),
+  fileSendStatus: (id) => invoke("file_send_status", { id }),
   exportLog: (id, path, format) =>
     invoke("export_log", { id, path, format, utcOffsetMin: utcOffsetMin() }),
   startCapture: (id, path, format) =>
