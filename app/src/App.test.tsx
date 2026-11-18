@@ -130,6 +130,50 @@ class FakeBackend implements Backend {
     return () => this.sessionListeners.delete(handler);
   }
 
+  reconnects: number[] = [];
+  failReconnect: string | null = null;
+  portListeners = new Set<(p: PortInfo[]) => void>();
+
+  async reconnectSession(id: number) {
+    if (this.failReconnect) throw this.failReconnect;
+    this.reconnects.push(id);
+    this.setState(id, "open");
+    this.appendMarker(id, "reconnected");
+  }
+
+  async setAutoReconnect(id: number, on: boolean) {
+    const session = this.sessions.get(id);
+    if (!session) throw `no session s${id}`;
+    session.info = { ...session.info, autoReconnect: on };
+    this.notify([]);
+  }
+
+  async onPortsChanged(handler: (p: PortInfo[]) => void) {
+    this.portListeners.add(handler);
+    return () => this.portListeners.delete(handler);
+  }
+
+  /** A device was plugged in or removed. */
+  changePorts(ports: PortInfo[]) {
+    this.ports = ports;
+    setTimeout(() => {
+      for (const l of this.portListeners) l(ports);
+    }, 0);
+  }
+
+  appendMarker(id: number, text: string) {
+    const session = this.sessions.get(id);
+    if (!session) return;
+    session.log.push({
+      seq: session.log.length,
+      timestampUs: Date.now() * 1000,
+      kind: "marker",
+      data: [],
+      label: text,
+    });
+    this.notify([id]);
+  }
+
   async onLogChanged(handler: (ids: number[]) => void) {
     this.logListeners.add(handler);
     return () => this.logListeners.delete(handler);
@@ -255,7 +299,14 @@ class FakeBackend implements Backend {
 
   /** A session opened by someone else, e.g. an MCP client. */
   addSession(port: string, alias: string | null): SessionInfo {
-    const info: SessionInfo = { id: this.nextId++, alias, port, state: "open", error: null };
+    const info: SessionInfo = {
+      id: this.nextId++,
+      alias,
+      port,
+      state: "open",
+      error: null,
+      autoReconnect: true,
+    };
     this.sessions.set(info.id, { info, log: [] });
     this.notify([info.id]);
     return info;
@@ -473,6 +524,54 @@ describe("App", () => {
     await waitFor(() => expect(tabs()).toEqual([]));
     expect(status()).toHaveTextContent("Closed");
     expect(backend.closed).toEqual([1]);
+  });
+
+  it("reconnects a lost session and reports a second disconnect", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    expect(screen.queryByRole("button", { name: "Reconnect" })).toBeNull();
+    act(() => backend.setState(1, "disconnected"));
+    await waitFor(() => expect(log()).toHaveTextContent("! Device disconnected"));
+    await user.click(screen.getByRole("button", { name: "Reconnect" }));
+    await waitFor(() => expect(status()).toHaveTextContent("COM3 · Open"));
+    expect(backend.reconnects).toEqual([1]);
+    await waitFor(() => expect(log()).toHaveTextContent("reconnected"));
+    expect(screen.queryByRole("button", { name: "Reconnect" })).toBeNull();
+    expect(tabs()).toEqual(["COM3"]);
+
+    act(() => backend.setState(1, "disconnected"));
+    await waitFor(() => expect(log().textContent?.match(/Device disconnected/g)).toHaveLength(2));
+    backend.failReconnect = "port COM3 is already in use";
+    await user.click(screen.getByRole("button", { name: "Reconnect" }));
+    await waitFor(() => expect(status()).toHaveTextContent("port COM3 is already in use"));
+  });
+
+  it("turns auto-reconnect off and on for the selected session", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    const chip = () => screen.getByRole("button", { name: "Auto-reconnect" });
+    expect(chip()).toHaveAttribute("aria-pressed", "true");
+    await user.click(chip());
+    await waitFor(() => expect(chip()).toHaveAttribute("aria-pressed", "false"));
+    expect(backend.sessions.get(1)?.info.autoReconnect).toBe(false);
+    await user.click(chip());
+    await waitFor(() => expect(chip()).toHaveAttribute("aria-pressed", "true"));
+    await user.click(screen.getByRole("button", { name: "Close session COM3" }));
+    await waitFor(() => expect(tabs()).toEqual([]));
+    expect(screen.queryByRole("button", { name: "Auto-reconnect" })).toBeNull();
+  });
+
+  it("refreshes the port list when devices are plugged in or removed", async () => {
+    const { backend, user } = setup();
+    await waitFor(() => expect(screen.getByLabelText("Port")).toHaveValue("COM3"));
+    await user.selectOptions(screen.getByLabelText("Port"), "COM4");
+    const com7 = { ...PORTS[1]!, path: "COM7" };
+    act(() => backend.changePorts([PORTS[1]!, com7]));
+    await waitFor(() => expect(screen.getByRole("option", { name: /^COM7/ })).toBeInTheDocument());
+    expect(screen.getByLabelText("Port")).toHaveValue("COM4");
+    expect(screen.queryByRole("option", { name: /^COM3/ })).toBeNull();
+    act(() => backend.changePorts([com7]));
+    await waitFor(() => expect(screen.getByLabelText("Port")).toHaveValue("COM7"));
   });
 
   it("shows the failure reason of a failed session", async () => {

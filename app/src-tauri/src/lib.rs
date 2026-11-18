@@ -7,7 +7,9 @@
 //! window. Changes reach the window as events (see [`watch`]):
 //! `sessions-changed` carries the session list, `log-changed` the ids of
 //! sessions with new log entries, `signals-changed` the line levels of one
-//! session.
+//! session, `ports-changed` the port list after a device is plugged in or
+//! removed. The same thread retries lost sessions that have auto-reconnect
+//! on.
 
 pub mod commands;
 pub mod export;
@@ -31,6 +33,13 @@ const WATCH_INTERVAL: Duration = Duration::from_millis(16);
 /// Line levels are read every this many watch ticks (about 10 times a
 /// second), because reading them may cost a USB round trip.
 const SIGNAL_TICKS: u32 = 6;
+
+/// Lost sessions with auto-reconnect are retried about once a second.
+const RECONNECT_TICKS: u32 = 60;
+
+/// The port list is checked for plugged/unplugged devices about every two
+/// seconds.
+const PORT_TICKS: u32 = 120;
 
 /// Thin IPC wrappers. Tauri hands command arguments over by value, and
 /// async commands that borrow state must return `Result`.
@@ -88,6 +97,20 @@ mod ipc {
         max_bytes: usize,
     ) -> Result<LogChunk, String> {
         state.read(id, cursor, max_bytes)
+    }
+
+    #[tauri::command(async)]
+    pub(crate) fn reconnect(state: tauri::State<'_, AppState>, id: u32) -> Result<(), String> {
+        state.reconnect(id)
+    }
+
+    #[tauri::command(async)]
+    pub(crate) fn set_auto_reconnect(
+        state: tauri::State<'_, AppState>,
+        id: u32,
+        on: bool,
+    ) -> Result<(), String> {
+        state.set_auto_reconnect(id, on)
     }
 
     #[tauri::command(async)]
@@ -212,7 +235,11 @@ struct Watcher {
 }
 
 impl Watcher {
-    fn start(handle: tauri::AppHandle, manager: Arc<serialx_core::SessionManager>) -> Self {
+    fn start(
+        handle: tauri::AppHandle,
+        manager: Arc<serialx_core::SessionManager>,
+        lister: Arc<commands::PortLister>,
+    ) -> Self {
         let stop = Arc::new(AtomicBool::new(false));
         let flag = Arc::clone(&stop);
         let thread = std::thread::spawn(move || {
@@ -227,6 +254,15 @@ impl Watcher {
                 }
                 if !changes.logs.is_empty() {
                     let _ = handle.emit("log-changed", changes.logs);
+                }
+                if tick.is_multiple_of(RECONNECT_TICKS) {
+                    // Reconnected sessions show up as state changes.
+                    manager.reconnect_lost();
+                }
+                if tick.is_multiple_of(PORT_TICKS)
+                    && let Some(ports) = detector.poll_ports(&*lister)
+                {
+                    let _ = handle.emit("ports-changed", ports);
                 }
                 if tick.is_multiple_of(SIGNAL_TICKS) {
                     for signals in detector.poll_signals(&manager) {
@@ -268,7 +304,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     };
     app.manage(McpController::new(
         Arc::clone(&manager),
-        lister,
+        Arc::clone(&lister),
         settings,
         Some(path),
         note,
@@ -277,7 +313,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     tauri::async_runtime::spawn(async move {
         handle.state::<McpController>().start_if_enabled().await;
     });
-    app.manage(Watcher::start(app.handle().clone(), manager));
+    app.manage(Watcher::start(app.handle().clone(), manager, lister));
     Ok(())
 }
 
@@ -296,6 +332,8 @@ pub fn run() -> Result<(), tauri::Error> {
             ipc::write_data,
             ipc::read_log,
             ipc::encode_text,
+            ipc::reconnect,
+            ipc::set_auto_reconnect,
             ipc::export_log,
             ipc::start_capture,
             ipc::stop_capture,

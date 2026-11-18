@@ -120,6 +120,9 @@ pub struct OpenRequest {
     pub stop_bits: u8,
     /// Flow control.
     pub flow_control: FlowControlArg,
+    /// Reopen the port automatically when the device comes back after an
+    /// unplug or a USB re-enumeration (default on).
+    pub auto_reconnect: bool,
 }
 
 impl Default for OpenRequest {
@@ -131,6 +134,7 @@ impl Default for OpenRequest {
             parity: ParityArg::None,
             stop_bits: 1,
             flow_control: FlowControlArg::None,
+            auto_reconnect: true,
         }
     }
 }
@@ -169,6 +173,8 @@ pub struct SessionDto {
     pub state: &'static str,
     /// Reason, when the state is `"failed"`.
     pub error: Option<String>,
+    /// Whether the port reopens automatically when the device comes back.
+    pub auto_reconnect: bool,
 }
 
 /// Converts a manager listing entry.
@@ -180,6 +186,7 @@ pub fn session_dto(summary: &SessionSummary) -> SessionDto {
         port: summary.info.name.clone(),
         state,
         error,
+        auto_reconnect: summary.auto_reconnect,
     }
 }
 
@@ -327,14 +334,30 @@ impl AppState {
             .manager
             .open(&config, None)
             .map_err(|e| e.to_string())?;
-        let (state, error) = state_parts(session.state());
-        Ok(SessionDto {
-            id: session.id().0,
-            alias: session.alias(),
-            port: session.info().name.clone(),
-            state,
-            error,
-        })
+        self.manager
+            .set_auto_reconnect(session.id(), request.auto_reconnect)
+            .map_err(|e| e.to_string())?;
+        self.manager
+            .list()
+            .iter()
+            .find(|s| s.id == session.id())
+            .map(session_dto)
+            .ok_or_else(|| "the session closed while opening".to_owned())
+    }
+
+    /// Reopens a disconnected or failed session's port now (same session,
+    /// same log). Does nothing for an open session.
+    pub fn reconnect(&self, id: u32) -> Result<(), String> {
+        self.manager
+            .reconnect(SessionId(id))
+            .map_err(|e| e.to_string())
+    }
+
+    /// Turns automatic reconnecting of a session on or off.
+    pub fn set_auto_reconnect(&self, id: u32, on: bool) -> Result<(), String> {
+        self.manager
+            .set_auto_reconnect(SessionId(id), on)
+            .map_err(|e| e.to_string())
     }
 
     /// Closes a session and forgets it; the frontend keeps what it shows.
@@ -619,7 +642,8 @@ mod tests {
                 alias: None,
                 port: "mock0".into(),
                 state: "open",
-                error: None
+                error: None,
+                auto_reconnect: true,
             }
         );
         assert_eq!(app.write(1, b"AT\r\n").unwrap(), 0);
@@ -801,6 +825,32 @@ mod tests {
             CaptureStatus::default(),
             "closing forgets it"
         );
+    }
+
+    #[test]
+    fn sessions_reconnect_on_request_and_automatically() {
+        let (app, devices) = state();
+        let manual = OpenRequest {
+            auto_reconnect: false,
+            ..request("mock0")
+        };
+        assert!(!app.open(&manual).unwrap().auto_reconnect);
+        devices.lock().unwrap()["mock0"].disconnect();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while app.read(1, 0, 1).unwrap().state == "open" {
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        assert!(
+            app.manager().reconnect_lost().is_empty(),
+            "auto reconnect is off"
+        );
+        app.reconnect(1).unwrap();
+        assert_eq!(app.read(1, 0, 1).unwrap().state, "open");
+        app.set_auto_reconnect(1, true).unwrap();
+        assert!(app.sessions()[0].auto_reconnect);
+        assert!(app.reconnect(9).unwrap_err().contains("no session"));
+        assert!(app.set_auto_reconnect(9, true).is_err());
     }
 
     #[test]

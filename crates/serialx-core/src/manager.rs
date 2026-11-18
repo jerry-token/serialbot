@@ -4,7 +4,7 @@
 //! process, so a port can never be opened twice by the same app and every
 //! client sees the same sessions.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use crate::clock::Clock;
@@ -69,6 +69,9 @@ pub struct SessionSummary {
     pub info: TransportInfo,
     /// Lifecycle state.
     pub state: SessionState,
+    /// Whether the manager reopens the port when the device comes back
+    /// (see [`SessionManager::reconnect_lost`]).
+    pub auto_reconnect: bool,
 }
 
 /// Owns all sessions of the process.
@@ -96,6 +99,10 @@ struct Registry {
     opening: HashSet<String>,
     /// Aliases reserved by an open call in progress.
     opening_aliases: HashSet<String>,
+    /// How each session's port was opened, for reconnecting.
+    configs: HashMap<SessionId, SerialConfig>,
+    /// Sessions to reconnect automatically.
+    auto: HashSet<SessionId>,
 }
 
 impl SessionManager {
@@ -176,19 +183,111 @@ impl SessionManager {
         let session = Arc::new(started?);
         session.set_alias(alias);
         reg.sessions.insert(session.id(), Arc::clone(&session));
+        reg.configs.insert(session.id(), config.clone());
         Ok(session)
+    }
+
+    /// Reopens the port of a disconnected or failed session with its
+    /// original settings and continues the session (same id, alias and log;
+    /// see [`Session::reattach`]). Does nothing for an open session.
+    ///
+    /// Fails if the device is not back yet (the opener's error), if another
+    /// open session now holds the port ([`ManagerError::PortInUse`]), or if
+    /// the session was closed.
+    pub fn reconnect(&self, id: SessionId) -> Result<(), ManagerError> {
+        let (session, config, key) = {
+            let mut reg = self.lock();
+            let session = reg
+                .sessions
+                .get(&id)
+                .cloned()
+                .ok_or(ManagerError::UnknownSession(id))?;
+            match session.state() {
+                SessionState::Open => return Ok(()),
+                SessionState::Closed => {
+                    return Err(SessionError::NotOpen(SessionState::Closed).into());
+                }
+                SessionState::Disconnected | SessionState::Failed(_) => {}
+            }
+            let config = reg
+                .configs
+                .get(&id)
+                .cloned()
+                .ok_or(ManagerError::UnknownSession(id))?;
+            let key = port_key(&config.path);
+            if let Some(holder) = reg.sessions.values().find(|s| {
+                s.id() != id && s.state() == SessionState::Open && port_key(&s.info().name) == key
+            }) {
+                return Err(ManagerError::PortInUse {
+                    port: config.path.clone(),
+                    session: holder.id(),
+                });
+            }
+            if !reg.opening.insert(key.clone()) {
+                return Err(ManagerError::PortOpening(config.path.clone()));
+            }
+            (session, config, key)
+        };
+        // Open without the lock, as in `open`.
+        let result = (self.opener)(&config)
+            .map_err(ManagerError::from)
+            .and_then(|connection| session.reattach(connection).map_err(ManagerError::from));
+        self.lock().opening.remove(&key);
+        result
+    }
+
+    /// Turns automatic reconnecting of a session on or off.
+    pub fn set_auto_reconnect(&self, id: SessionId, on: bool) -> Result<(), ManagerError> {
+        let mut reg = self.lock();
+        if !reg.sessions.contains_key(&id) {
+            return Err(ManagerError::UnknownSession(id));
+        }
+        if on {
+            reg.auto.insert(id);
+        } else {
+            reg.auto.remove(&id);
+        }
+        Ok(())
+    }
+
+    /// Tries once to reconnect every disconnected or failed session that
+    /// has automatic reconnecting on; returns the ids that reconnected.
+    /// Callers run this periodically (the app about once a second). A
+    /// device that is not back yet is simply tried again next time.
+    pub fn reconnect_lost(&self) -> Vec<SessionId> {
+        let lost: Vec<SessionId> = {
+            let reg = self.lock();
+            reg.auto
+                .iter()
+                .copied()
+                .filter(|id| {
+                    reg.sessions.get(id).is_some_and(|s| {
+                        matches!(
+                            s.state(),
+                            SessionState::Disconnected | SessionState::Failed(_)
+                        )
+                    })
+                })
+                .collect()
+        };
+        let mut lost = lost;
+        lost.sort_unstable();
+        lost.into_iter()
+            .filter(|&id| self.reconnect(id).is_ok())
+            .collect()
     }
 
     /// Lists every session, open or not, in id order.
     pub fn list(&self) -> Vec<SessionSummary> {
-        self.lock()
-            .sessions
+        let reg = self.lock();
+        reg.sessions
             .values()
             .map(|s| SessionSummary {
                 id: s.id(),
                 alias: s.alias(),
                 info: s.info().clone(),
                 state: s.state(),
+                auto_reconnect: reg.auto.contains(&s.id()),
             })
             .collect()
     }
@@ -235,11 +334,14 @@ impl SessionManager {
 
     /// Closes a session and forgets it, dropping its log.
     pub fn remove(&self, id: SessionId) -> Result<(), ManagerError> {
-        let session = self
-            .lock()
-            .sessions
-            .remove(&id)
-            .ok_or(ManagerError::UnknownSession(id))?;
+        let session = {
+            let mut reg = self.lock();
+            reg.configs.remove(&id);
+            reg.auto.remove(&id);
+            reg.sessions
+                .remove(&id)
+                .ok_or(ManagerError::UnknownSession(id))?
+        };
         session.close();
         Ok(())
     }
@@ -319,6 +421,126 @@ mod tests {
             SessionOptions::default(),
         );
         (m, devices)
+    }
+
+    /// A manager whose ports can be unplugged and plugged back in.
+    fn pluggable() -> (
+        SessionManager,
+        Arc<std::sync::atomic::AtomicBool>,
+        Arc<Mutex<Vec<MockDevice>>>,
+    ) {
+        let present = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let devices = Arc::new(Mutex::new(Vec::new()));
+        let (p, sink) = (Arc::clone(&present), Arc::clone(&devices));
+        let opener = move |c: &SerialConfig| {
+            if !p.load(std::sync::atomic::Ordering::SeqCst) {
+                return Err(TransportError::NotFound(c.path.clone()));
+            }
+            let (conn, dev) = mock::connection(&c.path, Duration::from_millis(5));
+            sink.lock().unwrap().push(dev);
+            Ok(conn)
+        };
+        let m = SessionManager::new(
+            Box::new(opener),
+            Arc::new(ManualClock::new(0)),
+            SessionOptions::default(),
+        );
+        (m, present, devices)
+    }
+
+    /// Disconnects the device opened `nth` (0-based) and waits until `s`
+    /// notices.
+    fn unplug(s: &Session, devices: &Mutex<Vec<MockDevice>>, nth: usize) {
+        devices.lock().unwrap()[nth].disconnect();
+        while s.state() == SessionState::Open {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+
+    #[test]
+    fn reconnect_continues_the_session_when_the_device_is_back() {
+        let (m, present, devices) = pluggable();
+        let s = m.open(&cfg("COM3"), Some("board".into())).unwrap();
+        m.reconnect(s.id()).unwrap(); // Open: nothing to do.
+        unplug(&s, &devices, 0);
+        present.store(false, std::sync::atomic::Ordering::SeqCst);
+        assert!(matches!(
+            m.reconnect(s.id()),
+            Err(ManagerError::Session(SessionError::Transport(
+                TransportError::NotFound(_)
+            )))
+        ));
+        assert_eq!(s.state(), SessionState::Disconnected);
+        present.store(true, std::sync::atomic::Ordering::SeqCst);
+        m.reconnect(s.id()).unwrap();
+        assert_eq!(s.state(), SessionState::Open);
+        assert_eq!(m.find_by_alias("board").unwrap().id(), s.id());
+        assert_eq!(
+            devices.lock().unwrap().len(),
+            2,
+            "opened with the same settings"
+        );
+        assert!(matches!(
+            m.reconnect(SessionId(99)),
+            Err(ManagerError::UnknownSession(_))
+        ));
+    }
+
+    #[test]
+    fn reconnect_respects_ports_taken_meanwhile_and_closed_sessions() {
+        let (m, _present, devices) = pluggable();
+        let s = m.open(&cfg("COM3"), None).unwrap();
+        unplug(&s, &devices, 0);
+        let other = m.open(&cfg("COM3"), None).unwrap();
+        assert!(matches!(
+            m.reconnect(s.id()),
+            Err(ManagerError::PortInUse { session, .. }) if session == other.id()
+        ));
+        m.close(other.id()).unwrap();
+        m.reconnect(s.id()).unwrap();
+        m.close(s.id()).unwrap();
+        assert!(matches!(
+            m.reconnect(s.id()),
+            Err(ManagerError::Session(SessionError::NotOpen(
+                SessionState::Closed
+            )))
+        ));
+    }
+
+    #[test]
+    fn lost_sessions_reconnect_automatically_when_enabled() {
+        let (m, present, devices) = pluggable();
+        let a = m.open(&cfg("COM3"), None).unwrap();
+        let b = m.open(&cfg("COM4"), None).unwrap();
+        m.set_auto_reconnect(a.id(), true).unwrap();
+        assert!(m.list()[0].auto_reconnect);
+        assert!(!m.list()[1].auto_reconnect);
+        assert!(m.reconnect_lost().is_empty(), "nothing is lost");
+        unplug(&a, &devices, 0);
+        unplug(&b, &devices, 1);
+        present.store(false, std::sync::atomic::Ordering::SeqCst);
+        assert!(m.reconnect_lost().is_empty(), "the device is not back yet");
+        present.store(true, std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(m.reconnect_lost(), [a.id()]);
+        assert_eq!(a.state(), SessionState::Open);
+        assert_eq!(
+            b.state(),
+            SessionState::Disconnected,
+            "auto reconnect is off for b"
+        );
+
+        m.set_auto_reconnect(a.id(), false).unwrap();
+        assert!(!m.list()[0].auto_reconnect);
+        assert!(matches!(
+            m.set_auto_reconnect(SessionId(99), true),
+            Err(ManagerError::UnknownSession(_))
+        ));
+        m.set_auto_reconnect(b.id(), true).unwrap();
+        m.remove(b.id()).unwrap();
+        assert!(
+            m.reconnect_lost().is_empty(),
+            "removed sessions are forgotten"
+        );
     }
 
     fn cfg(path: &str) -> SerialConfig {
