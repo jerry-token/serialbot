@@ -60,8 +60,10 @@ ports. Plan of record: the "AI 串口助手 · 开工前计划" doc.
   - `src/terminal.ts` — log entries to display lines (text/hex, line breaks, UTF-8)
   - `src/App.tsx` + `src/components/` — UI; tests use a fake `Backend`
   - Frontend gate: `npm run typecheck`, `npm run coverage` (≥ 85% lines), `npm run build`
-- `.github/workflows/ci.yml` — fmt, clippy, tests on Windows/macOS/Linux,
-  MSRV, docs, coverage gate, license/advisory checks
+- `.github/workflows/ci.yml` — fmt, clippy, tests, MSRV, docs, coverage gate,
+  license/advisory checks. PRs run on Linux; the Windows/macOS/Linux matrix
+  runs on `main`, weekly and on demand (Actions minutes for macOS/Windows
+  are expensive). A red `main` run is fixed before anything else is merged.
 
 ## Releases
 
