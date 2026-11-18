@@ -17,6 +17,8 @@ use serialx_core::{
 };
 pub use serialx_mcp::PortLister;
 
+use crate::repeat::{RepeatStatus, Repeaters};
+
 /// Largest payload one [`AppState::read`] returns.
 pub const MAX_READ_BYTES: usize = 4 * 1024 * 1024;
 
@@ -264,6 +266,7 @@ pub fn signals_dto(session: &Session) -> SignalsDto {
 pub struct AppState {
     manager: Arc<SessionManager>,
     list_ports: Arc<PortLister>,
+    repeaters: Repeaters,
 }
 
 impl std::fmt::Debug for AppState {
@@ -280,6 +283,7 @@ impl AppState {
         Self {
             manager,
             list_ports,
+            repeaters: Repeaters::default(),
         }
     }
 
@@ -332,6 +336,7 @@ impl AppState {
 
     /// Closes a session and forgets it; the frontend keeps what it shows.
     pub fn close(&self, id: u32) -> Result<(), String> {
+        self.repeaters.stop(id);
         self.manager
             .remove(SessionId(id))
             .map_err(|e| e.to_string())
@@ -421,7 +426,34 @@ impl AppState {
 
     /// Closes every session (on app exit).
     pub fn shutdown(&self) {
+        self.repeaters.stop_all();
         self.manager.close_all();
+    }
+
+    /// Starts sending `data` every `interval_ms` (`count` times, or until
+    /// stopped), replacing the session's previous repeat job.
+    pub fn start_repeat(
+        &self,
+        id: u32,
+        data: Vec<u8>,
+        interval_ms: u64,
+        count: Option<u32>,
+    ) -> Result<RepeatStatus, String> {
+        let session = self.manager.get(SessionId(id)).map_err(|e| e.to_string())?;
+        self.repeaters
+            .start(id, session, data, interval_ms, count)?;
+        Ok(self.repeaters.status(id))
+    }
+
+    /// Stops the session's repeat job, if any.
+    pub fn stop_repeat(&self, id: u32) -> RepeatStatus {
+        self.repeaters.stop(id);
+        self.repeaters.status(id)
+    }
+
+    /// Progress of the session's repeat job.
+    pub fn repeat_status(&self, id: u32) -> RepeatStatus {
+        self.repeaters.status(id)
     }
 }
 
@@ -654,6 +686,31 @@ mod tests {
                 .unwrap_err()
                 .contains("unknown encoding")
         );
+    }
+
+    #[test]
+    fn repeats_are_started_stopped_and_end_with_the_session() {
+        let (app, devices) = state();
+        assert!(
+            app.start_repeat(1, b"x".to_vec(), 10, None)
+                .unwrap_err()
+                .contains("no session")
+        );
+        app.open(&request("mock0")).unwrap();
+        let device = devices.lock().unwrap()["mock0"].clone();
+        let started = app.start_repeat(1, b"x".to_vec(), 60_000, None).unwrap();
+        assert!(started.running);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while app.repeat_status(1).sent == 0 {
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        assert!(!app.stop_repeat(1).running);
+        assert_eq!(device.take_written(), b"x");
+        app.start_repeat(1, b"y".to_vec(), 60_000, None).unwrap();
+        app.close(1).unwrap();
+        assert!(!app.repeat_status(1).running, "closing stops the job");
+        app.shutdown();
     }
 
     #[test]

@@ -431,7 +431,22 @@ label.check {
   flex-direction: column;
   justify-content: space-between;
   gap: 6px;
-  width: 110px;
+  width: 168px;
+}
+
+.send-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.send-row select {
+  flex: 1;
+}
+
+.interval-input {
+  width: 64px;
+  padding: 2px 6px;
 }
 
 .send-button {

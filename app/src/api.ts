@@ -66,6 +66,13 @@ export interface SignalsInfo {
   cd: boolean | null;
 }
 
+/** Progress of a session's timed send. */
+export interface RepeatStatus {
+  running: boolean;
+  sent: number;
+  error: string | null;
+}
+
 export interface McpSettings {
   enabled: boolean;
   /** Preferred port; the next free one of the following nine is used if taken. */
@@ -93,6 +100,15 @@ export interface Backend {
   onSessionsChanged(handler: (sessions: SessionInfo[]) => void): Promise<Unlisten>;
   /** Called with the ids of sessions that have new log entries or a new state. */
   onLogChanged(handler: (ids: number[]) => void): Promise<Unlisten>;
+  /** Sends `data` every `intervalMs`, `count` times or (null) until stopped. */
+  startRepeat(
+    id: number,
+    data: Uint8Array,
+    intervalMs: number,
+    count: number | null,
+  ): Promise<RepeatStatus>;
+  stopRepeat(id: number): Promise<RepeatStatus>;
+  repeatStatus(id: number): Promise<RepeatStatus>;
   /** Encodes text in a non-UTF-8 encoding (WHATWG label) for sending. */
   encodeText(text: string, encoding: string): Promise<number[]>;
   signals(id: number): Promise<SignalsInfo>;
@@ -116,6 +132,10 @@ export const tauriBackend: Backend = {
   onSessionsChanged: (handler) =>
     listen<SessionInfo[]>("sessions-changed", (event) => handler(event.payload)),
   onLogChanged: (handler) => listen<number[]>("log-changed", (event) => handler(event.payload)),
+  startRepeat: (id, data, intervalMs, count) =>
+    invoke("start_repeat", { id, data: Array.from(data), intervalMs, count }),
+  stopRepeat: (id) => invoke("stop_repeat", { id }),
+  repeatStatus: (id) => invoke("repeat_status", { id }),
   encodeText: (text, encoding) => invoke("encode_text", { text, encoding }),
   signals: (id) => invoke("signals", { id }),
   setSignals: (id, levels) =>

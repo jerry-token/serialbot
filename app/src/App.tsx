@@ -5,6 +5,7 @@ import type {
   McpStatus,
   PortInfo,
   SessionInfo,
+  RepeatStatus,
   SignalsInfo,
   Unlisten,
 } from "./api";
@@ -25,6 +26,12 @@ import { type Line, Terminal } from "./terminal";
 
 /** Payload budget of one log read. */
 export const READ_BYTES = 256 * 1024;
+
+/** Sent texts remembered for ↑ / ↓. */
+export const HISTORY_SIZE = 50;
+
+/** How often the progress of running timed sends is refreshed. */
+export const REPEAT_POLL_MS = 500;
 
 interface Props {
   backend: Backend;
@@ -65,7 +72,15 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
   const [activeId, setActiveId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [send, setSend] = useState<SendSettings>({ text: "", hex: false, ending: "crlf" });
+  const [send, setSend] = useState<SendSettings>({
+    text: "",
+    hex: false,
+    ending: "crlf",
+    repeat: false,
+    intervalMs: "1000",
+  });
+  const [history, setHistory] = useState<string[]>([]);
+  const [repeats, setRepeats] = useState<Record<number, RepeatStatus>>({});
   const [showTimestamps, setShowTimestamps] = useState(true);
   const [hexView, setHexView] = useState(false);
   const [showSent, setShowSent] = useState(true);
@@ -275,18 +290,62 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
       setError(t.invalidHex);
       return;
     }
+    const interval = Number(send.intervalMs);
+    if (send.repeat && !(Number.isInteger(interval) && interval >= 1 && interval <= 86_400_000)) {
+      setError(t.invalidInterval);
+      return;
+    }
     try {
       if (!send.hex && encoding !== "utf-8") {
         data = Uint8Array.from(
           await backend.encodeText(withEndings(send.text, send.ending), encoding),
         );
       }
-      await backend.writeData(active.id, data);
+      if (send.repeat) {
+        const status = await backend.startRepeat(active.id, data, interval, null);
+        setRepeats((all) => ({ ...all, [active.id]: status }));
+      } else {
+        await backend.writeData(active.id, data);
+      }
       setError(null);
+      // Remember what was sent; the newest entry is last, without repeats.
+      const text = send.text;
+      setHistory((h) => [...h.filter((x) => x !== text), text].slice(-HISTORY_SIZE));
     } catch (e) {
       setError(errorMessage(e));
     }
   };
+
+  const stopRepeat = async () => {
+    if (!active) return;
+    try {
+      const status = await backend.stopRepeat(active.id);
+      setRepeats((all) => ({ ...all, [active.id]: status }));
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  };
+
+  // While timed sends run, refresh their progress twice a second.
+  const runningIds = Object.entries(repeats)
+    .filter(([, r]) => r.running)
+    .map(([id]) => Number(id))
+    .join(",");
+  useEffect(() => {
+    if (runningIds === "") return undefined;
+    const timer = setInterval(() => {
+      for (const id of runningIds.split(",").map(Number)) {
+        backend.repeatStatus(id).then(
+          (status) => {
+            setRepeats((all) => ({ ...all, [id]: status }));
+            if (status.error) setError(status.error);
+          },
+          (e: unknown) => setError(errorMessage(e)),
+        );
+      }
+    }, REPEAT_POLL_MS);
+    return () => clearInterval(timer);
+  }, [backend, runningIds]);
 
   const toggleHexView = (hex: boolean) => {
     display.current.hex = hex;
@@ -504,6 +563,9 @@ export function App({ backend, lang, copy = defaultCopy }: Props) {
               onChange={setSend}
               enabled={active?.state === "open"}
               onSend={() => void sendData()}
+              repeat={active ? (repeats[active.id] ?? null) : null}
+              onStopRepeat={() => void stopRepeat()}
+              history={history}
             />
           </>
         ) : (

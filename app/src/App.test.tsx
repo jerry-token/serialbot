@@ -11,6 +11,7 @@ import type {
   OpenRequest,
   PortInfo,
   SessionInfo,
+  RepeatStatus,
   SessionStateName,
   SignalsInfo,
 } from "./api";
@@ -130,6 +131,27 @@ class FakeBackend implements Backend {
   async onLogChanged(handler: (ids: number[]) => void) {
     this.logListeners.add(handler);
     return () => this.logListeners.delete(handler);
+  }
+
+  repeats = new Map<number, RepeatStatus & { data: number[]; intervalMs: number }>();
+
+  async startRepeat(id: number, data: Uint8Array, intervalMs: number, count: number | null) {
+    if (count !== null) throw "the UI never limits the count";
+    await this.writeData(id, data);
+    const job = { running: true, sent: 1, error: null, data: Array.from(data), intervalMs };
+    this.repeats.set(id, job);
+    return { running: true, sent: 1, error: null };
+  }
+
+  async stopRepeat(id: number) {
+    const job = this.repeats.get(id);
+    if (job) job.running = false;
+    return { running: false, sent: job?.sent ?? 0, error: null };
+  }
+
+  async repeatStatus(id: number) {
+    const job = this.repeats.get(id);
+    return { running: job?.running ?? false, sent: job?.sent ?? 0, error: job?.error ?? null };
   }
 
   async encodeText(text: string, encoding: string) {
@@ -684,6 +706,89 @@ describe("App", () => {
     expect(screen.getByRole("search")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Close search" }));
     expect(screen.queryByRole("search")).not.toBeInTheDocument();
+  });
+
+  it("sends repeatedly until stopped", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    await user.type(screen.getByLabelText("Send"), "ping");
+    const interval = screen.getByLabelText("Interval (ms)");
+    expect(interval).toBeDisabled();
+    await user.click(screen.getByRole("checkbox", { name: "Timed" }));
+    await user.clear(interval);
+    await user.type(interval, "250");
+    await user.click(screen.getByRole("button", { name: "Start" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Stop (1)" })).toBeInTheDocument());
+    expect(backend.repeats.get(1)).toMatchObject({ intervalMs: 250, data: [112, 105, 110, 103, 13, 10] });
+    expect(interval).toBeDisabled();
+    // Progress is refreshed while the job runs.
+    const job = backend.repeats.get(1);
+    if (job) job.sent = 7;
+    await waitFor(() => expect(screen.getByRole("button", { name: "Stop (7)" })).toBeInTheDocument(), {
+      timeout: 2000,
+    });
+    // Enter does not start a second job while one runs.
+    await user.type(screen.getByLabelText("Send"), "{Enter}");
+    expect(backend.written).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: "Stop (7)" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Start" })).toBeEnabled());
+  });
+
+  it("reports bad intervals and failed timed sends", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    await user.type(screen.getByLabelText("Send"), "x");
+    await user.click(screen.getByRole("checkbox", { name: "Timed" }));
+    const interval = screen.getByLabelText("Interval (ms)");
+    await user.clear(interval);
+    await user.type(interval, "0");
+    await user.click(screen.getByRole("button", { name: "Start" }));
+    expect(status()).toHaveTextContent("The interval must be");
+    expect(backend.repeats.size).toBe(0);
+
+    await user.clear(interval);
+    await user.type(interval, "100");
+    await user.click(screen.getByRole("button", { name: "Start" }));
+    await waitFor(() => expect(backend.repeats.size).toBe(1));
+    const job = backend.repeats.get(1);
+    if (job) {
+      job.running = false;
+      job.error = "session is Disconnected";
+    }
+    await waitFor(() => expect(status()).toHaveTextContent("session is Disconnected"), {
+      timeout: 2000,
+    });
+    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+  });
+
+  it("recalls sent texts with the arrow keys", async () => {
+    const { user } = setup();
+    await openPort(user);
+    const input = screen.getByLabelText("Send") as HTMLTextAreaElement;
+    await user.type(input, "a{Enter}");
+    await user.clear(input);
+    await user.type(input, "b{Enter}");
+    await user.clear(input);
+    await user.type(input, "a{Enter}"); // Sent again: moves to the newest place.
+    await user.clear(input);
+    await user.keyboard("{ArrowUp}");
+    expect(input).toHaveValue("a");
+    input.setSelectionRange(0, 0);
+    await user.keyboard("{ArrowUp}");
+    expect(input).toHaveValue("b");
+    input.setSelectionRange(0, 0);
+    await user.keyboard("{ArrowUp}");
+    expect(input).toHaveValue("b"); // The oldest entry stays.
+    input.setSelectionRange(1, 1);
+    await user.keyboard("{ArrowDown}");
+    expect(input).toHaveValue("a");
+    input.setSelectionRange(1, 1);
+    await user.keyboard("{ArrowDown}");
+    expect(input).toHaveValue("");
+    // Typing leaves history browsing; ↑ in the middle of text moves the caret.
+    await user.type(input, "xy");
+    await user.keyboard("{ArrowUp}");
+    expect(input).toHaveValue("xy");
   });
 
   it("stops listening when closed", async () => {

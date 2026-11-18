@@ -11,6 +11,7 @@
 
 pub mod commands;
 pub mod mcp;
+pub mod repeat;
 pub mod settings;
 pub mod watch;
 
@@ -40,6 +41,7 @@ const SIGNAL_TICKS: u32 = 6;
 mod ipc {
     use super::commands::{AppState, LogChunk, OpenRequest, PortDto, SessionDto, SignalsDto};
     use super::mcp::{McpController, McpStatus};
+    use super::repeat::RepeatStatus;
     use super::settings::McpSettings;
 
     #[tauri::command(async)]
@@ -84,6 +86,33 @@ mod ipc {
         max_bytes: usize,
     ) -> Result<LogChunk, String> {
         state.read(id, cursor, max_bytes)
+    }
+
+    #[tauri::command(async)]
+    pub(crate) fn start_repeat(
+        state: tauri::State<'_, AppState>,
+        id: u32,
+        data: Vec<u8>,
+        interval_ms: u64,
+        count: Option<u32>,
+    ) -> Result<RepeatStatus, String> {
+        state.start_repeat(id, data, interval_ms, count)
+    }
+
+    #[tauri::command(async)]
+    pub(crate) fn stop_repeat(
+        state: tauri::State<'_, AppState>,
+        id: u32,
+    ) -> Result<RepeatStatus, String> {
+        Ok(state.stop_repeat(id))
+    }
+
+    #[tauri::command(async)]
+    pub(crate) fn repeat_status(
+        state: tauri::State<'_, AppState>,
+        id: u32,
+    ) -> Result<RepeatStatus, String> {
+        Ok(state.repeat_status(id))
     }
 
     #[tauri::command(async)]
@@ -226,6 +255,9 @@ pub fn run() -> Result<(), tauri::Error> {
             ipc::write_data,
             ipc::read_log,
             ipc::encode_text,
+            ipc::start_repeat,
+            ipc::stop_repeat,
+            ipc::repeat_status,
             ipc::signals,
             ipc::set_signals,
             ipc::mcp_status,
