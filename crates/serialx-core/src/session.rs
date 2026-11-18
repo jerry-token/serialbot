@@ -224,18 +224,29 @@ impl Session {
     }
 
     /// Sends `data` and logs it; returns the sequence number of the entry.
+    ///
+    /// The TX entry is logged *before* the bytes are written, stamped with
+    /// the time sending started, so a reply that arrives while the write is
+    /// still in progress always follows its command in the log. If the
+    /// write then fails, a `TX failed: …` marker is logged after the entry
+    /// and the error is returned.
     pub fn write(&self, data: &[u8]) -> Result<u64, SessionError> {
         self.ensure_open()?;
+        // Holding the control lock keeps concurrent writers' entries in the
+        // order their bytes go out.
         let mut control = lock(&self.control);
-        control.write_all(data)?;
         let now = self.shared.clock.now_us();
         let seq =
             self.shared
                 .lock()
                 .log
                 .push_data(now, Direction::Tx, Bytes::copy_from_slice(data));
-        drop(control);
         self.shared.changed.notify_all();
+        if let Err(e) = control.write_all(data) {
+            drop(control);
+            self.mark(&format!("TX failed: {e}"));
+            return Err(e.into());
+        }
         Ok(seq)
     }
 
@@ -696,37 +707,87 @@ mod tests {
         }
     }
 
+    /// Puts `control` in place of the session's control half, which is
+    /// returned so a wrapper can forward to it.
+    fn swap_control(s: &Session, control: Box<dyn TransportControl>) -> Box<dyn TransportControl> {
+        std::mem::replace(&mut *lock(&s.control), control)
+    }
+
     #[test]
-    fn send_and_expect_catches_a_reply_logged_before_the_command() {
+    fn a_reply_during_the_write_is_logged_after_the_command() {
+        // Regression: the TX entry was logged after write_all returned, so a
+        // device answering within the write showed its reply before the
+        // command (seen in the app with a fast PTY device).
         let (s, d, _c) = session();
-        // Wrap the session's own control half (it needs the session's log).
-        let placeholder = mock::connection("unused", T).0.control;
-        let original = std::mem::replace(&mut *lock(&s.control), placeholder);
-        *lock(&s.control) = Box::new(InstantReply {
-            inner: original,
-            device: d,
-            reply: b"OK\r\n",
-            logged: Arc::clone(&s.shared),
-        });
+        let original = swap_control(&s, mock::connection("unused", T).0.control);
+        swap_control(
+            &s,
+            Box::new(InstantReply {
+                inner: original,
+                device: d,
+                reply: b"OK\r\n",
+                logged: Arc::clone(&s.shared),
+            }),
+        );
 
         let m = s
             .send_and_expect(b"AT\r\n", &re(r"OK"), Duration::from_millis(200), WIN)
             .unwrap();
-        assert!(
-            m.is_some(),
-            "reply that raced ahead of the TX entry was missed"
-        );
+        assert!(m.is_some(), "the reply was found");
         let entries = s.read(Cursor(0), usize::MAX).unwrap().entries;
-        assert!(
-            matches!(
-                entries[0].kind,
-                EntryKind::Data {
-                    direction: Direction::Rx,
-                    ..
-                }
-            ),
-            "the test really logged the reply first"
-        );
+        let directions: Vec<Direction> = entries
+            .iter()
+            .map(|e| match &e.kind {
+                EntryKind::Data { direction, .. } => *direction,
+                EntryKind::Marker { .. } => panic!("unexpected marker"),
+            })
+            .collect();
+        assert_eq!(directions, [Direction::Tx, Direction::Rx]);
+    }
+
+    /// A control half whose writes fail.
+    struct FailingWrite;
+
+    impl TransportControl for FailingWrite {
+        fn write_all(&mut self, _: &[u8]) -> Result<(), TransportError> {
+            Err(TransportError::Io(std::io::Error::other("cable cut")))
+        }
+        fn set_dtr(&mut self, _: bool) -> Result<(), TransportError> {
+            Ok(())
+        }
+        fn set_rts(&mut self, _: bool) -> Result<(), TransportError> {
+            Ok(())
+        }
+        fn line_states(&mut self) -> Result<LineStates, TransportError> {
+            Ok(LineStates::default())
+        }
+        fn send_break(&mut self, _: Duration) -> Result<(), TransportError> {
+            Ok(())
+        }
+        fn set_baud_rate(&mut self, _: u32) -> Result<(), TransportError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_failed_write_is_marked_in_the_log() {
+        let (s, _d, _c) = session();
+        swap_control(&s, Box::new(FailingWrite));
+        let err = s.write(b"AT\r\n").unwrap_err();
+        assert!(err.to_string().contains("cable cut"), "{err}");
+        let entries = s.read(Cursor(0), usize::MAX).unwrap().entries;
+        assert_eq!(entries.len(), 2, "the attempt and its failure");
+        assert!(matches!(
+            entries[0].kind,
+            EntryKind::Data {
+                direction: Direction::Tx,
+                ..
+            }
+        ));
+        assert!(matches!(
+            &entries[1].kind,
+            EntryKind::Marker { label } if label == "TX failed: I/O error: cable cut"
+        ));
     }
 
     #[test]
