@@ -326,7 +326,7 @@ describe("App", () => {
 
     await user.click(screen.getByLabelText("Auto-scroll to new data"));
     await user.click(screen.getByRole("button", { name: "Clear" }));
-    expect(log()).toBeEmptyDOMElement();
+    expect(log().textContent).toBe("");
     expect(status()).toHaveTextContent("RX 0 · TX 0");
   });
 

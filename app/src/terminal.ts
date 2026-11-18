@@ -46,7 +46,12 @@ export interface TerminalLimits {
   maxRawBytes: number;
 }
 
-export const DEFAULT_LIMITS: TerminalLimits = { maxLines: 5000, maxRawBytes: 4 * 1024 * 1024 };
+/**
+ * Defaults sized for long captures: the log view is virtualized, so only the
+ * visible rows exist in the DOM. Kept bytes are stored compactly
+ * (Uint8Array), so 8 MiB of history costs about 8 MiB.
+ */
+export const DEFAULT_LIMITS: TerminalLimits = { maxLines: 50_000, maxRawBytes: 8 * 1024 * 1024 };
 
 /** Encodings offered in the UI, as WHATWG labels with display names. */
 export const ENCODINGS: ReadonlyArray<{ label: string; name: string }> = [
@@ -67,10 +72,20 @@ export function visible(text: string): string {
   });
 }
 
-type RawItem = { entry: LogEntry } | { info: string; timestampUs: number };
+/** A log entry as kept for re-rendering (bytes stored compactly). */
+interface RawEntry {
+  kind: LogEntry["kind"];
+  timestampUs: number;
+  bytes: Uint8Array;
+  label: string | null;
+}
+
+type RawItem = { entry: RawEntry } | { info: string; timestampUs: number };
 
 export class Terminal {
+  /** Kept items are raw[rawHead..]; dropping advances the head (O(1)). */
   private raw: RawItem[] = [];
+  private rawHead = 0;
   private rawBytes = 0;
   private lines: Line[] = [];
   private nextId = 0;
@@ -139,8 +154,14 @@ export class Terminal {
 
   /** Appends entries from the backend. */
   push(entries: readonly LogEntry[]): void {
-    for (const entry of entries) {
-      this.keep({ entry }, entry.data.length);
+    for (const e of entries) {
+      const entry: RawEntry = {
+        kind: e.kind,
+        timestampUs: e.timestampUs,
+        bytes: Uint8Array.from(e.data),
+        label: e.label,
+      };
+      this.keep({ entry }, entry.bytes.length);
       this.render({ entry });
     }
     this.trimLines();
@@ -157,6 +178,7 @@ export class Terminal {
   /** Forgets everything shown so far. */
   clear(): void {
     this.raw = [];
+    this.rawHead = 0;
     this.rawBytes = 0;
     this.resetView();
   }
@@ -164,9 +186,15 @@ export class Terminal {
   private keep(item: RawItem, bytes: number): void {
     this.raw.push(item);
     this.rawBytes += bytes;
-    while (this.rawBytes > this.limits.maxRawBytes && this.raw.length > 1) {
-      const dropped = this.raw.shift();
-      if (dropped && "entry" in dropped) this.rawBytes -= dropped.entry.data.length;
+    while (this.rawBytes > this.limits.maxRawBytes && this.raw.length - this.rawHead > 1) {
+      const dropped = this.raw[this.rawHead];
+      this.rawHead++;
+      if (dropped && "entry" in dropped) this.rawBytes -= dropped.entry.bytes.length;
+    }
+    // Compact once the dropped head outweighs what is kept.
+    if (this.rawHead > 1024 && this.rawHead * 2 > this.raw.length) {
+      this.raw = this.raw.slice(this.rawHead);
+      this.rawHead = 0;
     }
   }
 
@@ -182,7 +210,10 @@ export class Terminal {
 
   private rebuild(): void {
     this.resetView();
-    for (const item of this.raw) this.render(item);
+    for (let i = this.rawHead; i < this.raw.length; i++) {
+      const item = this.raw[i];
+      if (item) this.render(item);
+    }
     this.trimLines();
   }
 
@@ -257,7 +288,7 @@ export class Terminal {
       this.add("marker", entry.timestampUs, entry.label ?? "");
       return;
     }
-    const bytes = Uint8Array.from(entry.data);
+    const { bytes } = entry;
     if (this.hex) {
       this.renderHex(entry.kind, entry.timestampUs, bytes);
       return;
@@ -321,7 +352,13 @@ export class Terminal {
     }
   }
 
+  /**
+   * Keeps at most `maxLines` lines. Large views are trimmed in batches of a
+   * tenth of the limit, so a full view is not shifted on every update.
+   */
   private trimLines(): void {
+    const slack = Math.floor(this.limits.maxLines / 10);
+    if (this.lines.length <= this.limits.maxLines + slack) return;
     const excess = this.lines.length - this.limits.maxLines;
     if (excess > 0) {
       const removed = this.lines.splice(0, excess);

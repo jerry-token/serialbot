@@ -1,3 +1,4 @@
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { type CSSProperties, useLayoutEffect, useRef } from "react";
 import type { Style } from "../ansi";
 import type { Line } from "../terminal";
@@ -32,6 +33,14 @@ export function styleCss(style: Style): CSSProperties {
   return css;
 }
 
+/** Estimated height of one unwrapped row, refined by measuring rendered rows. */
+const ROW_HEIGHT = 18;
+
+/**
+ * The log, virtualized: only rows near the viewport are in the DOM, so tens
+ * of thousands of lines stay smooth. Rows wrap, so their heights are
+ * measured as they render.
+ */
 export function LogView({
   lines,
   showTimestamps,
@@ -41,41 +50,62 @@ export function LogView({
   currentMatch = null,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: lines.length,
+    getScrollElement: () => ref.current,
+    estimateSize: () => ROW_HEIGHT,
+    getItemKey: (index) => lines[index]?.id ?? index,
+    overscan: 20,
+    // Used until the element is measured (and in tests without layout).
+    initialRect: { width: 800, height: 600 },
+  });
 
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     if (currentMatch !== null) {
-      el.querySelector(".line.current")?.scrollIntoView?.({ block: "center" });
-    } else if (autoScroll) {
-      el.scrollTop = el.scrollHeight;
+      const index = lines.findIndex((line) => line.id === currentMatch);
+      if (index >= 0) virtualizer.scrollToIndex(index, { align: "center" });
+    } else if (autoScroll && lines.length > 0) {
+      virtualizer.scrollToIndex(lines.length - 1, { align: "end" });
     }
-  }, [version, autoScroll, currentMatch]);
+    // `lines` changes with `version`; the virtualizer object is stable.
+  }, [version, autoScroll, currentMatch, lines.length]);
 
   return (
     <div className="log" ref={ref} role="log" aria-live="off">
-      {lines.map((line) => {
-        const match = matches?.has(line.id) ? " match" : "";
-        const current = line.id === currentMatch ? " current" : "";
-        return (
-          <div key={line.id} className={`line ${line.kind}${match}${current}`}>
-            {showTimestamps && <span className="ts">[{formatTime(line.timestampUs)}] </span>}
-            {PREFIX[line.kind]}
-            {line.parts
-              ? line.parts.map((part, i) =>
-                  part.style ? (
-                    // Parts never reorder within a line, so the index is a stable key.
-                    <span key={i} style={styleCss(part.style)}>
-                      {part.text}
-                    </span>
-                  ) : (
-                    part.text
-                  ),
-                )
-              : line.text}
-          </div>
-        );
-      })}
+      <div className="log-rows" style={{ height: virtualizer.getTotalSize() }}>
+        {virtualizer.getVirtualItems().map((item) => {
+          const line = lines[item.index];
+          if (!line) return null;
+          const match = matches?.has(line.id) ? " match" : "";
+          const current = line.id === currentMatch ? " current" : "";
+          return (
+            <div
+              key={item.key}
+              data-index={item.index}
+              ref={virtualizer.measureElement}
+              className={`line ${line.kind}${match}${current}`}
+              style={{ transform: `translateY(${item.start}px)` }}
+            >
+              {showTimestamps && <span className="ts">[{formatTime(line.timestampUs)}] </span>}
+              {PREFIX[line.kind]}
+              {line.parts
+                ? line.parts.map((part, i) =>
+                    part.style ? (
+                      // Parts never reorder within a line, so the index is a stable key.
+                      <span key={i} style={styleCss(part.style)}>
+                        {part.text}
+                      </span>
+                    ) : (
+                      part.text
+                    ),
+                  )
+                : line.text}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

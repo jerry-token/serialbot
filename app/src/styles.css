@@ -662,3 +662,17 @@ button.signal.on:hover:not(:disabled) {
   border-style: solid;
   text-decoration: line-through;
 }
+
+/* ---- virtualized rows -------------------------------------------------- */
+
+.log-rows {
+  position: relative;
+  width: 100%;
+}
+
+.log-rows > .line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
