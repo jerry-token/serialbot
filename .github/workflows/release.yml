@@ -1,0 +1,104 @@
+# Builds installers for Windows, macOS and Linux and publishes them on the
+# GitHub release page when a version tag (v*) is pushed, e.g.
+#   git tag v0.1.0-alpha.1 && git push origin v0.1.0-alpha.1
+# Tags with a pre-release part (-alpha, -beta, -rc) are marked pre-release.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  create-release:
+    name: Create draft release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      release_id: ${{ steps.create.outputs.release_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: create
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          prerelease=""
+          if [[ "$TAG" == *-* ]]; then prerelease="--prerelease"; fi
+          gh release create "$TAG" --draft $prerelease --verify-tag \
+            --title "serialx $TAG" --notes-file .github/release-notes.md
+          id=$(gh api "repos/${{ github.repository }}/releases" \
+            --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -n1)
+          echo "release_id=$id" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (${{ matrix.name }})
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            platform: windows-latest
+            args: --bundles nsis
+            plain_binary: true
+          - name: macOS universal
+            platform: macos-latest
+            args: --target universal-apple-darwin --bundles app,dmg
+            plain_binary: false
+          - name: Linux x64
+            platform: ubuntu-22.04
+            args: --bundles deb,appimage
+            plain_binary: false
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y -qq libwebkit2gtk-4.1-dev librsvg2-dev \
+            libayatana-appindicator3-dev libudev-dev patchelf
+
+      # The toolchain comes from rust-toolchain.toml.
+      - name: Install Rust targets (macOS universal)
+        if: runner.os == 'macOS'
+        run: |
+          rustup toolchain install
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: app
+        run: npm ci
+
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          projectPath: app
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          args: ${{ matrix.args }}
+          uploadPlainBinary: ${{ matrix.plain_binary }}
+
+  publish:
+    name: Publish release
+    needs: [create-release, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "${{ github.ref_name }}" --draft=false --repo "${{ github.repository }}"
