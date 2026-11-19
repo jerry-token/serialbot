@@ -48,7 +48,7 @@ You stay in charge. Every change to a port needs your approval, and every line t
 
 **Connect**
 - 🗂️ Many ports at once: one tab per port, each with its own log and counters.
-- 🌐 TCP client, TCP server and UDP besides serial ports; pick the type at the left of the connection bar.
+- 🌐 TCP client, TCP server (several clients at once; sending goes to all of them, and the log shows who sent what) and UDP besides serial ports; pick the type at the left of the connection bar.
 - 🔁 Unplug and replug the adapter and the session carries on; the port list follows hot-plug.
 - 🎛️ DTR / RTS switches, CTS / DSR / RI / CD lamps, **BRK** for a BREAK, and **⏱** for a timed DTR/RTS sequence such as `DTR=0 RTS=1, 100, RTS=0` (a reset pulse). Every change is marked in the log.
 
@@ -184,7 +184,8 @@ On Windows the command is the path of `serialbot.exe` (installed or portable); o
 - [x] Log: search, filter, Δt, keyword highlight, save and capture
 - [x] Built-in MCP server (HTTP and stdio), approvals, per-session AI access
 - [x] Installers for Windows, macOS and Linux (x64 / arm64), published automatically
-- [ ] TCP server with several clients, command list in its own window
+- [x] TCP server with several clients
+- [ ] Command list in its own window
 - [x] Terminal mode (VT100, interactive shells)
 - [x] Waveform plots of received numbers
 - [ ] Built-in AI assistant "Bo"

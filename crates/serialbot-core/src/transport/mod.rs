@@ -57,7 +57,7 @@ pub enum TransportKind {
     Serial,
     /// A TCP connection to a server (`tcp://host:port`).
     TcpClient,
-    /// A TCP server serving one client at a time (`tcp-server://addr:port`).
+    /// A TCP server serving several clients at once (`tcp-server://addr:port`).
     TcpServer,
     /// UDP datagrams (`udp://host:port?local=addr:port`).
     Udp,
