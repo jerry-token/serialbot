@@ -16,6 +16,15 @@ pub struct McpSettings {
     pub port: u16,
     /// Bearer token clients must send.
     pub token: String,
+    /// Whether the user confirms each change an agent makes (see
+    /// [`crate::approval`]). On unless turned off; files written before
+    /// this setting existed read as on.
+    #[serde(default = "confirm_by_default")]
+    pub confirm: bool,
+}
+
+const fn confirm_by_default() -> bool {
+    true
 }
 
 impl McpSettings {
@@ -25,6 +34,7 @@ impl McpSettings {
             enabled: false,
             port: DEFAULT_PORT,
             token: generate_token().map_err(|e| format!("cannot generate a token: {e}"))?,
+            confirm: true,
         })
     }
 
@@ -149,6 +159,7 @@ pub(crate) mod tests {
             enabled: true,
             port: 9700,
             token: "my-own-token-123456".into(),
+            confirm: false,
         };
         save(&path, &settings).unwrap();
         assert_eq!(load(&path).unwrap(), (settings, None));
@@ -160,6 +171,18 @@ pub(crate) mod tests {
             let mode = std::fs::metadata(&path).unwrap().permissions().mode();
             assert_eq!(mode & 0o777, 0o600, "only the owner can read the token");
         }
+    }
+
+    #[test]
+    fn files_from_before_the_confirm_setting_ask_to_confirm() {
+        let dir = TempDir::new("legacy");
+        let path = dir.0.join("mcp.json");
+        let json = r#"{"enabled": true, "port": 9700, "token": "my-own-token-123456"}"#;
+        std::fs::write(&path, json).unwrap();
+        let (settings, problem) = load(&path).unwrap();
+        assert_eq!(problem, None);
+        assert!(settings.confirm);
+        assert!(McpSettings::new_default().unwrap().confirm);
     }
 
     #[test]

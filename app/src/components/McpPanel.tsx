@@ -53,6 +53,14 @@ export function McpPanel({ t, status, onApply, onRegenerate, copy }: Props) {
         />
         {t.mcpEnable}
       </label>
+      <label>
+        <input
+          type="checkbox"
+          checked={status.settings.confirm}
+          onChange={(e) => onApply({ ...status.settings, confirm: e.target.checked })}
+        />
+        {t.mcpConfirm}
+      </label>
       <div className="row">
         <label>
           {t.mcpPort}

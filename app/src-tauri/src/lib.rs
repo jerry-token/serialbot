@@ -9,8 +9,10 @@
 //! sessions with new log entries, `signals-changed` the line levels of one
 //! session, `ports-changed` the port list after a device is plugged in or
 //! removed. The same thread retries lost sessions that have auto-reconnect
-//! on.
+//! on. `approvals-changed` carries the queue of agent actions waiting for
+//! the user (see [`approval`]).
 
+pub mod approval;
 pub mod cli;
 pub mod commands;
 pub mod export;
@@ -51,6 +53,7 @@ const PORT_TICKS: u32 = 120;
     reason = "signatures required by tauri::command"
 )]
 mod ipc {
+    use super::approval::{ApprovalRequest, Approvals, Decision};
     use super::commands::{AppState, LogChunk, OpenRequest, PortDto, SessionDto, SignalsDto};
     use super::export::{CaptureStatus, ExportFormat, ExportSummary};
     use super::filesend::FileSendStatus;
@@ -260,6 +263,22 @@ mod ipc {
     }
 
     #[tauri::command]
+    pub(crate) async fn pending_approvals(
+        approvals: tauri::State<'_, std::sync::Arc<Approvals>>,
+    ) -> Result<Vec<ApprovalRequest>, String> {
+        Ok(approvals.pending())
+    }
+
+    #[tauri::command]
+    pub(crate) async fn answer_approval(
+        approvals: tauri::State<'_, std::sync::Arc<Approvals>>,
+        id: u64,
+        decision: Decision,
+    ) -> Result<(), String> {
+        approvals.answer(id, decision)
+    }
+
+    #[tauri::command]
     pub(crate) async fn mcp_regenerate_token(
         mcp: tauri::State<'_, McpController>,
     ) -> Result<McpStatus, String> {
@@ -341,9 +360,18 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         Ok(loaded) => loaded,
         Err(e) => (settings::McpSettings::new_default()?, Some(e)),
     };
+    let handle = app.handle().clone();
+    let approvals = Arc::new(approval::Approvals::new(
+        approval::DEFAULT_TIMEOUT,
+        Box::new(move |queue| {
+            let _ = handle.emit("approvals-changed", queue);
+        }),
+    ));
+    app.manage(Arc::clone(&approvals));
     app.manage(McpController::new(
         Arc::clone(&manager),
         Arc::clone(&lister),
+        approvals,
         settings,
         Some(path),
         note,
@@ -388,7 +416,9 @@ pub fn run() -> Result<(), tauri::Error> {
             ipc::set_signals,
             ipc::mcp_status,
             ipc::mcp_apply,
-            ipc::mcp_regenerate_token
+            ipc::mcp_regenerate_token,
+            ipc::pending_approvals,
+            ipc::answer_approval
         ])
         .build(tauri::generate_context!())?;
     app.run(|handle, event| {

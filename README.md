@@ -48,6 +48,9 @@ English · [简体中文](README.zh-CN.md)
 
   A port you opened in the window can be used by the agent, and everything the agent sends shows up in the window,
   tinted and tagged **AI**. Turn off **AI access** in the status bar to keep a session away from agents.
+  Before an agent sends data, toggles a line or opens, closes or reconfigures a port, SerialBot asks you:
+  allow once, allow for the session, or deny (unanswered requests are refused after 60 s).
+  You can turn the question off in the MCP settings.
 
 ## 📸 Screenshots
 

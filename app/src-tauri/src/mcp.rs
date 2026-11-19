@@ -16,6 +16,7 @@ use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
+use crate::approval::Approvals;
 use crate::settings::{self, McpSettings};
 
 /// How many ports after the preferred one are tried when it is taken.
@@ -58,6 +59,8 @@ struct Inner {
 pub struct McpController {
     manager: Arc<SessionManager>,
     list_ports: Arc<PortLister>,
+    /// Asked before every change an agent makes.
+    approvals: Arc<Approvals>,
     /// Where settings are saved; `None` keeps them in memory (tests).
     settings_path: Option<PathBuf>,
     inner: Mutex<Inner>,
@@ -73,17 +76,21 @@ impl std::fmt::Debug for McpController {
 
 impl McpController {
     /// A stopped controller. `note` is shown as the error until the next
-    /// change (for example why the settings file was ignored).
+    /// change (for example why the settings file was ignored). Agents'
+    /// changes go through `approvals` while the settings ask to confirm.
     pub fn new(
         manager: Arc<SessionManager>,
         list_ports: Arc<PortLister>,
+        approvals: Arc<Approvals>,
         settings: McpSettings,
         settings_path: Option<PathBuf>,
         note: Option<String>,
     ) -> Self {
+        approvals.set_enabled(settings.confirm);
         Self {
             manager,
             list_ports,
+            approvals,
             settings_path,
             inner: Mutex::new(Inner {
                 settings,
@@ -129,6 +136,7 @@ impl McpController {
         }
         let mut inner = self.inner.lock().await;
         Self::stop_running(&mut inner).await;
+        self.approvals.set_enabled(settings.confirm);
         inner.settings = settings;
         inner.error = None;
         if inner.settings.enabled {
@@ -178,7 +186,9 @@ impl McpController {
             }
         };
         let shutdown = CancellationToken::new();
-        let tools = SerialTools::new(Arc::clone(&self.manager), Arc::clone(&self.list_ports));
+        let guard: Arc<dyn serialbot_mcp::guard::Guard> = Arc::clone(&self.approvals) as _;
+        let tools = SerialTools::new(Arc::clone(&self.manager), Arc::clone(&self.list_ports))
+            .with_guard(guard);
         let app = serialbot_mcp::router(tools, &options, &shutdown);
         let task = tokio::spawn(serialbot_mcp::serve(listener, app, shutdown.clone()));
         inner.running = Some(Running {
@@ -240,14 +250,20 @@ mod tests {
         McpController::new(
             Arc::new(manager),
             Arc::new(|| Ok(Vec::new())),
+            approvals(),
             McpSettings {
                 enabled: false,
                 port: 0,
                 token: TOKEN.into(),
+                confirm: true,
             },
             path,
             None,
         )
+    }
+
+    fn approvals() -> Arc<Approvals> {
+        Arc::new(Approvals::new(Duration::from_secs(1), Box::new(|_| {})))
     }
 
     /// A free port with the next `PORT_ATTEMPTS` ports likely free too.
@@ -293,6 +309,7 @@ mod tests {
             enabled: true,
             port,
             token: token.into(),
+            confirm: true,
         }
     }
 
@@ -372,6 +389,15 @@ mod tests {
             .unwrap();
         assert!(!off.running);
         assert!(!settings::load(&path).unwrap().0.enabled);
+        assert!(c.approvals.enabled());
+        c.apply(McpSettings {
+            confirm: false,
+            ..off.settings
+        })
+        .await
+        .unwrap();
+        assert!(!c.approvals.enabled(), "agents' changes go ahead unasked");
+        assert!(!settings::load(&path).unwrap().0.confirm);
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -394,7 +420,11 @@ mod tests {
         c = McpController::new(
             Arc::clone(&c.manager),
             Arc::clone(&c.list_ports),
-            enabled(9, "bad"),
+            Arc::clone(&c.approvals),
+            McpSettings {
+                confirm: false,
+                ..enabled(9, "bad")
+            },
             None,
             Some("ignored invalid MCP settings".into()),
         );
@@ -406,5 +436,6 @@ mod tests {
         assert!(!status.running);
         assert!(status.error.unwrap().contains("at least"));
         assert!(format!("{c:?}").contains("McpController"));
+        assert!(!c.approvals.enabled(), "the loaded setting applies at once");
     }
 }

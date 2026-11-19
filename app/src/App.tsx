@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   Backend,
   McpSettings,
+  ApprovalRequest,
   McpStatus,
   PortInfo,
   SessionInfo,
@@ -30,6 +31,7 @@ import { SearchBar } from "./components/SearchBar";
 import { ConnectionBar, type PortSettings } from "./components/ConnectionBar";
 import { LogView } from "./components/LogView";
 import { McpPanel } from "./components/McpPanel";
+import { ApprovalDialog } from "./components/ApprovalDialog";
 import { SaveMenu } from "./components/SaveMenu";
 import { SendBar, type SendSettings } from "./components/SendBar";
 import { SignalBar } from "./components/SignalBar";
@@ -118,6 +120,7 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
   const [showSent, setShowSent] = useState(true);
   const [autoScroll, setAutoScroll] = useState(true);
   const [mcp, setMcp] = useState<McpStatus | null>(null);
+  const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [page, setPage] = useState<Page>("terminal");
   const [signals, setSignals] = useState<Record<number, SignalsInfo>>({});
   const storeSignals = useCallback(
@@ -244,6 +247,8 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
         );
         keep(await backend.onSignalsChanged(storeSignals));
         keep(await backend.onPortsChanged(applyPorts));
+        keep(await backend.onApprovalsChanged(setApprovals));
+        setApprovals(await backend.pendingApprovals());
         const list = await backend.listSessions();
         if (!disposed) applySessions(list);
         const status = await backend.mcpStatus();
@@ -918,6 +923,14 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
           </button>
         </div>
       </main>
+      <ApprovalDialog
+        t={t}
+        queue={approvals}
+        onAnswer={(id, decision) => {
+          setApprovals((queue) => queue.filter((r) => r.id !== id));
+          backend.answerApproval(id, decision).catch((e: unknown) => setError(errorMessage(e)));
+        }}
+      />
     </div>
   );
 }
