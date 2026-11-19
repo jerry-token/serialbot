@@ -443,6 +443,15 @@ async fn extra_commands_are_listed_and_called() {
         h.device("mock0").breaks(),
         [Duration::from_millis(250), Duration::from_millis(10)]
     );
+    let log = ok(&client, "io.read", json!({"session": "s1"})).await;
+    let marks: Vec<&str> = log["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["kind"] == "marker" && e["ai"] == true)
+        .map(|e| e["data"].as_str().unwrap())
+        .collect();
+    assert_eq!(marks, ["BREAK 250 ms", "BREAK 10 ms"]);
 
     for (args, why) in [
         (

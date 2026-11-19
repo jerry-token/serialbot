@@ -54,7 +54,9 @@ const PORT_TICKS: u32 = 120;
 )]
 mod ipc {
     use super::approval::{ApprovalRequest, Approvals, Decision};
-    use super::commands::{AppState, LogChunk, OpenRequest, PortDto, SessionDto, SignalsDto};
+    use super::commands::{
+        AppState, LogChunk, OpenRequest, PortDto, SessionDto, SignalStep, SignalsDto,
+    };
     use super::export::{CaptureStatus, ExportFormat, ExportSummary};
     use super::filesend::FileSendStatus;
     use super::mcp::{McpController, McpStatus};
@@ -247,6 +249,24 @@ mod ipc {
         state.set_signals(id, dtr, rts)
     }
 
+    #[tauri::command(async)]
+    pub(crate) fn run_signals(
+        state: tauri::State<'_, AppState>,
+        id: u32,
+        steps: Vec<SignalStep>,
+    ) -> Result<SignalsDto, String> {
+        state.run_signals(id, &steps)
+    }
+
+    #[tauri::command(async)]
+    pub(crate) fn send_break(
+        state: tauri::State<'_, AppState>,
+        id: u32,
+        ms: u32,
+    ) -> Result<(), String> {
+        state.send_break(id, ms)
+    }
+
     #[tauri::command]
     pub(crate) async fn mcp_status(
         mcp: tauri::State<'_, McpController>,
@@ -414,6 +434,8 @@ pub fn run() -> Result<(), tauri::Error> {
             ipc::repeat_status,
             ipc::signals,
             ipc::set_signals,
+            ipc::run_signals,
+            ipc::send_break,
             ipc::mcp_status,
             ipc::mcp_apply,
             ipc::mcp_regenerate_token,

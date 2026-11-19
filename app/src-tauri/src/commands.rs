@@ -259,6 +259,26 @@ pub struct SignalsDto {
     pub cd: Option<bool>,
 }
 
+/// One step of a DTR/RTS sequence: set the lines given, then wait.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignalStep {
+    /// New DTR level, or `None` to leave it.
+    pub dtr: Option<bool>,
+    /// New RTS level, or `None` to leave it.
+    pub rts: Option<bool>,
+    /// Pause after setting the lines, in milliseconds.
+    #[serde(default)]
+    pub wait_ms: u32,
+}
+
+/// Most steps of one sequence.
+pub const MAX_SEQUENCE_STEPS: usize = 64;
+/// Longest total pause of one sequence, in milliseconds.
+pub const MAX_SEQUENCE_MS: u64 = 10_000;
+/// Longest BREAK, in milliseconds.
+pub const MAX_BREAK_MS: u32 = 5_000;
+
 /// Reads the line levels of `session`; input lines are `None` when they
 /// cannot be read (closed session, PTY, unsupported adapter).
 pub fn signals_dto(session: &Session) -> SignalsDto {
@@ -459,6 +479,48 @@ impl AppState {
             session.set_rts(level).map_err(|e| e.to_string())?;
         }
         Ok(signals_dto(&session))
+    }
+
+    /// Runs a DTR/RTS sequence (for example a reset or boot-mode pulse)
+    /// with the pauses timed here rather than across IPC calls. Every
+    /// change is logged like [`AppState::set_signals`]. Refuses more than
+    /// [`MAX_SEQUENCE_STEPS`] steps or more than [`MAX_SEQUENCE_MS`] of
+    /// pauses before touching a line; stops at the first failing step.
+    pub fn run_signals(&self, id: u32, steps: &[SignalStep]) -> Result<SignalsDto, String> {
+        if steps.len() > MAX_SEQUENCE_STEPS {
+            return Err(format!("a sequence has at most {MAX_SEQUENCE_STEPS} steps"));
+        }
+        let total: u64 = steps.iter().map(|s| u64::from(s.wait_ms)).sum();
+        if total > MAX_SEQUENCE_MS {
+            return Err(format!(
+                "a sequence pauses at most {MAX_SEQUENCE_MS} ms in all"
+            ));
+        }
+        let session = self.manager.get(SessionId(id)).map_err(|e| e.to_string())?;
+        for step in steps {
+            if let Some(level) = step.dtr {
+                session.set_dtr(level).map_err(|e| e.to_string())?;
+            }
+            if let Some(level) = step.rts {
+                session.set_rts(level).map_err(|e| e.to_string())?;
+            }
+            if step.wait_ms > 0 {
+                std::thread::sleep(std::time::Duration::from_millis(u64::from(step.wait_ms)));
+            }
+        }
+        Ok(signals_dto(&session))
+    }
+
+    /// Holds a BREAK for `ms` milliseconds (1 to [`MAX_BREAK_MS`]); it is
+    /// logged as a marker.
+    pub fn send_break(&self, id: u32, ms: u32) -> Result<(), String> {
+        if !(1..=MAX_BREAK_MS).contains(&ms) {
+            return Err(format!("a BREAK lasts 1 to {MAX_BREAK_MS} ms"));
+        }
+        let session = self.manager.get(SessionId(id)).map_err(|e| e.to_string())?;
+        session
+            .send_break(std::time::Duration::from_millis(u64::from(ms)))
+            .map_err(|e| e.to_string())
     }
 
     /// Encodes typed text for sending in a non-UTF-8 encoding (WHATWG
@@ -770,6 +832,61 @@ mod tests {
         assert_eq!((set.dtr, set.rts), (Some(true), Some(false)));
         assert!(device.dtr() && !device.rts());
         assert!(app.signals(9).unwrap_err().contains("no session"));
+
+        // A reset pulse: both lines set, a pause, then DTR back.
+        let start = std::time::Instant::now();
+        let steps = [
+            SignalStep {
+                dtr: Some(false),
+                rts: Some(true),
+                wait_ms: 30,
+            },
+            SignalStep {
+                rts: Some(false),
+                ..SignalStep::default()
+            },
+        ];
+        let after = app.run_signals(1, &steps).unwrap();
+        assert!(start.elapsed() >= std::time::Duration::from_millis(30));
+        assert_eq!((after.dtr, after.rts), (Some(false), Some(false)));
+        let too_many = vec![SignalStep::default(); MAX_SEQUENCE_STEPS + 1];
+        assert!(app.run_signals(1, &too_many).unwrap_err().contains("steps"));
+        let too_long = [SignalStep {
+            wait_ms: 10_001,
+            ..SignalStep::default()
+        }];
+        assert!(app.run_signals(1, &too_long).unwrap_err().contains("ms"));
+        assert!(
+            app.run_signals(9, &steps)
+                .unwrap_err()
+                .contains("no session")
+        );
+        let parsed: SignalStep = serde_json::from_str(r#"{"dtr":true,"rts":null}"#).unwrap();
+        assert_eq!(
+            parsed,
+            SignalStep {
+                dtr: Some(true),
+                rts: None,
+                wait_ms: 0
+            }
+        );
+
+        app.send_break(1, 20).unwrap();
+        assert_eq!(device.breaks(), [std::time::Duration::from_millis(20)]);
+        assert!(app.send_break(1, 0).unwrap_err().contains("1 to 5000"));
+        assert!(app.send_break(1, 5001).is_err());
+        assert!(app.send_break(9, 20).unwrap_err().contains("no session"));
+        let labels: Vec<String> = app
+            .read(1, 0, 4096)
+            .unwrap()
+            .entries
+            .into_iter()
+            .filter_map(|e| e.label)
+            .collect();
+        assert_eq!(
+            labels,
+            ["DTR=1", "RTS=0", "DTR=0", "RTS=1", "RTS=0", "BREAK 20 ms"]
+        );
         assert!(app.set_signals(9, Some(true), None).is_err());
 
         device.disconnect();
