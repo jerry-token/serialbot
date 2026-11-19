@@ -388,6 +388,40 @@ main > section.hero {
   color: var(--ink-soft);
 }
 
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 32px 28px;
+  margin-top: 28px;
+  max-width: 1100px;
+}
+
+.gallery figure {
+  margin: 0;
+}
+
+.gallery img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--grid);
+  border-radius: 8px;
+}
+
+.gallery figcaption {
+  margin-top: 10px;
+  color: var(--ink-soft);
+  font-size: 15px;
+  max-width: 62ch;
+}
+
+@media (max-width: 720px) {
+  .gallery {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .mcp pre {
   max-width: 76ch;
   margin: 20px 0;

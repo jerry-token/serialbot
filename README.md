@@ -82,7 +82,13 @@ You stay in charge. Every change to a port needs your approval, and every line t
 
 | Dark | Light |
 |:---:|:---:|
-| <img src="docs/images/terminal-dark.png" alt="Terminal in the dark theme: an agent's commands tagged AI, keywords highlighted, Δt column"> | <img src="docs/images/terminal-light.png" alt="The same terminal in the light theme"> |
+| <img src="docs/images/terminal-dark.png" alt="Terminal in the dark theme: an agent's commands tagged AI next to a command sent from the list, line numbers, Δt, a bookmarked line and the command list"> | <img src="docs/images/terminal-light.png" alt="The same terminal in the light theme"> |
+
+| 📈 Plot | 🖥️ Terminal mode |
+|:---:|:---:|
+| <img src="docs/images/plot-dark.png" alt="Temperature, humidity and pressure from the log drawn as live curves, each on its own scale, with the values under the cursor"> | <img src="docs/images/tty-dark.png" alt="Terminal mode: vim editing a Zephyr main.c on a board's shell"> |
+| **📋 Command list in its own window** | **❓ Help page** |
+| <img src="docs/images/command-window.png" alt="The main window next to the command window, which sends the Demo board commands to esp32"> | <img src="docs/images/help-dark.png" alt="Help page: what SerialBot is for, getting started, and what each control does"> |
 
 <details>
 <summary>✅ Approving what an AI agent wants to do</summary>
@@ -101,7 +107,7 @@ You stay in charge. Every change to a port needs your approval, and every line t
 <details>
 <summary>⚙️ Settings</summary>
 
-<img src="docs/images/settings-dark.png" width="800" alt="Settings page: theme, log font size, lines kept, keep on top">
+<img src="docs/images/settings-dark.png" width="800" alt="Settings page: theme, language, log font size, lines kept, keep on top">
 
 </details>
 
