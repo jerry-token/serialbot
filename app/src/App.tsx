@@ -36,6 +36,9 @@ import { McpPanel } from "./components/McpPanel";
 import { ApprovalDialog } from "./components/ApprovalDialog";
 import { Bookmarks } from "./components/Bookmarks";
 import { TtyView } from "./components/TtyView";
+import { PlotView } from "./components/PlotView";
+import { type ChartFactory, type ChartTheme, chartThemeFromCss, loadUplotChart } from "./chart";
+import { PlotData } from "./plot";
 import { loadXtermScreen, type ScreenFactory, type ScreenTheme, themeFromCss } from "./screen";
 import { SaveMenu } from "./components/SaveMenu";
 import { SendBar, type SendSettings } from "./components/SendBar";
@@ -93,6 +96,8 @@ interface Props {
   storage?: Storage | null;
   /** Terminal emulator for terminal mode (replaceable in tests). */
   createScreen?: ScreenFactory;
+  /** Chart for the Plot view (replaceable in tests). */
+  createChart?: ChartFactory;
 }
 
 /** What the window keeps per session: its rendered log and read position. */
@@ -108,6 +113,8 @@ interface SessionView {
   ended: boolean;
   /** Ids of bookmarked lines (lost when the view is re-rendered). */
   bookmarks: Set<number>;
+  /** Plotted numbers, made when the Plot view is first opened for the session. */
+  plot?: PlotData;
 }
 
 const nowUs = () => Date.now() * 1000;
@@ -120,6 +127,7 @@ export function App({
   copy = defaultCopy,
   storage = browserStorage(),
   createScreen = loadXtermScreen,
+  createChart = loadUplotChart,
 }: Props) {
   // App preferences, read first: the language decides every string.
   const [prefs, setPrefs] = useState(() => loadPrefs(storage));
@@ -172,6 +180,9 @@ export function App({
   const [ttyIds, setTtyIds] = useState<ReadonlySet<number>>(new Set());
   /** Colors for terminal mode, read after each theme change. */
   const [screenTheme, setScreenTheme] = useState<ScreenTheme | null>(null);
+  /** Sessions showing the Plot view. */
+  const [plotIds, setPlotIds] = useState<ReadonlySet<number>>(new Set());
+  const [chartTheme, setChartTheme] = useState<ChartTheme | null>(null);
   const [jumpTo, setJumpTo] = useState<{ id: number; seq: number } | null>(null);
   const [filterMatches, setFilterMatches] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -341,6 +352,7 @@ export function App({
       applyAppearance(document.documentElement, prefs, media?.matches ?? false);
       // Terminal mode draws with the palette now in effect.
       setScreenTheme(themeFromCss(getComputedStyle(document.documentElement)));
+      setChartTheme(chartThemeFromCss(getComputedStyle(document.documentElement)));
     };
     apply();
     media?.addEventListener("change", apply);
@@ -461,6 +473,27 @@ export function App({
     } catch (e) {
       setError(errorMessage(e));
     }
+  };
+  // The Plot view: numbers from received lines, kept from the first opening on.
+  const togglePlot = (on: boolean) => {
+    if (activeId === null || !activeView) return;
+    if (on && !activeView.plot) {
+      const data = new PlotData();
+      for (const chunk of activeView.terminal.receivedChunks()) {
+        data.push(chunk.bytes, chunk.timestampUs);
+      }
+      activeView.terminal.subscribe((event) => {
+        if (event.kind === "rx") data.push(event.bytes, event.timestampUs);
+        else data.clear();
+      });
+      activeView.plot = data;
+    }
+    setPlotIds((ids) => {
+      const next = new Set(ids);
+      if (on) next.add(activeId);
+      else next.delete(activeId);
+      return next;
+    });
   };
   const toggleTty = (on: boolean) => {
     if (activeId === null) return;
@@ -823,6 +856,12 @@ export function App({
               onClose={(id) => void close(id)}
             >
               <Toggle
+                label={t.plot}
+                hint={t.plotHint}
+                pressed={activeId !== null && plotIds.has(activeId)}
+                onChange={togglePlot}
+              />
+              <Toggle
                 label={t.tty}
                 hint={t.ttyHint}
                 pressed={activeId !== null && ttyIds.has(activeId)}
@@ -937,6 +976,17 @@ export function App({
             <div className="work">
               {active ? (
                 <div className="log-area">
+                  {activeId !== null && plotIds.has(activeId) && activeView?.plot && (
+                    <PlotView
+                      key={`plot-${activeId}`}
+                      data={activeView.plot}
+                      createChart={createChart}
+                      theme={chartTheme ?? chartThemeFromCss(document.documentElement.style)}
+                      emptyText={t.plotEmpty}
+                      label={t.plotLabel(active.alias ?? active.port)}
+                      onError={setError}
+                    />
+                  )}
                   {activeId !== null && ttyIds.has(activeId) && activeView ? (
                     <TtyView
                       key={activeId}

@@ -48,6 +48,7 @@
   "Connect": "Many ports at once, TCP client and server, UDP, auto-reconnect after replugging.",
   "Receive": "Text or HEX with millisecond timestamps, ANSI colors, GBK and other encodings, frame gaps, search and filter, keyword highlight, line numbers and bookmarks.",
   "Terminal mode": "A full terminal emulator on any session: log in to a Linux board, run <code>top</code> or <code>vi</code>.",
+  "Plot": "Numbers in received lines, such as <code>temp=23.6 hum=41</code> or <code>1.2, 3.4</code>, drawn as live curves.",
   "Send": "Multi-line text or HEX, checksums (CRC-8/16/32, XOR, SUM, LRC), timed send, command lists, files.",
   "Signals": "DTR and RTS switches, line lamps, BREAK, timed sequences such as a reset pulse.",
   "Small": "About 4.5 MB to install on Windows, or a single portable exe. Linux x64 and arm64, macOS universal."

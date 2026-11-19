@@ -93,7 +93,9 @@ interface RawEntry {
 type RawItem = { entry: RawEntry } | { info: string; timestampUs: number };
 
 /** What a terminal-mode screen is told: received bytes, or that the log was cleared. */
-export type RawEvent = { kind: "rx"; bytes: Uint8Array } | { kind: "clear" };
+export type RawEvent =
+  | { kind: "rx"; bytes: Uint8Array; timestampUs: number }
+  | { kind: "clear" };
 
 export class Terminal {
   /** Kept items are raw[rawHead..]; dropping advances the head (O(1)). */
@@ -186,10 +188,17 @@ export class Terminal {
    * replay them (bounded by `maxRawBytes`, like re-rendering).
    */
   received(): Uint8Array[] {
-    const out: Uint8Array[] = [];
+    return this.receivedChunks().map((c) => c.bytes);
+  }
+
+  /** Like `received`, with each chunk's arrival time. */
+  receivedChunks(): Array<{ bytes: Uint8Array; timestampUs: number }> {
+    const out: Array<{ bytes: Uint8Array; timestampUs: number }> = [];
     for (let i = this.rawHead; i < this.raw.length; i++) {
       const item = this.raw[i];
-      if (item && "entry" in item && item.entry.kind === "rx") out.push(item.entry.bytes);
+      if (item && "entry" in item && item.entry.kind === "rx") {
+        out.push({ bytes: item.entry.bytes, timestampUs: item.entry.timestampUs });
+      }
     }
     return out;
   }
@@ -213,7 +222,8 @@ export class Terminal {
       this.keep({ entry }, entry.bytes.length);
       this.render({ entry });
       if (entry.kind === "rx") {
-        for (const l of this.listeners) l({ kind: "rx", bytes: entry.bytes });
+        const event = { kind: "rx" as const, bytes: entry.bytes, timestampUs: entry.timestampUs };
+        for (const l of this.listeners) l(event);
       }
     }
     this.trimLines();

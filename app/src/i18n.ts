@@ -41,6 +41,10 @@ const en = {
   showDeltaHint: "Show the time since the line before (frame gaps in HEX view)",
   showLineNumbers: "#",
   showLineNumbersHint: "Show line numbers",
+  plot: "Plot",
+  plotHint: "Plot numbers from received lines: name=value pairs, or numbers separated by commas",
+  plotEmpty: "No numbers yet. Lines like temp=23.6 hum=41 or 1.2, 3.4 are plotted as they arrive.",
+  plotLabel: (name: string) => `Plot of the numbers from ${name}`,
   tty: "TTY",
   ttyHint:
     "Terminal mode: a full terminal (cursor, colors, full-screen programs); " +
@@ -251,6 +255,10 @@ const zh: Strings = {
   showDeltaHint: "显示与上一行的时间差（HEX 视图下即帧间隔）",
   showLineNumbers: "#",
   showLineNumbersHint: "显示行号",
+  plot: "波形",
+  plotHint: "把接收到的数值画成曲线：name=value 形式，或用逗号分隔的数字",
+  plotEmpty: "还没有数值。像 temp=23.6 hum=41 或 1.2, 3.4 这样的行，收到后会实时画出来。",
+  plotLabel: (name: string) => `${name} 的数值曲线`,
   tty: "TTY",
   ttyHint: "终端模式：完整的终端（光标、颜色、全屏程序），按键直接发给设备",
   ttyLabel: (name: string) => `${name} 的终端`,
