@@ -1376,6 +1376,18 @@ describe("App", () => {
     expect(log()).toHaveTextContent("hum=40");
   });
 
+  it("shows line numbers that copying leaves out", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    act(() => backend.receive(1, "first\nsecond\n"));
+    await waitFor(() => expect(log()).toHaveTextContent("second"));
+    expect(log().querySelector(".ln")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Show line numbers" }));
+    const gutter = [...log().querySelectorAll(".ln")];
+    expect(gutter.map((n) => n.textContent)).toEqual(["1", "2"]);
+    expect(gutter[0]).toHaveAttribute("aria-hidden", "true");
+  });
+
   it("shows the time between lines", async () => {
     const { backend, user } = setup();
     await openPort(user);

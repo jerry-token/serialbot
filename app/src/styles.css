@@ -424,6 +424,17 @@ label.check {
   color: var(--muted);
 }
 
+.ln {
+  display: inline-block;
+  min-width: var(--gutter, 5ch);
+  margin-right: 1ch;
+  padding-right: 0.5ch;
+  color: var(--muted);
+  text-align: right;
+  border-right: 1px solid var(--border);
+  user-select: none;
+}
+
 .delta {
   display: inline-block;
   min-width: 7.5ch;

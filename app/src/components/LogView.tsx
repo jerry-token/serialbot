@@ -11,6 +11,8 @@ interface Props {
   showTimestamps: boolean;
   /** Show the time since the previous shown line. */
   showDelta?: boolean;
+  /** Show line numbers in a gutter. */
+  showLineNumbers?: boolean;
   autoScroll: boolean;
   /** Changes whenever the lines change, so the view scrolls. */
   version: number;
@@ -79,6 +81,7 @@ export function LogView({
   lines,
   showTimestamps,
   showDelta = false,
+  showLineNumbers = false,
   autoScroll,
   version,
   matches,
@@ -108,8 +111,16 @@ export function LogView({
     // `lines` changes with `version`; the virtualizer object is stable.
   }, [version, autoScroll, currentMatch, lines.length]);
 
+  // The gutter is as wide as the largest number shown.
+  const gutter = `${String(lines.at(-1)?.no ?? 0).length + 1}ch`;
   return (
-    <div className="log" ref={ref} role="log" aria-live="off">
+    <div
+      className="log"
+      ref={ref}
+      role="log"
+      aria-live="off"
+      style={{ "--gutter": gutter } as CSSProperties}
+    >
       <div className="log-rows" style={{ height: virtualizer.getTotalSize() }}>
         {virtualizer.getVirtualItems().map((item) => {
           const line = lines[item.index];
@@ -125,6 +136,11 @@ export function LogView({
               className={`line ${line.kind}${ai}${match}${current}`}
               style={{ transform: `translateY(${item.start}px)` }}
             >
+              {showLineNumbers && (
+                <span className="ln" aria-hidden="true">
+                  {line.no ?? ""}
+                </span>
+              )}
               {showTimestamps && <span className="ts">[{formatTime(line.timestampUs)}] </span>}
               {showDelta && (
                 <span className="delta">

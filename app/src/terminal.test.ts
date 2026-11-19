@@ -102,6 +102,31 @@ describe("Terminal hex view", () => {
   });
 });
 
+describe("Terminal line numbers", () => {
+  const numbers = (t: Terminal) => t.view.map((l) => `${l.no}:${l.text}`);
+
+  it("count lines and keep their numbers when old ones are trimmed", () => {
+    const t = new Terminal({ maxLines: 2, maxRawBytes: 1000 });
+    t.push([entry("rx", "a\nb\n"), entry("marker", "m"), entry("rx", "c")]);
+    expect(numbers(t)).toEqual(["3:m", "4:c"]);
+    // More data for the open line keeps its number.
+    t.push([entry("rx", "d\n")]);
+    expect(numbers(t)).toEqual(["3:m", "4:cd"]);
+  });
+
+  it("count again after clearing or re-rendering", () => {
+    const t = new Terminal();
+    t.push([entry("rx", "a\nb\n")]);
+    t.setHex(true);
+    expect(numbers(t)).toEqual(["1:61 0a 62 0a"]);
+    t.setHex(false);
+    expect(numbers(t)).toEqual(["1:a", "2:b"]);
+    t.clear();
+    t.push([entry("rx", "c\n")]);
+    expect(numbers(t)).toEqual(["1:c"]);
+  });
+});
+
 describe("Terminal limits", () => {
   it("drops the oldest lines", () => {
     const t = new Terminal({ maxLines: 2, maxRawBytes: 1000 });
