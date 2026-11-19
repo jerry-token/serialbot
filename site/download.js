@@ -1,5 +1,5 @@
 // Fills the download table from the newest GitHub release (pre-releases
-// included, since everything is alpha for now). Without JavaScript or if
+// included, since every release is a pre-release for now). Without JavaScript or if
 // GitHub cannot be reached, every link still points at the releases page.
 
 const RELEASES = "https://api.github.com/repos/jerry-token/serialbot/releases?per_page=1";

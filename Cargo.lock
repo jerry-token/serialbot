@@ -3312,7 +3312,7 @@ dependencies = [
 
 [[package]]
 name = "serialbot-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "dirs",
  "open",
@@ -3329,7 +3329,7 @@ dependencies = [
 
 [[package]]
 name = "serialbot-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bytes",
  "encoding_rs",
@@ -3341,7 +3341,7 @@ dependencies = [
 
 [[package]]
 name = "serialbot-mcp"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "axum",
  "getrandom 0.4.3",

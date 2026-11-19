@@ -69,7 +69,7 @@
  "dl_appimage": "其他 Linux x64",
  "dl_deb_arm": "Debian / Ubuntu arm64，树莓派 4/5",
  "dl_appimage_arm": "其他 Linux arm64",
- "download_note": "SerialBot 目前是 Alpha 版，安装包还没有签名，macOS 和 Windows 首次打开会有提示，发布说明里写了打开方法。",
+ "download_note": "SerialBot 目前是 Beta 版，安装包还没有签名，macOS 和 Windows 首次打开会有提示，发布说明里写了打开方法。",
  "footer_license": "SerialBot 以 GPL-3.0 开源。",
  "footer_issues": "反馈问题",
  "verify_title": "值得信任的 Agent，会自己验证",
