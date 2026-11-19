@@ -1113,3 +1113,16 @@ mark.kw {
 .bookmark-list {
   width: 420px;
 }
+
+/* Terminal mode */
+.tty {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 0 0 8px;
+  background: var(--log-bg);
+  overflow: hidden;
+}
+
+.tty .xterm {
+  height: 100%;
+}
