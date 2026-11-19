@@ -1572,6 +1572,7 @@ describe("Settings page", () => {
     await waitFor(() => expect(backend.onTop).toEqual([false, true]));
     expect(JSON.parse(storage.getItem("serialbot.preferences") ?? "{}")).toEqual({
       theme: "light",
+      language: "system",
       fontSize: 24,
       maxLines: 1000,
       alwaysOnTop: true,
@@ -1609,6 +1610,36 @@ describe("Settings page", () => {
     await user.click(screen.getByRole("button", { name: "Terminal" }));
     await waitFor(() => expect(log()).not.toHaveTextContent("row499\n"));
     expect(log().querySelector(".line")?.textContent).toContain("row500");
+  });
+});
+
+describe("Language setting", () => {
+  it("switches the whole window between English and Chinese", async () => {
+    const { user, storage } = setup();
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    await user.selectOptions(screen.getByLabelText("Language"), "zh");
+    // Every string follows at once, the picker included.
+    expect(screen.getByRole("region", { name: "设置" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "终端" })).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe("zh-CN");
+    expect(JSON.parse(storage.getItem("serialbot.preferences") ?? "{}").language).toBe("zh");
+    const picker = screen.getByLabelText("语言");
+    expect([...picker.querySelectorAll("option")].map((o) => o.textContent)).toEqual([
+      "跟随系统",
+      "English",
+      "简体中文",
+    ]);
+    // "Follow the system" goes back to the language the system reports (English here).
+    await user.selectOptions(picker, "system");
+    expect(screen.getByRole("region", { name: "Settings" })).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe("en");
+  });
+
+  it("starts in the stored language", () => {
+    const storage = memoryStorage();
+    storage.setItem("serialbot.preferences", JSON.stringify({ language: "zh" }));
+    setup(new FakeBackend(), undefined, storage);
+    expect(screen.getByRole("button", { name: "设置" })).toBeInTheDocument();
   });
 });
 

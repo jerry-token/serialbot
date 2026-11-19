@@ -4,6 +4,7 @@ import {
   FONT_SIZE_RANGE,
   MAX_LINES_RANGE,
   normalize,
+  type Language,
   type Preferences,
   type Theme,
 } from "../prefs";
@@ -15,6 +16,12 @@ interface Props {
 }
 
 const THEMES: Theme[] = ["system", "light", "dark"];
+/** Languages are named in themselves, so anyone can find their own. */
+const LANGUAGES: Array<[Language, string | null]> = [
+  ["system", null],
+  ["en", "English"],
+  ["zh", "简体中文"],
+];
 
 /**
  * App preferences. Choices apply at once; the number fields apply when
@@ -67,6 +74,20 @@ export function SettingsPanel({ t, prefs, onChange }: Props) {
           {THEMES.map((theme) => (
             <option key={theme} value={theme}>
               {t.themeNames[theme]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        {t.language}
+        <select
+          aria-label={t.language}
+          value={prefs.language}
+          onChange={(e) => apply({ language: e.target.value })}
+        >
+          {LANGUAGES.map(([value, name]) => (
+            <option key={value} value={value}>
+              {name ?? t.languageSystem}
             </option>
           ))}
         </select>

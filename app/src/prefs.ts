@@ -1,9 +1,15 @@
 // App-wide preferences, kept in local storage.
 
+import type { Lang } from "./i18n";
+
 export type Theme = "system" | "light" | "dark";
+
+/** UI language; "system" follows the operating system's language. */
+export type Language = "system" | Lang;
 
 export interface Preferences {
   theme: Theme;
+  language: Language;
   /** Log font size in pixels. */
   fontSize: number;
   /** Most log lines kept per session in the window. */
@@ -14,6 +20,7 @@ export interface Preferences {
 
 export const DEFAULT_PREFS: Preferences = {
   theme: "system",
+  language: "system",
   fontSize: 12.5,
   maxLines: 50_000,
   alwaysOnTop: false,
@@ -27,7 +34,8 @@ const KEY = "serialbot.preferences";
 const clamp = (v: number, [lo, hi]: readonly [number, number]) => Math.min(Math.max(v, lo), hi);
 
 /**
- * Brings stored or typed values into range: unknown themes become "system",
+ * Brings stored or typed values into range: unknown themes and languages
+ * become "system",
  * numbers are clamped (line counts rounded to whole lines), anything
  * missing or of the wrong type takes its default.
  */
@@ -37,6 +45,7 @@ export function normalize(value: unknown): Preferences {
     typeof x === "number" && Number.isFinite(x) ? x : fallback;
   return {
     theme: v.theme === "light" || v.theme === "dark" ? v.theme : "system",
+    language: v.language === "en" || v.language === "zh" ? v.language : "system",
     fontSize: clamp(num(v.fontSize, DEFAULT_PREFS.fontSize), FONT_SIZE_RANGE),
     maxLines: Math.round(clamp(num(v.maxLines, DEFAULT_PREFS.maxLines), MAX_LINES_RANGE)),
     alwaysOnTop: v.alwaysOnTop === true,
@@ -60,6 +69,11 @@ export function savePrefs(storage: Storage | null, prefs: Preferences): void {
   } catch {
     // Private mode or a full quota: the preferences just are not kept.
   }
+}
+
+/** The language to show: "system" follows `systemLang`. */
+export function resolveLanguage(language: Language, systemLang: Lang): Lang {
+  return language === "system" ? systemLang : language;
 }
 
 /** The theme to show: "system" follows `prefersDark`. */

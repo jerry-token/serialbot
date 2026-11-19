@@ -4,6 +4,7 @@ import {
   applyAppearance,
   loadPrefs,
   normalize,
+  resolveLanguage,
   resolveTheme,
   savePrefs,
 } from "./prefs";
@@ -26,15 +27,30 @@ describe("preferences", () => {
   it("round-trip through storage", () => {
     const storage = memory();
     expect(loadPrefs(storage)).toEqual(DEFAULT_PREFS);
-    const prefs = { theme: "dark" as const, fontSize: 15, maxLines: 200_000, alwaysOnTop: true };
+    const prefs = {
+      theme: "dark" as const,
+      language: "zh" as const,
+      fontSize: 15,
+      maxLines: 200_000,
+      alwaysOnTop: true,
+    };
     savePrefs(storage, prefs);
     expect(loadPrefs(storage)).toEqual(prefs);
     expect(loadPrefs(null)).toEqual(DEFAULT_PREFS);
   });
 
   it("bring bad values into range", () => {
-    expect(normalize({ theme: "neon", fontSize: 99, maxLines: 12.7, alwaysOnTop: "yes" })).toEqual({
+    expect(
+      normalize({
+        theme: "neon",
+        language: "fr",
+        fontSize: 99,
+        maxLines: 12.7,
+        alwaysOnTop: "yes",
+      }),
+    ).toEqual({
       theme: "system",
+      language: "system",
       fontSize: 24,
       maxLines: 1_000,
       alwaysOnTop: false,
@@ -63,6 +79,8 @@ describe("preferences", () => {
     expect(resolveTheme("system", true)).toBe("dark");
     expect(resolveTheme("system", false)).toBe("light");
     expect(resolveTheme("light", true)).toBe("light");
+    expect(resolveLanguage("system", "zh")).toBe("zh");
+    expect(resolveLanguage("en", "zh")).toBe("en");
     const root = document.createElement("div");
     applyAppearance(root, { ...DEFAULT_PREFS, theme: "dark", fontSize: 16 }, false);
     expect(root.dataset.theme).toBe("dark");

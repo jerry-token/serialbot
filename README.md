@@ -54,7 +54,7 @@ English · [简体中文](README.zh-CN.md)
 
 **Comfortable**
 - 🌗 Light, dark or system theme; log font size; lines kept per session; keep the window on top.
-- 🌏 English and Chinese.
+- 🌏 English and Chinese, following the system or chosen in Settings.
 
 ## 📸 Screenshots
 
