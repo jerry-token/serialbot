@@ -44,9 +44,12 @@ jobs:
           if [[ "$TAG" == *-* ]]; then prerelease=true; fi
           repo="${{ github.repository }}"
           # Re-running a release reuses it (as a draft again) instead of failing.
-          id=$(gh api "repos/$repo/releases/tags/$TAG" --jq .id 2>/dev/null || true)
+          # Drafts are found by name: one whose tag was never created has none.
+          id=$(gh api "repos/$repo/releases?per_page=50" \
+            --jq ".[] | select(.name == \"SerialBot $TAG\") | .id" | head -n1)
           if [[ "$id" =~ ^[0-9]+$ ]]; then
             gh api -X PATCH "repos/$repo/releases/$id" -F draft=true \
+              -f tag_name="$TAG" -f target_commitish="$GITHUB_SHA" \
               -F prerelease=$prerelease -F body=@.github/release-notes.md --jq .id
           else
             # A pushed tag already exists; a manual run creates it on this commit.
@@ -134,7 +137,13 @@ jobs:
           api="repos/${{ github.repository }}/releases/$RELEASE_ID"
           sizes=$(gh api "$api" | python3 .github/scripts/release_sizes.py)
           printf '%s\n\n%s\n' "$(cat .github/release-notes.md)" "$sizes" > notes.md
-          gh api -X PATCH "$api" -F body=@notes.md --jq .id
-      - env:
+          # A draft whose tag does not exist yet loses it on any edit that
+          # leaves tag_name out, so it is always sent.
+          gh api -X PATCH "$api" -f tag_name="$TAG" -F body=@notes.md --jq .id
+      - name: Publish
+        env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release edit "$TAG" --draft=false --repo "${{ github.repository }}"
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+        run: |
+          gh api -X PATCH "repos/${{ github.repository }}/releases/$RELEASE_ID" \
+            -f tag_name="$TAG" -F draft=false --jq '"\(.tag_name) published: \(.html_url)"'
