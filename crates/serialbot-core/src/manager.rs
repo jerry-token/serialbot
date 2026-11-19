@@ -103,6 +103,9 @@ struct Registry {
     configs: HashMap<SessionId, SerialConfig>,
     /// Sessions to reconnect automatically.
     auto: HashSet<SessionId>,
+    /// Sessions whose port was handed back on purpose: not reconnected
+    /// automatically until reopened by hand.
+    released: HashSet<SessionId>,
 }
 
 impl SessionManager {
@@ -233,8 +236,37 @@ impl SessionManager {
         let result = (self.opener)(&config)
             .map_err(ManagerError::from)
             .and_then(|connection| session.reattach(connection).map_err(ManagerError::from));
-        self.lock().opening.remove(&key);
+        let mut reg = self.lock();
+        reg.opening.remove(&key);
+        if result.is_ok() {
+            reg.released.remove(&id);
+        }
         result
+    }
+
+    /// Hands a session's port back to the operating system, keeping the
+    /// session and its log (see [`Session::release`]). Automatic
+    /// reconnecting leaves it alone until [`SessionManager::reconnect`]
+    /// reopens it.
+    pub fn release(&self, id: SessionId) -> Result<(), ManagerError> {
+        let session = self.get(id)?;
+        session.release()?;
+        self.lock().released.insert(id);
+        Ok(())
+    }
+
+    /// Changes a session's baud rate without closing the port, and
+    /// remembers it for reconnecting.
+    pub fn set_baud_rate(&self, id: SessionId, baud_rate: u32) -> Result<(), ManagerError> {
+        if baud_rate == 0 {
+            return Err(TransportError::InvalidConfig("baud rate must be positive".into()).into());
+        }
+        let session = self.get(id)?;
+        session.set_baud_rate(baud_rate)?;
+        if let Some(config) = self.lock().configs.get_mut(&id) {
+            config.baud_rate = baud_rate;
+        }
+        Ok(())
     }
 
     /// Turns automatic reconnecting of a session on or off.
@@ -261,6 +293,7 @@ impl SessionManager {
             reg.auto
                 .iter()
                 .copied()
+                .filter(|id| !reg.released.contains(id))
                 .filter(|id| {
                     reg.sessions.get(id).is_some_and(|s| {
                         matches!(
@@ -339,6 +372,7 @@ impl SessionManager {
             let mut reg = self.lock();
             reg.configs.remove(&id);
             reg.auto.remove(&id);
+            reg.released.remove(&id);
             reg.sessions
                 .remove(&id)
                 .ok_or(ManagerError::UnknownSession(id))?
@@ -456,6 +490,78 @@ mod tests {
         while s.state() == SessionState::Open {
             std::thread::sleep(Duration::from_millis(1));
         }
+    }
+
+    #[test]
+    fn released_ports_wait_for_a_manual_reopen() {
+        let (m, _present, devices) = pluggable();
+        let s = m.open(&cfg("COM3"), None).unwrap();
+        m.set_auto_reconnect(s.id(), true).unwrap();
+        m.release(s.id()).unwrap();
+        assert_eq!(s.state(), SessionState::Disconnected);
+        assert!(s.write(b"x").is_err(), "nothing to write to");
+        let labels: Vec<String> = s
+            .read(crate::Cursor(0), usize::MAX)
+            .unwrap()
+            .entries
+            .into_iter()
+            .filter_map(|e| match e.kind {
+                crate::EntryKind::Marker { label } => Some(label),
+                crate::EntryKind::Data { .. } => None,
+            })
+            .collect();
+        assert_eq!(labels, ["released"]);
+
+        assert!(
+            m.reconnect_lost().is_empty(),
+            "auto-reconnect leaves it alone"
+        );
+        assert_eq!(devices.lock().unwrap().len(), 1);
+        m.reconnect(s.id()).unwrap();
+        assert_eq!(s.state(), SessionState::Open);
+        assert_eq!(devices.lock().unwrap().len(), 2, "opened again");
+        s.write(b"hi").unwrap();
+        assert_eq!(devices.lock().unwrap()[1].take_written(), b"hi");
+
+        // Once reopened, a lost device is reconnected automatically again.
+        unplug(&s, &devices, 1);
+        assert_eq!(m.reconnect_lost(), [s.id()]);
+
+        // A lost session can be released too; a closed one cannot.
+        unplug(&s, &devices, 2);
+        m.release(s.id()).unwrap();
+        m.close(s.id()).unwrap();
+        assert!(m.release(s.id()).is_err());
+        assert!(matches!(
+            m.release(SessionId(99)),
+            Err(ManagerError::UnknownSession(_))
+        ));
+        m.remove(s.id()).unwrap();
+    }
+
+    #[test]
+    fn baud_rate_changes_apply_now_and_on_reconnect() {
+        let bauds = Arc::new(Mutex::new(Vec::new()));
+        let devices = Arc::new(Mutex::new(Vec::new()));
+        let (b, d) = (Arc::clone(&bauds), Arc::clone(&devices));
+        let m = SessionManager::new(
+            Box::new(move |c: &SerialConfig| {
+                b.lock().unwrap().push(c.baud_rate);
+                let (conn, dev) = mock::connection(&c.path, Duration::from_millis(5));
+                d.lock().unwrap().push(dev);
+                Ok(conn)
+            }),
+            Arc::new(ManualClock::new(0)),
+            SessionOptions::default(),
+        );
+        let s = m.open(&cfg("COM3"), None).unwrap();
+        m.set_baud_rate(s.id(), 921_600).unwrap();
+        assert_eq!(devices.lock().unwrap()[0].baud_rate(), 921_600);
+        assert!(m.set_baud_rate(s.id(), 0).is_err());
+        m.release(s.id()).unwrap();
+        assert!(m.set_baud_rate(s.id(), 9600).is_err(), "not open");
+        m.reconnect(s.id()).unwrap();
+        assert_eq!(*bauds.lock().unwrap(), [115_200, 921_600]);
     }
 
     #[test]

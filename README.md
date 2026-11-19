@@ -116,6 +116,11 @@ Get the file for your system from [Releases](https://github.com/jerry-token/seri
 | `io.wait_for` | Wait until received data matches a regex |
 | `io.send_and_expect` | Send a command and wait for the expected reply |
 | `io.signals` | Set DTR / RTS, read CTS / DSR / RI / CD |
+| `session.close` | Close a session's port; its log stays readable |
+| `session.release` / `session.reopen` | Hand the port to another tool (a flasher) and take it back; the log continues |
+| `session.configure` | Change the baud rate without closing the port |
+| `log.mark` / `log.query` | Set a named marker; summarize or search what happened after it |
+| `command.list` / `command.call` | Further commands: rename, auto-reconnect, send BREAK |
 
 ## 🗺️ Roadmap
 
