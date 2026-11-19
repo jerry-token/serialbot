@@ -15,6 +15,7 @@ import type {
 } from "./api";
 import { errorMessage, formatBytes, saveFileName } from "./api";
 import { encodeInput, withEndings } from "./bytes";
+import { withChecksum } from "./checksum";
 import {
   type Command,
   type CommandGroup,
@@ -108,6 +109,7 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
     text: "",
     hex: false,
     ending: "crlf",
+    checksum: "none",
     repeat: false,
     intervalMs: "1000",
   });
@@ -352,6 +354,7 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
     let data: Uint8Array;
     try {
       data = encodeInput(send.text, send.hex, send.ending);
+      if (send.hex) data = withChecksum(send.checksum, data);
     } catch {
       setError(t.invalidHex);
       return;
