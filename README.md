@@ -8,65 +8,78 @@
 
 [![CI](https://github.com/jerry-token/serialbot/actions/workflows/ci.yml/badge.svg)](https://github.com/jerry-token/serialbot/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/jerry-token/serialbot?include_prereleases&label=release&color=orange)](https://github.com/jerry-token/serialbot/releases)
-![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
+![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%28x64%2C%20arm64%29-blue)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green)](LICENSE)
 
 English · [简体中文](README.zh-CN.md)
 
-<img src="docs/images/demo.gif" width="800" alt="An AI agent opens a port over MCP, sends commands and waits for replies while the window shows every step">
+<img src="docs/images/demo.gif" width="800" alt="An AI agent asks to open a port and send commands; the user approves and the commands appear in the log tagged AI">
 
-<sub>☝️ Claude Code opens a dev board's port over MCP, sends commands and waits for the replies. The window shows every step.</sub>
+<sub>☝️ An AI agent opens a dev board's port over MCP and sends commands. You approve, and every step shows up in the window, tagged AI.</sub>
 
 </div>
 
 > [!NOTE]
-> 🚧 **Alpha.** The basics work. Please try it and [report problems](https://github.com/jerry-token/serialbot/issues).
+> 🚧 **Alpha.** Everyday debugging and AI control work. Please try it and [report problems](https://github.com/jerry-token/serialbot/issues).
 
 ## ✨ Features
 
-- 🪶 **Lightweight**: a Windows installer of about 4.5 MB, or a portable exe of about 19 MB that runs without installing.
-- 💻 **Cross-platform**: Windows, macOS (Apple Silicon and Intel) and Linux (x64 and arm64).
-- 🗂️ **Many ports at once**: one tab per port, each with its own log and counters.
-- 🌈 **Receive view**:
-  - text or HEX, with millisecond timestamps
-  - **ANSI colors** (Zephyr, ESP-IDF and other colored logs)
-  - encodings: UTF-8, GBK, GB18030, Big5, Shift_JIS and more
-  - auto frame split, pause, `Ctrl/Cmd+F` search
-  - stays smooth with tens of thousands of lines
-- ✍️ **Send**: multi-line text or HEX, with a choice of line ending. `Enter` sends, `Shift+Enter` adds a line, `↑` recalls history; timed send.
-  Data goes out as raw bytes, exactly as typed: no framing or protocol is added, only the line ending you pick (none for HEX).
-- 🧮 **Checksums** for HEX data: CRC-8, CRC-16 (Modbus, CCITT), CRC-32, XOR, SUM8 and LRC are appended as you send.
-- 🔎 **Search and filter**: `Ctrl/Cmd+F` finds text in the log; "Only matching lines" hides the rest. **Δt** shows the time since the line before, which in HEX view is the gap between frames.
-- 🖍️ **Keyword highlight**: list words such as `ERROR` or `WARN` in the display settings (⚙️) and they are marked in color wherever they appear.
-- ⚙️ **Settings**: light, dark or system theme, log font size, how many lines each session keeps, and keeping the window on top.
-- 📋 **Command lists**: saved commands in groups; click one to send it, or run a group in order with a delay after each.
-- 📄 **Send a file** in chunks, with an optional pause between chunks for devices without flow control.
-- 💾 **Save the log** once or keep writing it to a file as data arrives.
-- 🌐 **TCP and UDP** besides serial ports: TCP client, TCP server (one client at a time, connects and leaves are logged) and UDP. Pick the type at the left of the connection bar; for AI agents, open `tcp://host:port`, `tcp-server://:port` or `udp://host:port?local=:port` like a port.
-- 🔁 **Auto-reconnect**: unplug and replug the adapter and the session carries on; the port list follows hot-plug.
-- 🎛️ **Signals**: DTR / RTS switches, CTS / DSR / RI / CD lamps, and every change is marked in the log.
-  BRK sends a BREAK; ⏱ runs a timed DTR/RTS sequence such as `DTR=0 RTS=1, 100, RTS=0` (a reset pulse).
-- 🤖 **AI-ready**: a built-in MCP server lets Claude Code and other agents
-  - list and open ports
-  - send data and wait for a matching reply
-  - drive DTR / RTS
+**Light and everywhere**
+- 🪶 A Windows installer of about 4.5 MB, or a portable exe of about 19 MB that runs without installing.
+- 💻 Windows, macOS (Apple Silicon and Intel) and Linux (x64 and arm64, Raspberry Pi included).
 
-  A port you opened in the window can be used by the agent, and everything the agent sends shows up in the window,
-  tinted and tagged **AI**. Turn off **AI access** in the status bar to keep a session away from agents.
-  Before an agent sends data, toggles a line or opens, closes or reconfigures a port, SerialBot asks you:
-  allow once, allow for the session, or deny (unanswered requests are refused after 60 s).
-  You can turn the question off in the MCP settings.
+**Connect**
+- 🗂️ Many ports at once: one tab per port, each with its own log and counters.
+- 🌐 TCP client, TCP server and UDP besides serial ports; pick the type at the left of the connection bar.
+- 🔁 Unplug and replug the adapter and the session carries on; the port list follows hot-plug.
+- 🎛️ DTR / RTS switches, CTS / DSR / RI / CD lamps, **BRK** for a BREAK, and **⏱** for a timed DTR/RTS sequence such as `DTR=0 RTS=1, 100, RTS=0` (a reset pulse). Every change is marked in the log.
+
+**Receive**
+- 🌈 Text or HEX with millisecond timestamps, **ANSI colors** (Zephyr, ESP-IDF and other colored logs), and encodings such as UTF-8, GBK, GB18030, Big5 and Shift_JIS.
+- ✂️ Auto frame split by gap; **Δt** shows the time since the line before, so in HEX view you see the gaps between frames.
+- 🔎 `Ctrl/Cmd+F` search, "only matching lines" filter, and **keyword highlight** (`ERROR`, `WARN`, … in ⚙️).
+- ⏸️ Pause, and smooth scrolling through tens of thousands of lines.
+- 💾 Save the log once, or keep writing it to a file as data arrives.
+
+**Send**
+- ✍️ Multi-line text or HEX with a choice of line ending. `Enter` sends, `Shift+Enter` adds a line, `↑` recalls history. Data goes out as raw bytes, exactly as typed: only the line ending you pick is added.
+- 🧮 Checksums appended to HEX data: CRC-8, CRC-16 (Modbus, CCITT), CRC-32, XOR, SUM8, LRC.
+- ⏲️ Timed send, 📋 saved command lists (click to send, or run a group in order), and 📄 file send in chunks.
+
+**AI agents, under your control**
+- 🤖 A built-in MCP server lets Claude Code, Claude Desktop and other agents list and open ports, send data, wait for replies and drive DTR / RTS, on the same sessions you see in the window.
+- ✅ Before an agent sends data, toggles a line or opens, closes or reconfigures a port, SerialBot asks you: **allow once**, **allow for the session**, or **deny** (unanswered requests are refused after 60 s).
+- 🟣 Everything an agent did is tagged **AI** in the log; **AI access** in the status bar keeps a session away from agents.
+- 🔒 The server is off until you turn it on, listens on `127.0.0.1` only and needs a token.
+
+**Comfortable**
+- 🌗 Light, dark or system theme; log font size; lines kept per session; keep the window on top.
+- 🌏 English and Chinese.
 
 ## 📸 Screenshots
 
 | Dark | Light |
 |:---:|:---:|
-| <img src="docs/images/terminal-dark.png" alt="Terminal page in the dark theme"> | <img src="docs/images/terminal-light.png" alt="Terminal page in the light theme"> |
+| <img src="docs/images/terminal-dark.png" alt="Terminal in the dark theme: an agent's commands tagged AI, keywords highlighted, Δt column"> | <img src="docs/images/terminal-light.png" alt="The same terminal in the light theme"> |
+
+<details>
+<summary>✅ Approving what an AI agent wants to do</summary>
+
+<img src="docs/images/approval.png" width="800" alt="Dialog: an AI agent wants to write version to /tmp/ttyA; Allow, Allow for this session, Deny">
+
+</details>
 
 <details>
 <summary>🤖 AI page: MCP server settings</summary>
 
-<img src="docs/images/ai-dark.png" width="800" alt="AI page with the MCP server enabled and the claude mcp add command">
+<img src="docs/images/ai-dark.png" width="800" alt="AI page with the MCP server enabled, the confirmation setting and the Claude Code and Claude Desktop snippets">
+
+</details>
+
+<details>
+<summary>⚙️ Settings</summary>
+
+<img src="docs/images/settings-dark.png" width="800" alt="Settings page: theme, log font size, lines kept, keep on top">
 
 </details>
 
@@ -102,9 +115,9 @@ Get the file for your system from [Releases](https://github.com/jerry-token/seri
 ## 🚀 Quick start
 
 1. 🔌 Plug in a USB-serial adapter, pick the port at the top and set the baud rate. Data bits, parity, stop bits and flow control are under `8N1 ▾`. Then press **Open**.
-2. 📥 The receive view shows timestamps by default. The chips at the top right switch HEX view, sent data, auto-scroll and pause. 🔍 searches; ⚙️ sets the encoding, frame gap and ANSI colors.
+2. 📥 The receive view shows timestamps by default. The chips at the top right switch Δt, HEX view, sent data, auto-scroll and pause. 🔍 searches; ⚙️ sets the encoding, frame gap, ANSI colors and highlighted keywords.
 3. 📤 Type a command in the box at the bottom and press `Enter`. Tick HEX to send bytes such as `01 03 00 00`.
-4. 🎛️ To reset a board, use **DTR / RTS** in the status bar.
+4. 🎛️ To reset a board, use **DTR / RTS** in the status bar, or **⏱** for a timed sequence.
 
 > [!TIP]
 > Keep flow control at "None" unless your board wires CTS. With RTS/CTS on and CTS inactive, nothing gets sent.
@@ -118,6 +131,7 @@ Get the file for your system from [Releases](https://github.com/jerry-token/seri
      --header "Authorization: Bearer <your token>"
    ```
 3. Ask Claude Code: *"List the serial ports, open the ESP32 one and send `version`."* 🎉
+4. ✅ SerialBot asks before the agent opens the port or sends anything. Pick **Allow for this session** to stop being asked for that port, or untick "Ask before AI agents send data or change a port" on the AI page.
 
 **Claude Desktop** (and other clients that only start stdio servers): copy the second snippet on the AI page into `claude_desktop_config.json`. It runs `serialbot mcp`, a small bridge to the running app, so SerialBot must be open with the MCP server on:
 
@@ -143,22 +157,17 @@ On Windows the command is the path of `serialbot.exe` (installed or portable); o
 
 ## 🗺️ Roadmap
 
-- [x] Serial I/O, multiple sessions, timestamps, HEX
-- [x] ANSI colors, encodings, frame split, search, smooth large logs
-- [x] DTR / RTS and line states
-- [x] Built-in MCP server
-- [x] Installers for all three platforms, published automatically
-- [x] Timed send, send history
-- [x] Send a file
-- [x] Command lists (groups, run in order)
-- [x] Save received data to a file, export
-- [x] Hot-plug detection, auto-reconnect
-- [x] TCP client / server, UDP
-- [x] AI write confirmation, per-session AI access, AI-sent lines tagged
-- [x] Checksums, BREAK, timed DTR/RTS sequences
-- [x] Log filter, Δt, keyword highlight; settings page
-- [ ] Line numbers and favorites, TCP server with several clients, command list in its own window
+- [x] Serial, TCP and UDP; many sessions; text / HEX, ANSI colors, encodings, frame split
+- [x] Send: history, timed send, command lists, files, checksums
+- [x] Signals: DTR / RTS, line states, BREAK, timed sequences
+- [x] Log: search, filter, Δt, keyword highlight, save and capture
+- [x] Built-in MCP server (HTTP and stdio), approvals, per-session AI access
+- [x] Installers for Windows, macOS and Linux (x64 / arm64), published automatically
+- [ ] TCP server with several clients, command list in its own window
+- [ ] Terminal mode (VT100, interactive shells) and waveform plots
 - [ ] Built-in AI assistant "Bo"
+- [ ] JS scripts
+- [ ] BLE
 
 ## 🛠️ Build from source
 
