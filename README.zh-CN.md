@@ -82,7 +82,13 @@ SerialBot 补上的就是这一环，让 Agent 直接面对设备：
 
 | 深色主题 | 浅色主题 |
 |:---:|:---:|
-| <img src="docs/images/terminal-dark.png" alt="深色主题的终端页：AI 发送的命令带 AI 标记，关键字高亮，Δt 列"> | <img src="docs/images/terminal-light.png" alt="浅色主题的终端页"> |
+| <img src="docs/images/terminal-dark.png" alt="深色主题的终端页：AI 发送的命令带 AI 标记，旁边是从命令列表发送的命令；行号、Δt、收藏的行和命令列表"> | <img src="docs/images/terminal-light.png" alt="浅色主题的终端页"> |
+
+| 📈 波形图 | 🖥️ 终端模式 |
+|:---:|:---:|
+| <img src="docs/images/plot-dark.png" alt="日志中的温度、湿度、气压实时画成曲线，每条曲线独立缩放，下方显示光标处的数值"> | <img src="docs/images/tty-dark.png" alt="终端模式：在开发板 shell 里用 vim 编辑 Zephyr 的 main.c"> |
+| **📋 命令列表独立窗口** | **❓ 帮助页** |
+| <img src="docs/images/command-window.png" alt="主窗口旁边是命令窗口，把 Demo board 组的命令发往 esp32"> | <img src="docs/images/help-dark.png" alt="帮助页：用途、快速上手和各个按钮的作用"> |
 
 <details>
 <summary>✅ AI 操作前的确认弹窗</summary>
@@ -101,7 +107,7 @@ SerialBot 补上的就是这一环，让 Agent 直接面对设备：
 <details>
 <summary>⚙️ 设置页</summary>
 
-<img src="docs/images/settings-dark.png" width="800" alt="设置页：主题、日志字号、保留行数、窗口置顶">
+<img src="docs/images/settings-dark.png" width="800" alt="设置页：主题、语言、日志字号、保留行数、窗口置顶">
 
 </details>
 
