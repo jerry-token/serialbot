@@ -13,6 +13,8 @@ Exact file sizes are listed at the end. 各文件的实际大小见文末。
 | macOS 11+ (Apple Silicon & Intel) | `SerialBot_*_universal.dmg` | See note below. 见下方说明 |
 | Linux x64 | `SerialBot_*_amd64.AppImage` | `chmod +x` then run. 加执行权限后直接运行 |
 | Debian / Ubuntu x64 | `SerialBot_*_amd64.deb` | `sudo apt install ./SerialBot_*.deb` |
+| Linux arm64 | `SerialBot_*_aarch64.AppImage` | Raspberry Pi 4/5 (64-bit OS) and other ARM boards. 树莓派 4/5（64 位系统）等 ARM 设备 |
+| Debian / Ubuntu arm64 | `SerialBot_*_arm64.deb` | `sudo apt install ./SerialBot_*_arm64.deb` |
 
 **macOS:** this alpha is not notarized yet. If macOS says the app "is damaged" or "cannot be opened", run once:
 macOS 版暂未公证，若提示「已损坏」或「无法打开」，在终端执行一次：
