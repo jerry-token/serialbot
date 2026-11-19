@@ -76,6 +76,7 @@ You stay in charge. Every change to a port needs your approval, and every line t
 **Comfortable**
 - 🌗 Light, dark or system theme; log font size; lines kept per session; keep the window on top.
 - 🌏 English and Chinese, following the system or chosen in Settings.
+- ❓ A Help page in the app: what SerialBot is for, first steps, every control, connecting an AI agent, and keys.
 
 ## 📸 Screenshots
 

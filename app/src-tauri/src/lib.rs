@@ -17,6 +17,7 @@ pub mod cli;
 pub mod commands;
 pub mod export;
 pub mod filesend;
+pub mod links;
 pub mod mcp;
 pub mod repeat;
 pub mod settings;
@@ -259,6 +260,11 @@ mod ipc {
     }
 
     #[tauri::command(async)]
+    pub(crate) fn open_link(url: String) -> Result<(), String> {
+        crate::links::open(&url)
+    }
+
+    #[tauri::command(async)]
     pub(crate) fn send_break(
         state: tauri::State<'_, AppState>,
         id: u32,
@@ -436,6 +442,7 @@ pub fn run() -> Result<(), tauri::Error> {
             ipc::set_signals,
             ipc::run_signals,
             ipc::send_break,
+            ipc::open_link,
             ipc::mcp_status,
             ipc::mcp_apply,
             ipc::mcp_regenerate_token,

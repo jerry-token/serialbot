@@ -43,6 +43,13 @@ export const GearIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const HelpIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01" />
+  </Svg>
+);
+
 export const RefreshIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" />
