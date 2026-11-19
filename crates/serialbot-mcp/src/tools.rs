@@ -43,13 +43,24 @@ pub const DEFAULT_MATCH_WINDOW: usize = 64 * 1024;
 /// Largest regex the wait tools compile, in bytes of compiled program.
 const REGEX_SIZE_LIMIT: usize = 1 << 20;
 
-const INSTRUCTIONS: &str = "Drives serial ports opened in serialbot. \
+const INSTRUCTIONS: &str = "Drives serial ports and network endpoints opened in SerialBot. \
 Use port.list to find ports, session.open to open one (or session.list to \
 reuse an open session), then io.write / io.read / io.wait_for / \
 io.send_and_expect, and io.signals for DTR/RTS. Every log entry has a sequence number; pass the \
 `cursor` a result returns to the next call so nothing is read twice. \
 io.write returns the cursor taken just before sending: pass it to \
-io.wait_for to catch replies that arrive very fast.";
+io.wait_for to catch replies that arrive very fast. Before running an external \
+tool on the same port (a flasher), call session.release, then session.reopen \
+afterwards: the log continues. log.mark sets a named point and log.query \
+summarizes or searches what happened after it. command.list shows further \
+commands, run with command.call.";
+
+/// Longest `session.reopen` wait for a device to come back.
+pub(crate) const MAX_REOPEN_WAIT_MS: u64 = 60_000;
+/// Pause between `session.reopen` attempts.
+const REOPEN_RETRY: Duration = Duration::from_millis(200);
+/// Default payload budget of `log.query` results.
+pub(crate) const DEFAULT_QUERY_BYTES: usize = 16 * 1024;
 
 /// MCP handler exposing serialbot sessions as tools.
 #[derive(Clone)]
@@ -221,6 +232,77 @@ pub(crate) struct SendExpectArgs {
     pub format: Format,
 }
 
+/// Arguments naming one session.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub(crate) struct SessionArgs {
+    /// Session id or alias.
+    pub session: String,
+}
+
+/// Arguments of `session.reopen`.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub(crate) struct ReopenArgs {
+    /// Session id or alias.
+    pub session: String,
+    /// Keep trying this long (ms, max 60000) while the device is not back
+    /// yet, e.g. while a board re-enumerates after flashing. Default 0: try
+    /// once.
+    #[serde(default)]
+    pub wait_ms: u64,
+}
+
+/// Arguments of `session.configure`.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub(crate) struct ConfigureArgs {
+    /// Session id or alias.
+    pub session: String,
+    /// New baud rate, applied without closing the port and kept for
+    /// reopening.
+    pub baud_rate: u32,
+}
+
+/// Arguments of `log.mark`.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub(crate) struct MarkArgs {
+    /// Session id or alias.
+    pub session: String,
+    /// Label of the marker, e.g. "reset" or "test 3 start".
+    pub label: String,
+}
+
+/// Arguments of `log.query`.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub(crate) struct QueryArgs {
+    /// Session id or alias.
+    pub session: String,
+    /// Start after the latest marker whose label contains this text.
+    #[serde(default)]
+    pub after_marker: Option<String>,
+    /// Start at this cursor instead (default: the oldest entry kept).
+    #[serde(default)]
+    pub cursor: Option<u64>,
+    /// Only return entries whose text (data or marker label) matches this
+    /// regular expression. The summary still counts everything.
+    #[serde(default)]
+    pub pattern: Option<String>,
+    /// Payload budget of the returned entries (default 16384, max 1048576).
+    #[serde(default)]
+    pub max_bytes: Option<usize>,
+    /// How data is rendered (default text).
+    #[serde(default)]
+    pub format: Format,
+}
+
+/// Arguments of `command.call`.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub(crate) struct CallArgs {
+    /// Command name from command.list.
+    pub name: String,
+    /// Arguments as described by command.list.
+    #[serde(default)]
+    pub args: serde_json::Value,
+}
+
 // ---- results -------------------------------------------------------------
 
 /// A session in tool results.
@@ -339,6 +421,74 @@ pub(crate) struct ReadOut {
     pub more: bool,
 }
 
+/// Result of `log.mark`.
+#[derive(Debug, Serialize, JsonSchema)]
+pub(crate) struct MarkOut {
+    /// Sequence number of the marker.
+    pub seq: u64,
+    /// Cursor just after the marker: read or wait from here.
+    pub cursor: u64,
+}
+
+/// Counts over the queried range.
+#[derive(Debug, Default, Serialize, JsonSchema)]
+pub(crate) struct QuerySummary {
+    /// Entries in the range.
+    pub entries: u64,
+    /// Bytes received.
+    pub rx_bytes: u64,
+    /// Bytes sent.
+    pub tx_bytes: u64,
+    /// Entries matching `pattern` (all entries without one).
+    pub matches: u64,
+    /// Marker labels in order (at most 50).
+    pub markers: Vec<String>,
+    /// Time of the first entry (µs since the Unix epoch).
+    pub first_us: Option<u64>,
+    /// Time of the last entry.
+    pub last_us: Option<u64>,
+}
+
+/// Result of `log.query`.
+#[derive(Debug, Serialize, JsonSchema)]
+pub(crate) struct QueryOut {
+    /// Matching entries, oldest first, within the payload budget.
+    pub entries: Vec<EntryOut>,
+    /// Whether matching entries were left out because of the budget.
+    pub truncated: bool,
+    /// Counts over the whole range.
+    pub summary: QuerySummary,
+    /// Cursor just past the range: continue from here.
+    pub cursor: u64,
+    /// Entries already dropped from the log before the start.
+    pub missed: u64,
+}
+
+/// A command in `command.list`.
+#[derive(Debug, Serialize, JsonSchema)]
+pub(crate) struct CommandOut {
+    /// Name to pass to command.call.
+    pub name: String,
+    /// What it does.
+    pub description: String,
+    /// Its arguments, as an example object.
+    pub args: serde_json::Value,
+}
+
+/// Result of `command.list`.
+#[derive(Debug, Serialize, JsonSchema)]
+pub(crate) struct CommandsOut {
+    /// Available commands.
+    pub commands: Vec<CommandOut>,
+}
+
+/// Result of `command.call`.
+#[derive(Debug, Serialize, JsonSchema)]
+pub(crate) struct CallOut {
+    /// What the command returned.
+    pub result: serde_json::Value,
+}
+
 /// Result of `io.signals`.
 #[derive(Debug, Serialize, JsonSchema)]
 pub(crate) struct SignalsOut {
@@ -441,6 +591,44 @@ where
         .map_err(|e| format!("internal error: {e}"))?
 }
 
+fn entry_out(e: serialbot_core::Entry, format: Format) -> EntryOut {
+    let (kind, data) = match e.kind {
+        EntryKind::Data { direction, bytes } => (
+            match direction {
+                Direction::Rx => "rx",
+                Direction::Tx => "tx",
+            },
+            payload::render(&bytes, format),
+        ),
+        EntryKind::Marker { label } => ("marker", label),
+    };
+    EntryOut {
+        seq: e.seq,
+        timestamp_us: e.timestamp_us,
+        kind: kind.into(),
+        data,
+    }
+}
+
+/// Extra commands reached through `command.call`, with example arguments.
+const COMMANDS: &[(&str, &str, &str)] = &[
+    (
+        "session.rename",
+        "Set or clear a session's alias.",
+        r#"{"session":"s1","alias":"esp32"}"#,
+    ),
+    (
+        "session.auto_reconnect",
+        "Turn reopening the port by itself after the device comes back on or off.",
+        r#"{"session":"s1","on":true}"#,
+    ),
+    (
+        "io.break",
+        "Hold a BREAK condition on the line for ms milliseconds (1 to 5000, default 250).",
+        r#"{"session":"s1","ms":250}"#,
+    ),
+];
+
 fn port_out(info: PortInfo, sessions: &[SessionSummary]) -> PortOut {
     let session = sessions
         .iter()
@@ -488,7 +676,7 @@ impl SerialTools {
         Self {
             manager,
             list_ports,
-            tool_router: Self::tool_router(),
+            tool_router: Self::tool_router() + Self::more_tools(),
         }
     }
 
@@ -502,6 +690,16 @@ impl SerialTools {
         self.manager
             .find_by_alias(name)
             .map_err(|_| format!("no session {name:?}; call session.list"))
+    }
+
+    /// The summary of one session as a tool result.
+    fn summary(&self, id: SessionId) -> Result<Json<SessionOut>, String> {
+        self.manager
+            .list()
+            .into_iter()
+            .find(|s| s.id == id)
+            .map(|s| Json(s.into()))
+            .ok_or_else(|| format!("no session {id}"))
     }
 
     #[tool(
@@ -620,24 +818,7 @@ impl SerialTools {
         let entries = result
             .entries
             .into_iter()
-            .map(|e| {
-                let (kind, data) = match e.kind {
-                    EntryKind::Data { direction, bytes } => (
-                        match direction {
-                            Direction::Rx => "rx",
-                            Direction::Tx => "tx",
-                        },
-                        payload::render(&bytes, args.format),
-                    ),
-                    EntryKind::Marker { label } => ("marker", label),
-                };
-                EntryOut {
-                    seq: e.seq,
-                    timestamp_us: e.timestamp_us,
-                    kind: kind.into(),
-                    data,
-                }
-            })
+            .map(|e| entry_out(e, args.format))
             .collect();
         Ok(Json(ReadOut {
             entries,
@@ -737,6 +918,304 @@ impl SerialTools {
         })
         .await
     }
+}
+
+#[tool_router(router = more_tools, vis = "pub(crate)")]
+impl SerialTools {
+    #[tool(
+        name = "session.close",
+        description = "Close a session's port. The session stays listed and its log readable; it cannot be reopened (open the port again for a new session).",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true
+        )
+    )]
+    async fn session_close(
+        &self,
+        Parameters(args): Parameters<SessionArgs>,
+    ) -> Result<Json<SessionOut>, String> {
+        let id = self.session(&args.session)?.id();
+        let manager = Arc::clone(&self.manager);
+        blocking(move || manager.close(id).map_err(|e| e.to_string())).await?;
+        self.summary(id)
+    }
+
+    #[tool(
+        name = "session.release",
+        description = "Hand the port back to the operating system so another program (a flasher, a terminal) can open it, keeping the session and its log. Reopen it with session.reopen; it is not reopened automatically before that.",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = true
+        )
+    )]
+    async fn session_release(
+        &self,
+        Parameters(args): Parameters<SessionArgs>,
+    ) -> Result<Json<SessionOut>, String> {
+        let id = self.session(&args.session)?.id();
+        let manager = Arc::clone(&self.manager);
+        blocking(move || manager.release(id).map_err(|e| e.to_string())).await?;
+        self.summary(id)
+    }
+
+    #[tool(
+        name = "session.reopen",
+        description = "Reopen the port of a released, disconnected or failed session with its settings; the log continues. With wait_ms, keep trying while the device is not back yet (e.g. a board re-enumerating after flashing).",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = true
+        )
+    )]
+    async fn session_reopen(
+        &self,
+        Parameters(args): Parameters<ReopenArgs>,
+    ) -> Result<Json<SessionOut>, String> {
+        if args.wait_ms > MAX_REOPEN_WAIT_MS {
+            return Err(format!("wait_ms must be at most {MAX_REOPEN_WAIT_MS}"));
+        }
+        let id = self.session(&args.session)?.id();
+        let manager = Arc::clone(&self.manager);
+        let wait = Duration::from_millis(args.wait_ms);
+        blocking(move || {
+            let deadline = std::time::Instant::now() + wait;
+            loop {
+                match manager.reconnect(id) {
+                    Ok(()) => return Ok(()),
+                    // Only a device that is not there (yet) is worth waiting for.
+                    Err(serialbot_core::ManagerError::Session(
+                        serialbot_core::SessionError::Transport(TransportError::NotFound(_)),
+                    )) if std::time::Instant::now() + REOPEN_RETRY <= deadline => {
+                        std::thread::sleep(REOPEN_RETRY);
+                    }
+                    Err(e) => return Err(e.to_string()),
+                }
+            }
+        })
+        .await?;
+        self.summary(id)
+    }
+
+    #[tool(
+        name = "session.configure",
+        description = "Change a session's baud rate without closing the port. The new rate is also used when the session is reopened.",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = true
+        )
+    )]
+    async fn session_configure(
+        &self,
+        Parameters(args): Parameters<ConfigureArgs>,
+    ) -> Result<Json<SessionOut>, String> {
+        let id = self.session(&args.session)?.id();
+        let manager = Arc::clone(&self.manager);
+        blocking(move || {
+            manager
+                .set_baud_rate(id, args.baud_rate)
+                .map_err(|e| e.to_string())
+        })
+        .await?;
+        self.summary(id)
+    }
+
+    #[tool(
+        name = "log.mark",
+        description = "Insert a named marker into a session's log, e.g. before resetting a board, so log.query can look at what happened after it.",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            open_world_hint = false
+        )
+    )]
+    fn log_mark(&self, Parameters(args): Parameters<MarkArgs>) -> Result<Json<MarkOut>, String> {
+        if args.label.trim().is_empty() {
+            return Err("label must not be empty".into());
+        }
+        let session = self.session(&args.session)?;
+        let seq = session.mark(&args.label);
+        Ok(Json(MarkOut {
+            seq,
+            cursor: seq + 1,
+        }))
+    }
+
+    #[tool(
+        name = "log.query",
+        description = "Summarize and search a session's log: from a cursor or after the latest marker with a label, count rx/tx bytes and markers, and return the entries matching an optional regular expression.",
+        annotations(read_only_hint = true, open_world_hint = false)
+    )]
+    async fn log_query(
+        &self,
+        Parameters(args): Parameters<QueryArgs>,
+    ) -> Result<Json<QueryOut>, String> {
+        let budget = args.max_bytes.unwrap_or(DEFAULT_QUERY_BYTES);
+        if budget == 0 || budget > MAX_READ_BYTES {
+            return Err(format!("max_bytes must be between 1 and {MAX_READ_BYTES}"));
+        }
+        let pattern = args.pattern.as_deref().map(compile).transpose()?;
+        let session = self.session(&args.session)?;
+        blocking(move || query(&session, &args, pattern.as_ref(), budget)).await
+    }
+
+    #[tool(
+        name = "command.list",
+        description = "List further commands (beyond the tools) with their arguments; run one with command.call.",
+        annotations(read_only_hint = true, open_world_hint = false)
+    )]
+    #[allow(clippy::unused_self, reason = "tool handlers are methods")]
+    fn command_list(&self) -> Json<CommandsOut> {
+        Json(CommandsOut {
+            commands: COMMANDS
+                .iter()
+                .map(|(name, description, args)| CommandOut {
+                    name: (*name).into(),
+                    description: (*description).into(),
+                    args: serde_json::from_str(args).unwrap_or_default(),
+                })
+                .collect(),
+        })
+    }
+
+    #[tool(
+        name = "command.call",
+        description = "Run a command from command.list with its arguments.",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = false
+        )
+    )]
+    async fn command_call(
+        &self,
+        Parameters(call): Parameters<CallArgs>,
+    ) -> Result<Json<CallOut>, String> {
+        let arg = |key: &str| call.args.get(key).cloned().unwrap_or_default();
+        let session_name = arg("session")
+            .as_str()
+            .map(str::to_owned)
+            .ok_or("args.session is required; see command.list")?;
+        let session = self.session(&session_name)?;
+        let id = session.id();
+        let result = match call.name.as_str() {
+            "session.rename" => {
+                let alias = match arg("alias") {
+                    serde_json::Value::Null => None,
+                    serde_json::Value::String(a) if !a.is_empty() => {
+                        if parse_session_id(&a).is_some() {
+                            return Err(format!("alias {a:?} looks like a session id"));
+                        }
+                        Some(a)
+                    }
+                    _ => return Err("args.alias must be a non-empty string or null".into()),
+                };
+                self.manager
+                    .set_alias(id, alias.clone())
+                    .map_err(|e| e.to_string())?;
+                serde_json::json!({ "alias": alias })
+            }
+            "session.auto_reconnect" => {
+                let on = arg("on").as_bool().ok_or("args.on must be true or false")?;
+                self.manager
+                    .set_auto_reconnect(id, on)
+                    .map_err(|e| e.to_string())?;
+                serde_json::json!({ "auto_reconnect": on })
+            }
+            "io.break" => {
+                let ms = match arg("ms") {
+                    serde_json::Value::Null => 250,
+                    v => v
+                        .as_u64()
+                        .filter(|ms| (1..=5000).contains(ms))
+                        .ok_or("args.ms must be a whole number of milliseconds from 1 to 5000")?,
+                };
+                blocking(move || {
+                    session
+                        .send_break(Duration::from_millis(ms))
+                        .map_err(|e| e.to_string())
+                })
+                .await?;
+                serde_json::json!({ "break_ms": ms })
+            }
+            other => return Err(format!("unknown command {other:?}; see command.list")),
+        };
+        Ok(Json(CallOut { result }))
+    }
+}
+
+/// Scans the log for `log.query`.
+fn query(
+    session: &Session,
+    args: &QueryArgs,
+    pattern: Option<&Regex>,
+    budget: usize,
+) -> Result<Json<QueryOut>, String> {
+    let read_all = |from: Cursor| -> Result<serialbot_core::ReadResult, String> {
+        session.read(from, usize::MAX).map_err(|e| e.to_string())
+    };
+    let start = match (&args.after_marker, args.cursor) {
+        (Some(_), Some(_)) => return Err("give either after_marker or cursor, not both".into()),
+        (Some(label), None) => {
+            let all = read_all(Cursor(0))?;
+            let marker = all
+                .entries
+                .iter()
+                .rev()
+                .find(|e| matches!(&e.kind, EntryKind::Marker { label: l } if l.contains(label.as_str())))
+                .ok_or_else(|| format!("no marker containing {label:?} in the log"))?;
+            Cursor(marker.seq + 1)
+        }
+        (None, cursor) => Cursor(cursor.unwrap_or(0)),
+    };
+    let result = read_all(start)?;
+    let mut out = QueryOut {
+        entries: Vec::new(),
+        truncated: false,
+        summary: QuerySummary::default(),
+        cursor: result.next.0,
+        missed: result.missed,
+    };
+    let mut used = 0;
+    for e in result.entries {
+        let s = &mut out.summary;
+        s.entries += 1;
+        s.first_us.get_or_insert(e.timestamp_us);
+        s.last_us = Some(e.timestamp_us);
+        let hit = match &e.kind {
+            EntryKind::Data { direction, bytes } => {
+                match direction {
+                    Direction::Rx => s.rx_bytes += bytes.len() as u64,
+                    Direction::Tx => s.tx_bytes += bytes.len() as u64,
+                }
+                pattern.is_none_or(|p| p.is_match(bytes))
+            }
+            EntryKind::Marker { label } => {
+                if s.markers.len() < 50 {
+                    s.markers.push(label.clone());
+                }
+                pattern.is_none_or(|p| p.is_match(label.as_bytes()))
+            }
+        };
+        if !hit {
+            continue;
+        }
+        s.matches += 1;
+        let size = match &e.kind {
+            EntryKind::Data { bytes, .. } => bytes.len(),
+            EntryKind::Marker { label } => label.len(),
+        };
+        // At least one entry, then as many as fit.
+        if used > 0 && used + size > budget {
+            out.truncated = true;
+            continue;
+        }
+        used += size;
+        out.entries.push(entry_out(e, args.format));
+    }
+    Ok(Json(out))
 }
 
 #[tool_handler(router = self.tool_router)]

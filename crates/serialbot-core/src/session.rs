@@ -439,6 +439,33 @@ impl Session {
         }
     }
 
+    /// Gives the port back to the operating system so another program (a
+    /// flashing tool, say) can use it, keeping the session, its id, alias
+    /// and log. The session becomes [`SessionState::Disconnected`], a
+    /// `released` marker is logged, and [`Session::reattach`] continues it
+    /// later.
+    ///
+    /// Works on open, disconnected and failed sessions (a lost device may
+    /// still hold a handle); fails with [`SessionError::NotOpen`] on a
+    /// closed one.
+    pub fn release(&self) -> Result<(), SessionError> {
+        let mut reader = lock(&self.reader);
+        if self.state() == SessionState::Closed {
+            return Err(SessionError::NotOpen(SessionState::Closed));
+        }
+        self.shared.stop.store(true, Ordering::SeqCst);
+        if let Some(handle) = reader.take() {
+            // Returns within one read timeout; the reader half closes with it.
+            let _ = handle.join();
+        }
+        self.shared.stop.store(false, Ordering::SeqCst);
+        *lock(&self.control) = Box::new(Released);
+        *lock(&self.outputs) = OutputSignals::default();
+        self.shared.finish(SessionState::Disconnected);
+        self.mark("released");
+        Ok(())
+    }
+
     /// Stops the reader thread and closes the port. Idempotent; the log
     /// stays readable afterwards.
     pub fn close(&self) {
@@ -465,6 +492,31 @@ impl Session {
     ) -> Result<T, SessionError> {
         self.ensure_open()?;
         Ok(f(lock(&self.control).as_mut())?)
+    }
+}
+
+/// Control half left in place of a released port; never reached, because
+/// a released session is not open.
+struct Released;
+
+impl TransportControl for Released {
+    fn write_all(&mut self, _: &[u8]) -> Result<(), TransportError> {
+        Err(TransportError::Disconnected)
+    }
+    fn set_dtr(&mut self, _: bool) -> Result<(), TransportError> {
+        Err(TransportError::Disconnected)
+    }
+    fn set_rts(&mut self, _: bool) -> Result<(), TransportError> {
+        Err(TransportError::Disconnected)
+    }
+    fn line_states(&mut self) -> Result<LineStates, TransportError> {
+        Err(TransportError::Disconnected)
+    }
+    fn send_break(&mut self, _: Duration) -> Result<(), TransportError> {
+        Err(TransportError::Disconnected)
+    }
+    fn set_baud_rate(&mut self, _: u32) -> Result<(), TransportError> {
+        Err(TransportError::Disconnected)
     }
 }
 

@@ -159,14 +159,22 @@ async fn lists_the_curated_tools_with_annotations() {
     assert_eq!(
         names,
         [
+            "command.call",
+            "command.list",
             "io.read",
             "io.send_and_expect",
             "io.signals",
             "io.wait_for",
             "io.write",
+            "log.mark",
+            "log.query",
             "port.list",
+            "session.close",
+            "session.configure",
             "session.list",
             "session.open",
+            "session.release",
+            "session.reopen",
         ]
     );
     let hints: HashMap<&str, (Option<bool>, Option<bool>)> = tools
@@ -185,6 +193,278 @@ async fn lists_the_curated_tools_with_annotations() {
             tool.output_schema.is_some(),
             "{} has an output schema",
             tool.name
+        );
+    }
+    client.cancel().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn sessions_are_released_reopened_configured_and_closed() {
+    let h = Harness::start().await;
+    let client = h.client().await;
+    ok(
+        &client,
+        "session.open",
+        json!({"port": "mock0", "alias": "board"}),
+    )
+    .await;
+
+    let released = ok(&client, "session.release", json!({"session": "board"})).await;
+    assert_eq!(released["state"], "disconnected");
+    assert!(
+        err(
+            &client,
+            "io.write",
+            json!({"session": "board", "text": "x"})
+        )
+        .await
+        .contains("Disconnected")
+    );
+    // The port is free: a new session could take it (the mock reopens it).
+    let reopened = ok(
+        &client,
+        "session.reopen",
+        json!({"session": "board", "wait_ms": 1000}),
+    )
+    .await;
+    assert_eq!(reopened["state"], "open");
+    ok(
+        &client,
+        "io.write",
+        json!({"session": "board", "text": "hi"}),
+    )
+    .await;
+    assert_eq!(h.device("mock0").take_written(), b"hi");
+    assert!(
+        err(
+            &client,
+            "session.reopen",
+            json!({"session": "board", "wait_ms": 60_001})
+        )
+        .await
+        .contains("at most")
+    );
+    // Reopening an open session does nothing.
+    ok(&client, "session.reopen", json!({"session": "board"})).await;
+
+    let configured = ok(
+        &client,
+        "session.configure",
+        json!({"session": "board", "baud_rate": 921_600}),
+    )
+    .await;
+    assert_eq!(configured["state"], "open");
+    assert_eq!(h.device("mock0").baud_rate(), 921_600);
+    assert!(
+        err(
+            &client,
+            "session.configure",
+            json!({"session": "board", "baud_rate": 0})
+        )
+        .await
+        .contains("positive")
+    );
+
+    let closed = ok(&client, "session.close", json!({"session": "board"})).await;
+    assert_eq!(closed["state"], "closed");
+    assert!(
+        err(&client, "session.reopen", json!({"session": "board"}))
+            .await
+            .contains("Closed")
+    );
+    assert!(
+        err(&client, "session.release", json!({"session": "board"}))
+            .await
+            .contains("Closed")
+    );
+    // Still listed with its log.
+    let read = ok(&client, "io.read", json!({"session": "board"})).await;
+    assert!(
+        read["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["data"] == "released")
+    );
+    client.cancel().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn markers_and_queries_summarize_the_log() {
+    let h = Harness::start().await;
+    let client = h.client().await;
+    ok(&client, "session.open", json!({"port": "mock0"})).await;
+    let device = h.device("mock0");
+    device.send(b"boot\r\n");
+    ok(
+        &client,
+        "io.wait_for",
+        json!({"session": "s1", "pattern": "boot", "cursor": 0}),
+    )
+    .await;
+    let mark = ok(
+        &client,
+        "log.mark",
+        json!({"session": "s1", "label": "reset 1"}),
+    )
+    .await;
+    assert_eq!(mark["cursor"], mark["seq"].as_u64().unwrap() + 1);
+    ok(
+        &client,
+        "io.write",
+        json!({"session": "s1", "text": "AT\r\n"}),
+    )
+    .await;
+    device.send(b"ERR 5\r\n");
+    ok(
+        &client,
+        "io.wait_for",
+        json!({"session": "s1", "pattern": "ERR", "cursor": 0}),
+    )
+    .await;
+    device.send(b"ready\r\n");
+    ok(
+        &client,
+        "io.wait_for",
+        json!({"session": "s1", "pattern": "ready", "cursor": 0}),
+    )
+    .await;
+
+    let q = ok(
+        &client,
+        "log.query",
+        json!({"session": "s1", "after_marker": "reset", "pattern": "ERR"}),
+    )
+    .await;
+    assert_eq!(q["entries"].as_array().unwrap().len(), 1);
+    assert_eq!(q["entries"][0]["data"], "ERR 5\r\n");
+    assert_eq!(q["summary"]["matches"], 1);
+    assert_eq!(q["summary"]["rx_bytes"], 14);
+    assert_eq!(q["summary"]["tx_bytes"], 4);
+    assert_eq!(q["truncated"], false);
+
+    let all = ok(
+        &client,
+        "log.query",
+        json!({"session": "s1", "cursor": 0, "max_bytes": 6}),
+    )
+    .await;
+    assert_eq!(all["summary"]["markers"], json!(["reset 1"]));
+    assert_eq!(all["truncated"], true);
+    assert!(
+        u64::try_from(all["entries"].as_array().unwrap().len()).unwrap()
+            < all["summary"]["entries"].as_u64().unwrap()
+    );
+
+    for (args, why) in [
+        (
+            json!({"session": "s1", "after_marker": "nope"}),
+            "no marker",
+        ),
+        (
+            json!({"session": "s1", "after_marker": "reset", "cursor": 0}),
+            "either",
+        ),
+        (json!({"session": "s1", "pattern": "("}), "invalid pattern"),
+        (json!({"session": "s1", "max_bytes": 0}), "max_bytes"),
+    ] {
+        assert!(err(&client, "log.query", args).await.contains(why), "{why}");
+    }
+    assert!(
+        err(&client, "log.mark", json!({"session": "s1", "label": " "}))
+            .await
+            .contains("empty")
+    );
+    client.cancel().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn extra_commands_are_listed_and_called() {
+    let h = Harness::start().await;
+    let client = h.client().await;
+    ok(&client, "session.open", json!({"port": "mock0"})).await;
+    let list = ok(&client, "command.list", json!({})).await;
+    let names: Vec<&str> = list["commands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        names,
+        ["session.rename", "session.auto_reconnect", "io.break"]
+    );
+    assert_eq!(list["commands"][2]["args"]["ms"], 250);
+
+    let call_cmd = |name: &str, args: Value| json!({"name": name, "args": args});
+    ok(
+        &client,
+        "command.call",
+        call_cmd("session.rename", json!({"session": "s1", "alias": "esp"})),
+    )
+    .await;
+    let sessions = ok(&client, "session.list", json!({})).await;
+    assert_eq!(sessions["sessions"][0]["alias"], "esp");
+    ok(
+        &client,
+        "command.call",
+        call_cmd("session.rename", json!({"session": "esp", "alias": null})),
+    )
+    .await;
+    let r = ok(
+        &client,
+        "command.call",
+        call_cmd(
+            "session.auto_reconnect",
+            json!({"session": "s1", "on": true}),
+        ),
+    )
+    .await;
+    assert_eq!(r["result"]["auto_reconnect"], true);
+    ok(
+        &client,
+        "command.call",
+        call_cmd("io.break", json!({"session": "s1"})),
+    )
+    .await;
+    ok(
+        &client,
+        "command.call",
+        call_cmd("io.break", json!({"session": "s1", "ms": 10})),
+    )
+    .await;
+    assert_eq!(
+        h.device("mock0").breaks(),
+        [Duration::from_millis(250), Duration::from_millis(10)]
+    );
+
+    for (args, why) in [
+        (
+            call_cmd("nope", json!({"session": "s1"})),
+            "unknown command",
+        ),
+        (call_cmd("io.break", json!({})), "args.session"),
+        (
+            call_cmd("io.break", json!({"session": "s1", "ms": 0})),
+            "1 to 5000",
+        ),
+        (
+            call_cmd("session.auto_reconnect", json!({"session": "s1"})),
+            "true or false",
+        ),
+        (
+            call_cmd("session.rename", json!({"session": "s1", "alias": "s2"})),
+            "looks like",
+        ),
+        (
+            call_cmd("session.rename", json!({"session": "s1", "alias": 3})),
+            "non-empty",
+        ),
+        (call_cmd("io.break", json!({"session": "zz"})), "no session"),
+    ] {
+        assert!(
+            err(&client, "command.call", args).await.contains(why),
+            "{why}"
         );
     }
     client.cancel().await.unwrap();
