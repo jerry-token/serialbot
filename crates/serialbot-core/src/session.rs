@@ -118,6 +118,13 @@ impl Shared {
         reopened
     }
 
+    /// Marks the session closed whatever its state (a lost or failed
+    /// session too), and wakes waiters.
+    fn set_closed(&self) {
+        self.lock().state = SessionState::Closed;
+        self.changed.notify_all();
+    }
+
     /// Sets a terminal state unless one is already set, and wakes waiters.
     fn finish(&self, state: SessionState) {
         let mut inner = self.lock();
@@ -441,7 +448,8 @@ impl Session {
             // has nothing left to clean up.
             let _ = handle.join();
         }
-        self.shared.finish(SessionState::Closed);
+        // Also a lost session: closed means nothing reconnects it.
+        self.shared.set_closed();
     }
 
     fn ensure_open(&self) -> Result<(), SessionError> {
@@ -1019,6 +1027,19 @@ mod tests {
         s.write(b"hi").unwrap();
         assert_eq!(d2.take_written(), b"hi");
         assert!(rx_bytes(&s).starts_with(b"before"), "the history is kept");
+    }
+
+    #[test]
+    fn closing_a_lost_session_marks_it_closed() {
+        let (s, d, _c) = session();
+        d.disconnect();
+        while s.state() == SessionState::Open {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        s.close();
+        assert_eq!(s.state(), SessionState::Closed);
+        let (conn, _d2) = mock::connection("mock0", T);
+        assert!(s.reattach(conn).is_err(), "closed stays closed");
     }
 
     #[test]
