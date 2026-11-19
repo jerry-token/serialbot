@@ -43,7 +43,7 @@ import { type Page, Sidebar } from "./components/Sidebar";
 import { ClearIcon, ListIcon, SearchIcon } from "./components/icons";
 import { type Lang, strings } from "./i18n";
 import { DEFAULT_LIMITS, type Line, Terminal } from "./terminal";
-import { applyAppearance, loadPrefs, savePrefs } from "./prefs";
+import { applyAppearance, loadPrefs, resolveLanguage, savePrefs } from "./prefs";
 import { SettingsPanel } from "./components/SettingsPanel";
 
 /** Storage key of the DTR/RTS sequence. */
@@ -108,7 +108,13 @@ const nowUs = () => Date.now() * 1000;
 const defaultCopy = (text: string) => navigator.clipboard.writeText(text);
 
 export function App({ backend, lang, copy = defaultCopy, storage = browserStorage() }: Props) {
-  const t = strings(lang);
+  // App preferences, read first: the language decides every string.
+  const [prefs, setPrefs] = useState(() => loadPrefs(storage));
+  const uiLang = resolveLanguage(prefs.language, lang);
+  const t = strings(uiLang);
+  useEffect(() => {
+    document.documentElement.lang = uiLang === "zh" ? "zh-CN" : "en";
+  }, [uiLang]);
   const [groups, setGroups] = useState<CommandGroup[]>(() =>
     loadGroups(storage, t.defaultGroup),
   );
@@ -300,8 +306,7 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
     saveGroups(storage, groups);
   }, [storage, groups]);
   // The DTR/RTS sequence last typed, kept across restarts.
-  // App preferences; theme and font are applied to the document.
-  const [prefs, setPrefs] = useState(() => loadPrefs(storage));
+  // Theme and font are applied to the document.
   useEffect(() => savePrefs(storage, prefs), [storage, prefs]);
   useEffect(() => {
     const media = window.matchMedia?.("(prefers-color-scheme: dark)");
