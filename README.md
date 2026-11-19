@@ -46,7 +46,8 @@ English · [简体中文](README.zh-CN.md)
   - send data and wait for a matching reply
   - drive DTR / RTS
 
-  A port you opened in the window can be used by the agent, and everything the agent sends shows up in the window.
+  A port you opened in the window can be used by the agent, and everything the agent sends shows up in the window,
+  tinted and tagged **AI**. Turn off **AI access** in the status bar to keep a session away from agents.
 
 ## 📸 Screenshots
 

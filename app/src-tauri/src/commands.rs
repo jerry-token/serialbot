@@ -176,6 +176,8 @@ pub struct SessionDto {
     pub error: Option<String>,
     /// Whether the port reopens automatically when the device comes back.
     pub auto_reconnect: bool,
+    /// Whether AI agents (MCP) may use the session.
+    pub ai_access: bool,
 }
 
 /// Converts a manager listing entry.
@@ -188,6 +190,7 @@ pub fn session_dto(summary: &SessionSummary) -> SessionDto {
         state,
         error,
         auto_reconnect: summary.auto_reconnect,
+        ai_access: summary.ai_access,
     }
 }
 
@@ -214,6 +217,8 @@ pub struct LogEntryDto {
     pub data: Vec<u8>,
     /// The label of a marker.
     pub label: Option<String>,
+    /// Whether an AI agent sent the data or set the marker.
+    pub ai: bool,
 }
 
 /// Result of [`AppState::read`].
@@ -363,6 +368,13 @@ impl AppState {
             .map_err(|e| e.to_string())
     }
 
+    /// Lets AI agents use the session through MCP, or withholds it.
+    pub fn set_ai_access(&self, id: u32, allowed: bool) -> Result<(), String> {
+        self.manager
+            .set_ai_access(SessionId(id), allowed)
+            .map_err(|e| e.to_string())
+    }
+
     /// Closes a session and forgets it; the frontend keeps what it shows.
     pub fn close(&self, id: u32) -> Result<(), String> {
         self.repeaters.stop(id);
@@ -412,6 +424,7 @@ impl AppState {
                     kind,
                     data,
                     label,
+                    ai: e.actor == serialbot_core::Actor::Ai,
                 }
             })
             .collect();
@@ -675,6 +688,7 @@ mod tests {
                 state: "open",
                 error: None,
                 auto_reconnect: true,
+                ai_access: true,
             }
         );
         assert_eq!(app.write(1, b"AT\r\n").unwrap(), 0);
@@ -891,6 +905,19 @@ mod tests {
     }
 
     #[test]
+    fn sessions_can_be_withheld_from_ai_agents() {
+        let (app, _devices) = state();
+        let opened = app.open(&request("mock0")).unwrap();
+        assert!(opened.ai_access);
+        app.set_ai_access(1, false).unwrap();
+        assert!(!app.sessions()[0].ai_access);
+        assert!(app.set_ai_access(9, true).is_err());
+        // Entries written from the window are not the AI's.
+        app.write(1, b"x").unwrap();
+        assert!(!app.read(1, 0, 1024).unwrap().entries[0].ai);
+    }
+
+    #[test]
     fn sessions_reconnect_on_request_and_automatically() {
         let (app, devices) = state();
         let manual = OpenRequest {
@@ -990,10 +1017,11 @@ mod tests {
             kind: "rx",
             data: vec![65],
             label: None,
+            ai: false,
         };
         assert_eq!(
             serde_json::to_string(&entry).unwrap(),
-            r#"{"seq":1,"timestampUs":2,"kind":"rx","data":[65],"label":null}"#
+            r#"{"seq":1,"timestampUs":2,"kind":"rx","data":[65],"label":null,"ai":false}"#
         );
         let failed = state_parts(SessionState::Failed("boom".into()));
         assert_eq!(failed, ("failed", Some("boom".into())));

@@ -977,3 +977,76 @@ async fn the_stdio_bridge_forwards_to_the_http_server() {
         "{text}"
     );
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn withheld_sessions_are_refused_and_ai_entries_are_flagged() {
+    let h = Harness::start().await;
+    let client = h.client().await;
+    let opened = ok(&client, "session.open", json!({"port": "mock0"})).await;
+    assert_eq!(opened["ai_access"], true);
+    // Something the user sent from the window, then the agent's own writes.
+    let session = h.manager.get(serialbot_core::SessionId(1)).unwrap();
+    session.write(b"by hand").unwrap();
+    ok(
+        &client,
+        "io.write",
+        json!({"session": "s1", "text": "by agent"}),
+    )
+    .await;
+    ok(&client, "io.signals", json!({"session": "s1", "dtr": true})).await;
+    ok(
+        &client,
+        "log.mark",
+        json!({"session": "s1", "label": "agent mark"}),
+    )
+    .await;
+    let read = ok(&client, "io.read", json!({"session": "s1"})).await;
+    let flags: Vec<(String, bool)> = read["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| {
+            (
+                e["data"].as_str().unwrap().to_owned(),
+                e["ai"].as_bool().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        flags,
+        [
+            ("by hand".to_owned(), false),
+            ("by agent".to_owned(), true),
+            ("DTR=1".to_owned(), true),
+            ("agent mark".to_owned(), true),
+        ]
+    );
+
+    h.manager
+        .set_ai_access(serialbot_core::SessionId(1), false)
+        .unwrap();
+    let listed = ok(&client, "session.list", json!({})).await;
+    assert_eq!(listed["sessions"][0]["ai_access"], false);
+    for (tool, args) in [
+        ("io.write", json!({"session": "s1", "text": "x"})),
+        ("io.read", json!({"session": "s1"})),
+        ("session.close", json!({"session": "s1"})),
+        ("log.query", json!({"session": "s1"})),
+    ] {
+        assert!(
+            err(&client, tool, args)
+                .await
+                .contains("not shared with AI"),
+            "{tool}"
+        );
+    }
+    assert!(
+        h.device("mock0").take_written().ends_with(b"by agent"),
+        "nothing more was sent"
+    );
+    h.manager
+        .set_ai_access(serialbot_core::SessionId(1), true)
+        .unwrap();
+    ok(&client, "io.read", json!({"session": "s1"})).await;
+    client.cancel().await.unwrap();
+}

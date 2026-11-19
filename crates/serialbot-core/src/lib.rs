@@ -14,7 +14,7 @@ pub mod transport;
 
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use log::{
-    Cursor, Direction, ENTRY_OVERHEAD, Entry, EntryKind, LogBuffer, LogError, ReadResult,
+    Actor, Cursor, Direction, ENTRY_OVERHEAD, Entry, EntryKind, LogBuffer, LogError, ReadResult,
 };
 pub use manager::{ManagerError, SessionManager, SessionSummary};
 pub use session::{

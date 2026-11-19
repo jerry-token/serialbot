@@ -117,6 +117,15 @@ mod ipc {
     }
 
     #[tauri::command(async)]
+    pub(crate) fn set_ai_access(
+        state: tauri::State<'_, AppState>,
+        id: u32,
+        allowed: bool,
+    ) -> Result<(), String> {
+        state.set_ai_access(id, allowed)
+    }
+
+    #[tauri::command(async)]
     pub(crate) fn export_log(
         state: tauri::State<'_, AppState>,
         id: u32,
@@ -367,6 +376,7 @@ pub fn run() -> Result<(), tauri::Error> {
             ipc::encode_text,
             ipc::reconnect,
             ipc::set_auto_reconnect,
+            ipc::set_ai_access,
             ipc::export_log,
             ipc::start_capture,
             ipc::stop_capture,
