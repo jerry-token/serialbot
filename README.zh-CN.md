@@ -8,64 +8,78 @@
 
 [![CI](https://github.com/jerry-token/serialbot/actions/workflows/ci.yml/badge.svg)](https://github.com/jerry-token/serialbot/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/jerry-token/serialbot?include_prereleases&label=release&color=orange)](https://github.com/jerry-token/serialbot/releases)
-![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
+![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%28x64%2C%20arm64%29-blue)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green)](LICENSE)
 
 [English](README.md) · 简体中文
 
-<img src="docs/images/demo.gif" width="800" alt="AI 通过 MCP 打开串口、发送命令并等待回复，窗口实时显示">
+<img src="docs/images/demo.gif" width="800" alt="AI 请求打开串口并发送命令，用户确认后命令出现在日志里并带 AI 标记">
 
-<sub>☝️ Claude Code 通过 MCP 打开开发板串口、发命令、等回复，窗口实时显示每一步</sub>
+<sub>☝️ AI 通过 MCP 打开开发板串口并发送命令，你确认后执行，每一步都实时显示在窗口里，并带 AI 标记</sub>
 
 </div>
 
 > [!NOTE]
-> 🚧 **当前是 Alpha 测试版**：基础功能可用，欢迎试用并[反馈问题](https://github.com/jerry-token/serialbot/issues)。
+> 🚧 **当前是 Alpha 测试版**：日常调试和 AI 控制都已可用，欢迎试用并[反馈问题](https://github.com/jerry-token/serialbot/issues)。
 
 ## ✨ 特性
 
-- 🪶 **轻量**：Windows 安装版约 4.5 MB；免安装单文件版约 19 MB，不用安装直接运行。
-- 💻 **跨平台**：Windows、macOS（Apple Silicon 和 Intel）、Linux（x64 和 arm64）都能用。
-- 🗂️ **多串口同时打开**：每个串口一个标签页，各自有日志和收发计数。
-- 🌈 **接收显示**：
-  - 文本 / HEX 两种显示方式，带毫秒级时间戳
-  - 支持 **ANSI 颜色**（Zephyr、ESP-IDF 等彩色日志）
-  - 支持 GBK、GB18030、Big5 等多种编码
-  - 自动断帧、暂停、`Ctrl/Cmd+F` 搜索
-  - 几万行日志依然流畅
-- ✍️ **发送**：多行输入，文本或 HEX，可选结尾符；`Enter` 发送，`Shift+Enter` 换行，`↑` 调出历史；支持定时发送。
-  发出去的是原始字节，和输入完全一致：不加任何帧头或协议，只加你选的结尾符（HEX 不加）。
-- 🧮 **校验和**：HEX 发送时可自动追加 CRC-8、CRC-16（Modbus、CCITT）、CRC-32、XOR、SUM8、LRC。
-- 🔎 **搜索与过滤**：`Ctrl/Cmd+F` 在日志中查找；勾选"只显示匹配的行"即可过滤。**Δt** 显示与上一行的时间差，HEX 视图下就是帧间隔。
-- 🖍️ **关键字高亮**：在显示设置（⚙️）里填上 `ERROR`、`WARN` 这样的词，日志里出现时会用颜色标出来。
-- ⚙️ **设置**：浅色/深色/跟随系统主题、日志字号、每个会话保留的行数、窗口置顶。
-- 📋 **扩展命令列表**：常用命令分组保存，点一下发送，也可以整组按顺序带延时执行。
-- 📄 **发送文件**：分块发送，可设块间隔，适合没有流控的设备。
-- 💾 **保存日志**：一次性导出，或边收边写入文件。
-- 🌐 **TCP 与 UDP**：除了串口，还支持 TCP 客户端、TCP 服务端（一次服务一个客户端，连入和断开会记录在日志里）和 UDP。在连接栏最左边选择类型；AI 通过 MCP 打开 `tcp://主机:端口`、`tcp-server://:端口` 或 `udp://主机:端口?local=:端口`，和打开串口一样。
-- 🔁 **自动重连**：拔掉串口再插上，会话自动接上；串口列表随插拔刷新。
-- 🎛️ **信号线**：DTR / RTS 开关，CTS / DSR / RI / CD 指示灯，每次切换都会在日志里记一笔。
-  BRK 发送 BREAK；⏱ 执行带时间的 DTR/RTS 时序，例如 `DTR=0 RTS=1, 100, RTS=0`（复位脉冲）。
-- 🤖 **AI 友好**：内置 MCP 服务，Claude Code 等 AI 工具可以直接
-  - 列出、打开串口
-  - 收发数据、等待匹配的回复
-  - 控制 DTR / RTS
+**轻量，哪里都能用**
+- 🪶 Windows 安装版约 4.5 MB；免安装单文件版约 19 MB，不用安装直接运行。
+- 💻 Windows、macOS（Apple Silicon 和 Intel）、Linux（x64 和 arm64，包括树莓派）。
 
-  你在窗口里打开的串口，AI 能接着用；AI 发的每条数据，窗口里也看得到，并带 **AI** 标记和底色。
-  在状态栏关掉 **允许 AI**，这个会话就不让 AI 碰。
-  AI 发送数据、切换信号线、打开/关闭/改配置串口之前，SerialBot 会先问你：允许一次、本会话都允许、或拒绝（60 秒不处理自动拒绝）。
-  不想被问可以在 MCP 设置里关掉。
+**连接**
+- 🗂️ 多个串口同时打开：每个一个标签页，各自有日志和收发计数。
+- 🌐 除了串口，还支持 TCP 客户端、TCP 服务端和 UDP，在连接栏最左边选择类型。
+- 🔁 拔掉串口再插上，会话自动接上；串口列表随插拔刷新。
+- 🎛️ DTR / RTS 开关，CTS / DSR / RI / CD 指示灯，**BRK** 发送 BREAK，**⏱** 执行带时间的 DTR/RTS 时序（例如复位脉冲 `DTR=0 RTS=1, 100, RTS=0`），每次变化都记在日志里。
+
+**接收**
+- 🌈 文本 / HEX 显示，毫秒级时间戳；支持 **ANSI 颜色**（Zephyr、ESP-IDF 等彩色日志）和 UTF-8、GBK、GB18030、Big5、Shift_JIS 等编码。
+- ✂️ 按间隔自动断帧；**Δt** 显示与上一行的时间差，HEX 视图下就是帧间隔。
+- 🔎 `Ctrl/Cmd+F` 搜索、"只显示匹配的行"过滤，以及**关键字高亮**（在 ⚙️ 里填 `ERROR`、`WARN` 等）。
+- ⏸️ 暂停；几万行日志滚动依然流畅。
+- 💾 一次性保存日志，或边收边写入文件。
+
+**发送**
+- ✍️ 多行输入，文本或 HEX，可选结尾符；`Enter` 发送，`Shift+Enter` 换行，`↑` 调出历史。发出去的是原始字节，和输入完全一致，只加你选的结尾符。
+- 🧮 HEX 发送可自动追加校验：CRC-8、CRC-16（Modbus、CCITT）、CRC-32、XOR、SUM8、LRC。
+- ⏲️ 定时发送、📋 扩展命令列表（点一下发送，或整组按顺序执行）、📄 分块发送文件。
+
+**AI 能用，你说了算**
+- 🤖 内置 MCP 服务：Claude Code、Claude Desktop 等 AI 工具可以列出和打开串口、收发数据、等待回复、控制 DTR / RTS，用的就是你在窗口里看到的会话。
+- ✅ AI 发送数据、切换信号线、打开/关闭/改配置串口之前，SerialBot 会先问你：**允许一次**、**本会话都允许**或**拒绝**（60 秒不处理自动拒绝）。
+- 🟣 AI 做的每件事在日志里都带 **AI** 标记；在状态栏关掉 **允许 AI**，这个会话就不让 AI 碰。
+- 🔒 MCP 服务默认关闭，只监听 `127.0.0.1`，需要令牌。
+
+**用着顺手**
+- 🌗 浅色 / 深色 / 跟随系统主题，日志字号，每个会话保留的行数，窗口置顶。
+- 🌏 中文和英文界面。
 
 ## 📸 截图
 
 | 深色主题 | 浅色主题 |
 |:---:|:---:|
-| <img src="docs/images/terminal-dark.png" alt="深色主题下的终端页"> | <img src="docs/images/terminal-light.png" alt="浅色主题下的终端页"> |
+| <img src="docs/images/terminal-dark.png" alt="深色主题的终端页：AI 发送的命令带 AI 标记，关键字高亮，Δt 列"> | <img src="docs/images/terminal-light.png" alt="浅色主题的终端页"> |
+
+<details>
+<summary>✅ AI 操作前的确认弹窗</summary>
+
+<img src="docs/images/approval.png" width="800" alt="弹窗：AI 想向 /tmp/ttyA 写入 version；允许、本会话都允许、拒绝">
+
+</details>
 
 <details>
 <summary>🤖 AI 页：MCP 服务设置</summary>
 
-<img src="docs/images/ai-dark.png" width="800" alt="AI 页：启用 MCP 服务并复制 claude mcp add 命令">
+<img src="docs/images/ai-dark.png" width="800" alt="AI 页：启用 MCP 服务、确认设置，以及 Claude Code 和 Claude Desktop 的配置">
+
+</details>
+
+<details>
+<summary>⚙️ 设置页</summary>
+
+<img src="docs/images/settings-dark.png" width="800" alt="设置页：主题、日志字号、保留行数、窗口置顶">
 
 </details>
 
@@ -101,9 +115,9 @@
 ## 🚀 快速上手
 
 1. 🔌 插上 USB 转串口模块，在顶部选择端口，设置波特率。数据位、校验、停止位、流控在 `8N1 ▾` 里，然后点 **打开**。
-2. 📥 接收区默认显示时间戳。右上角的小开关可以切换 HEX 显示、显示发送内容、自动滚动、暂停；🔍 是搜索，⚙️ 里可以设置编码、自动断帧和 ANSI 颜色。
+2. 📥 接收区默认显示时间戳。右上角的小开关可以切换 Δt、HEX 显示、显示发送内容、自动滚动、暂停；🔍 是搜索，⚙️ 里可以设置编码、自动断帧、ANSI 颜色和高亮关键字。
 3. 📤 在底部输入框写好命令，按 `Enter` 发送。勾选 HEX 可以发送 `01 03 00 00` 这样的十六进制数据。
-4. 🎛️ 需要复位开发板时，点状态栏的 **DTR / RTS**。
+4. 🎛️ 需要复位开发板时，点状态栏的 **DTR / RTS**，或用 **⏱** 执行带时间的时序。
 
 > [!TIP]
 > 如果开发板没有接 CTS 线，流控请保持「无」。开着 RTS/CTS 硬件流控时，数据会因为 CTS 无效而发不出去。
@@ -117,6 +131,7 @@
      --header "Authorization: Bearer <你的 token>"
    ```
 3. 在 Claude Code 里直接说：*「列出串口，打开 ESP32 那个口，发送 `version` 看看固件版本」* 🎉
+4. ✅ AI 打开串口或发送数据前，SerialBot 会先弹窗问你。选 **本会话都允许** 后，这个串口就不再询问；也可以在 AI 页取消勾选「AI 发送数据或改动串口前先问我」。
 
 **Claude Desktop**（以及其他只支持 stdio 的客户端）：把 AI 页上的第二段配置复制到 `claude_desktop_config.json`。它运行 `serialbot mcp`，一个连接到正在运行的 SerialBot 的小桥接程序，所以需要先打开 SerialBot 并启用 MCP 服务：
 
@@ -142,22 +157,17 @@ Windows 上 command 填 `serialbot.exe` 的路径（安装版或免安装版都�
 
 ## 🗺️ 路线图
 
-- [x] 串口收发、多会话、时间戳、HEX
-- [x] ANSI 颜色、多编码、自动断帧、搜索、大日志流畅显示
-- [x] DTR / RTS 和信号状态
-- [x] 内置 MCP 服务
-- [x] 三平台安装包自动发布
-- [x] 定时发送、发送历史
-- [x] 发送文件
-- [x] 扩展命令列表（分组、一键顺序发送）
-- [x] 接收存文件、导出
-- [x] 热插拔检测、自动重连
-- [x] TCP Client / Server、UDP
-- [x] AI 写入确认、按会话控制 AI 权限、AI 发送内容标记
-- [x] 校验和、BREAK、DTR/RTS 时序
-- [x] 日志过滤、Δt、关键字高亮；设置页
-- [ ] 行号与收藏、TCP 服务端多客户端、命令列表独立窗口
+- [x] 串口、TCP、UDP；多会话；文本 / HEX、ANSI 颜色、多编码、自动断帧
+- [x] 发送：历史、定时发送、扩展命令列表、发送文件、校验和
+- [x] 信号线：DTR / RTS、状态灯、BREAK、时序
+- [x] 日志：搜索、过滤、Δt、关键字高亮、保存与边收边存
+- [x] 内置 MCP 服务（HTTP 和 stdio）、操作确认、按会话控制 AI 权限
+- [x] Windows、macOS、Linux（x64 / arm64）安装包自动发布
+- [ ] TCP 服务端多客户端、命令列表独立窗口
+- [ ] 终端模式（VT100、交互式 shell）和波形图
 - [ ] 内置 AI 助手「小波」
+- [ ] JS 脚本
+- [ ] BLE
 
 ## 🛠️ 从源码构建
 
