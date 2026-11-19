@@ -22,6 +22,20 @@ English · [简体中文](README.zh-CN.md)
 > [!NOTE]
 > 🚧 **Alpha.** Everyday debugging and AI control work. Please try it and [report problems](https://github.com/jerry-token/serialbot/issues).
 
+## 💡 Why SerialBot
+
+Debugging firmware with an AI agent usually still needs a person in the middle. You flash the board, watch the serial log, copy the interesting lines into the chat and explain what happened. The agent can write the code, but it cannot see what the code does.
+
+SerialBot closes that loop. The agent works on the device directly:
+
+- 🔥 **Flashes the board**: it hands the port to your flashing tool, then takes it back. The log continues.
+- 👀 **Reads the log itself**: it waits for the line it expects, or gives up after a timeout.
+- 🐛 **Debugs on its own**: it adds debug prints, rebuilds, flashes and reads again, until it understands what is going on.
+
+You stay in charge. Every change to a port needs your approval, and every line the agent sent is marked in the window.
+
+**SerialBot only moves the data; your skills bring the knowledge.** SerialBot passes raw bytes between the device and the model, with timestamps, markers and waits, and nothing more. What to run, in which order, and what a log line means depends on the chip, the board and the project: datasheets, boot sequences, error codes, house rules. That knowledge belongs in your repository, as skills (for example Claude Code skills or a `CLAUDE.md`), where you can version it and share it with your team.
+
 ## ✨ Features
 
 **Light and everywhere**
