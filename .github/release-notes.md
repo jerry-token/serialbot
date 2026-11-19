@@ -30,15 +30,15 @@ Windows 可能提示「未知发布者」，点「更多信息」→「仍要运
 
 ### New in this release / 本版新增
 
-- **AI safety / AI 安全**: confirm each change an AI agent makes (allow once, for the session, or deny); withhold a session from AI; lines an agent sent are tagged **AI**.
-  AI 改动前弹窗确认；可禁止某个会话被 AI 使用；AI 发送的内容带 **AI** 标记。
-- **Checksums / 校验和**: CRC-8, CRC-16 (Modbus, CCITT), CRC-32, XOR, SUM8, LRC appended to HEX data.
-- **Signals / 信号线**: BREAK button and timed DTR/RTS sequences (e.g. `DTR=0 RTS=1, 100, RTS=0`).
-  BREAK 按钮与带时间的 DTR/RTS 时序。
-- **Log / 日志**: show only search matches, Δt between lines (frame gaps in HEX), keyword highlighting.
-  只显示匹配行、行间 Δt（HEX 下即帧间隔）、关键字高亮。
-- **Settings / 设置**: light / dark / system theme, log font size, lines kept per session, always on top.
-  主题、日志字号、保留行数、窗口置顶。
+- **Linux arm64 / Linux ARM 版**: `.deb` and AppImage for Raspberry Pi 4/5 (64-bit OS) and other ARM boards.
+  新增 arm64 的 `.deb` 和 AppImage，可在树莓派 4/5（64 位系统）等设备上运行。
+- **Language setting / 语言设置**: choose English or 简体中文 in Settings, or follow the system.
+  可在设置里选择界面语言，默认跟随系统。
+- **Tested throughput / 吞吐验证**: CI now sends 2 Mbit/s into a session for an hour on x64 and arm64; all 900 MB arrive in order, about 80 MB of memory.
+  CI 中以 2 Mbit/s 连续发送 1 小时（x64 和 arm64），900 MB 数据无丢失、无乱序，内存约 80 MB。
+
+Since alpha.3 / 自 alpha.3 起: AI write confirmation and AI tags, checksums, BREAK and DTR/RTS sequences, log filter, Δt, keyword highlight, settings page.
+AI 写入确认与标记、校验和、BREAK 与 DTR/RTS 时序、日志过滤、Δt、关键字高亮、设置页。
 
 ### What works / 已有功能
 
