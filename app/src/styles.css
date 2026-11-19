@@ -1,5 +1,6 @@
 :root {
-  color-scheme: light dark;
+  /* Light palette; `data-theme="dark"` on the root switches (see prefs.ts). */
+  color-scheme: light;
   --bg: #f5f6f8;
   --panel: #ffffff;
   --rail: #eceef2;
@@ -37,41 +38,40 @@
   font-size: 13px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #17191d;
-    --panel: #1e2126;
-    --rail: #141619;
-    --border: #2e333b;
-    --text: #e3e6ea;
-    --muted: #8b939e;
-    --hover: rgba(255, 255, 255, 0.06);
-    --log-bg: #1a1c20;
-    --rx: #e3e6ea;
-    --tx: #f0a14a;
-    --marker: #b892ff;
-    --info: #ff8a80;
-    --ok: #4cc27a;
-    --accent: #5b9dff;
-    --accent-soft: rgba(91, 157, 255, 0.16);
-    /* ANSI 16-color palette for the dark theme. */
-    --ansi-0: #5a5a5a;
-    --ansi-1: #f14c4c;
-    --ansi-2: #23d18b;
-    --ansi-3: #e5e510;
-    --ansi-4: #3b8eea;
-    --ansi-5: #d670d6;
-    --ansi-6: #29b8db;
-    --ansi-7: #cccccc;
-    --ansi-8: #767676;
-    --ansi-9: #f14c4c;
-    --ansi-10: #23d18b;
-    --ansi-11: #f5f543;
-    --ansi-12: #3b8eea;
-    --ansi-13: #d670d6;
-    --ansi-14: #29b8db;
-    --ansi-15: #e5e5e5;
-  }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #17191d;
+  --panel: #1e2126;
+  --rail: #141619;
+  --border: #2e333b;
+  --text: #e3e6ea;
+  --muted: #8b939e;
+  --hover: rgba(255, 255, 255, 0.06);
+  --log-bg: #1a1c20;
+  --rx: #e3e6ea;
+  --tx: #f0a14a;
+  --marker: #b892ff;
+  --info: #ff8a80;
+  --ok: #4cc27a;
+  --accent: #5b9dff;
+  --accent-soft: rgba(91, 157, 255, 0.16);
+  /* ANSI 16-color palette for the dark theme. */
+  --ansi-0: #5a5a5a;
+  --ansi-1: #f14c4c;
+  --ansi-2: #23d18b;
+  --ansi-3: #e5e510;
+  --ansi-4: #3b8eea;
+  --ansi-5: #d670d6;
+  --ansi-6: #29b8db;
+  --ansi-7: #cccccc;
+  --ansi-8: #767676;
+  --ansi-9: #f14c4c;
+  --ansi-10: #23d18b;
+  --ansi-11: #f5f543;
+  --ansi-12: #3b8eea;
+  --ansi-13: #d670d6;
+  --ansi-14: #29b8db;
+  --ansi-15: #e5e5e5;
 }
 
 * {
@@ -179,6 +179,10 @@ label.check {
   padding: 8px 0;
   background: var(--rail);
   border-right: 1px solid var(--border);
+}
+
+.sidebar .spacer {
+  flex: 1;
 }
 
 .nav-item {
@@ -385,7 +389,7 @@ label.check {
   padding: 8px 12px;
   background: var(--log-bg);
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Cascadia Mono", monospace;
-  font-size: 12.5px;
+  font-size: var(--log-font-size, 12.5px);
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-all;
@@ -1009,4 +1013,10 @@ mark.kw {
 .popover .keywords textarea {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   resize: vertical;
+}
+
+/* Settings page */
+.settings-panel select,
+.settings-panel input:not([type="checkbox"]) {
+  min-width: 120px;
 }

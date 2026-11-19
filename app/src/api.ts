@@ -3,6 +3,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import type { SignalStep } from "./signals";
 
@@ -183,6 +184,8 @@ export interface Backend {
   signals(id: number): Promise<SignalsInfo>;
   /** Drives DTR and/or RTS; an omitted line is left unchanged. */
   setSignals(id: number, levels: { dtr?: boolean; rts?: boolean }): Promise<SignalsInfo>;
+  /** Keeps the window above other windows, or stops doing so. */
+  setAlwaysOnTop(on: boolean): Promise<void>;
   /** Runs a DTR/RTS sequence with pauses timed by the backend. */
   runSignals(id: number, steps: SignalStep[]): Promise<SignalsInfo>;
   /** Holds a BREAK for `ms` milliseconds (1 to 5000). */
@@ -245,6 +248,7 @@ export const tauriBackend: Backend = {
     invoke("set_signals", { id, dtr: levels.dtr ?? null, rts: levels.rts ?? null }),
   onSignalsChanged: (handler) =>
     listen<SignalsInfo>("signals-changed", (event) => handler(event.payload)),
+  setAlwaysOnTop: (on) => getCurrentWindow().setAlwaysOnTop(on),
   runSignals: (id, steps) => invoke("run_signals", { id, steps }),
   sendBreak: (id, ms) => invoke("send_break", { id, ms }),
   mcpStatus: () => invoke("mcp_status"),
