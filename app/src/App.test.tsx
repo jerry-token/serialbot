@@ -1246,6 +1246,45 @@ describe("App", () => {
     expect(screen.queryByRole("search")).not.toBeInTheDocument();
   });
 
+  it("filters the log to matching lines", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    act(() => backend.receive(1, "temp=21\nhum=40\nTEMP=22\n"));
+    await waitFor(() => expect(log()).toHaveTextContent("TEMP=22"));
+    await user.keyboard("{Control>}f{/Control}");
+    await user.click(screen.getByRole("checkbox", { name: "Only matching lines" }));
+    // An empty query hides nothing.
+    expect(log()).toHaveTextContent("hum=40");
+    await user.type(screen.getByRole("searchbox", { name: "Search" }), "temp");
+    expect(log()).not.toHaveTextContent("hum=40");
+    expect(log().querySelectorAll(".line")).toHaveLength(2);
+    expect(screen.getByRole("search")).toHaveTextContent("2 / 2");
+    act(() => backend.receive(1, "hum=41\ntemp=23\n"));
+    await waitFor(() => expect(log()).toHaveTextContent("temp=23"));
+    expect(log()).not.toHaveTextContent("hum=41");
+    await user.click(screen.getByRole("checkbox", { name: "Only matching lines" }));
+    expect(log()).toHaveTextContent("hum=41");
+    await user.click(screen.getByRole("checkbox", { name: "Only matching lines" }));
+    // Closing the search shows everything again.
+    await user.click(screen.getByRole("button", { name: "Close search" }));
+    expect(log()).toHaveTextContent("hum=40");
+  });
+
+  it("shows the time between lines", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    act(() => {
+      backend.receiveAt(1, "a\n", 1_000_000);
+      backend.receiveAt(1, "b\n", 1_012_500);
+      backend.receiveAt(1, "c\n", 3_612_300);
+    });
+    await waitFor(() => expect(log()).toHaveTextContent("c"));
+    expect(log().querySelector(".delta")).toBeNull();
+    await user.click(screen.getByRole("button", { name: /Show the time since/ }));
+    const deltas = [...log().querySelectorAll(".delta")].map((d) => d.textContent?.trim());
+    expect(deltas).toEqual(["", "+13ms", "+2.600s"]);
+  });
+
   it("sends repeatedly until stopped", async () => {
     const { backend, user } = setup();
     await openPort(user);

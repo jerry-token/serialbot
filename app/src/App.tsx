@@ -120,6 +120,8 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
   const [showTimestamps, setShowTimestamps] = useState(true);
   const [hexView, setHexView] = useState(false);
   const [showSent, setShowSent] = useState(true);
+  const [showDelta, setShowDelta] = useState(false);
+  const [filterMatches, setFilterMatches] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
   const [mcp, setMcp] = useState<McpStatus | null>(null);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
@@ -607,13 +609,14 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
   const live = activeView?.terminal.view ?? [];
   const paused = frozen !== null && frozen.id === activeId;
   const shown = paused ? frozen.lines : live;
-  const visibleLines = showSent ? shown : shown.filter((l) => l.kind !== "tx");
+  const unfiltered = showSent ? shown : shown.filter((l) => l.kind !== "tx");
   const lastFrozenId = paused ? (frozen.lines.at(-1)?.id ?? -1) : -1;
   const newWhilePaused = paused ? live.filter((l) => l.id > lastFrozenId).length : 0;
   const needle = searchOpen ? query.toLowerCase() : "";
-  const matchIds = needle
-    ? visibleLines.filter((l) => l.text.toLowerCase().includes(needle)).map((l) => l.id)
-    : [];
+  const matching = needle ? unfiltered.filter((l) => l.text.toLowerCase().includes(needle)) : [];
+  const matchIds = matching.map((l) => l.id);
+  // With the filter on, only matching lines are shown (all of them while the query is empty).
+  const visibleLines = needle && filterMatches ? matching : unfiltered;
   const matchIndex =
     matchIds.length === 0 ? -1 : Math.min(matchPos ?? matchIds.length - 1, matchIds.length - 1);
   const currentMatch = matchIndex >= 0 ? (matchIds[matchIndex] ?? null) : null;
@@ -687,6 +690,12 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
                 hint={t.showTimestampsHint}
                 pressed={showTimestamps}
                 onChange={setShowTimestamps}
+              />
+              <Toggle
+                label={t.showDelta}
+                hint={t.showDeltaHint}
+                pressed={showDelta}
+                onChange={setShowDelta}
               />
               <Toggle
                 label={t.hexView}
@@ -771,6 +780,8 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
                         setQuery(q);
                         setMatchPos(null);
                       }}
+                      filter={filterMatches}
+                      onFilter={setFilterMatches}
                       current={matchIndex + 1}
                       total={matchIds.length}
                       onStep={(delta) =>
@@ -788,6 +799,7 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
                     key={activeId ?? 0}
                     lines={visibleLines}
                     showTimestamps={showTimestamps}
+                    showDelta={showDelta}
                     autoScroll={autoScroll && !paused}
                     version={version}
                     matches={new Set(matchIds)}

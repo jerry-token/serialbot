@@ -420,6 +420,13 @@ label.check {
   color: var(--muted);
 }
 
+.delta {
+  display: inline-block;
+  min-width: 7.5ch;
+  color: var(--muted);
+  text-align: right;
+}
+
 /* ---- send panel -------------------------------------------------------- */
 
 .send-panel {
@@ -702,6 +709,11 @@ button.signal.on:hover:not(:disabled) {
 
 .searchbar input {
   width: 200px;
+}
+
+.searchbar .filter {
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .searchbar .count {

@@ -37,6 +37,8 @@ const en = {
   showSent: "Sent",
   autoScroll: "Scroll",
   showTimestampsHint: "Show timestamps",
+  showDelta: "Δt",
+  showDeltaHint: "Show the time since the line before (frame gaps in HEX view)",
   hexViewHint: "Hex view",
   showSentHint: "Show sent data",
   autoScrollHint: "Auto-scroll to new data",
@@ -174,6 +176,7 @@ const en = {
   previousMatch: "Previous match",
   nextMatch: "Next match",
   closeSearch: "Close search",
+  filterMatches: "Only matching lines",
 };
 
 export type Strings = typeof en;
@@ -215,6 +218,8 @@ const zh: Strings = {
   showTimestampsHint: "显示时间戳",
   hexViewHint: "以 HEX 显示",
   showSentHint: "显示发送的数据",
+  showDelta: "Δt",
+  showDeltaHint: "显示与上一行的时间差（HEX 视图下即帧间隔）",
   autoScrollHint: "新数据到达时自动滚动",
   clear: "清屏",
   sendPlaceholder: "要发送的数据 · Enter 发送，Shift+Enter 换行，↑ 调出历史",
@@ -350,6 +355,7 @@ const zh: Strings = {
   previousMatch: "上一个",
   nextMatch: "下一个",
   closeSearch: "关闭搜索",
+  filterMatches: "只显示匹配的行",
 };
 
 export function strings(lang: Lang): Strings {

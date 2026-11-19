@@ -8,6 +8,8 @@ interface Props {
   /** Lines to show (already filtered). */
   lines: readonly Line[];
   showTimestamps: boolean;
+  /** Show the time since the previous shown line. */
+  showDelta?: boolean;
   autoScroll: boolean;
   /** Changes whenever the lines change, so the view scrolls. */
   version: number;
@@ -33,6 +35,20 @@ export function styleCss(style: Style): CSSProperties {
   return css;
 }
 
+/**
+ * Time between two lines: "+0.8ms" under 10 ms, "+12ms" under a second,
+ * "+1.234s" under a minute, "+2m03s" beyond. Lines out of order (a clock
+ * step) show "+0ms" rather than a negative gap.
+ */
+export function formatDelta(us: number): string {
+  const d = Math.max(0, us);
+  if (d < 10_000) return `+${(d / 1000).toFixed(1)}ms`;
+  if (d < 1_000_000) return `+${Math.round(d / 1000)}ms`;
+  if (d < 60_000_000) return `+${(d / 1_000_000).toFixed(3)}s`;
+  const s = Math.floor(d / 1_000_000);
+  return `+${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s`;
+}
+
 /** Estimated height of one unwrapped row, refined by measuring rendered rows. */
 const ROW_HEIGHT = 18;
 
@@ -44,6 +60,7 @@ const ROW_HEIGHT = 18;
 export function LogView({
   lines,
   showTimestamps,
+  showDelta = false,
   autoScroll,
   version,
   matches,
@@ -90,6 +107,13 @@ export function LogView({
               style={{ transform: `translateY(${item.start}px)` }}
             >
               {showTimestamps && <span className="ts">[{formatTime(line.timestampUs)}] </span>}
+              {showDelta && (
+                <span className="delta">
+                  {item.index > 0
+                    ? formatDelta(line.timestampUs - (lines[item.index - 1]?.timestampUs ?? 0))
+                    : ""}{" "}
+                </span>
+              )}
               {line.ai && <span className="ai-tag">AI</span>}
               {PREFIX[line.kind]}
               {line.parts
