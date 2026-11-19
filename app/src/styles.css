@@ -993,3 +993,20 @@ button.signal.on:hover:not(:disabled) {
 .sequence-form .primary {
   align-self: flex-end;
 }
+
+/* Highlighted keywords in the log */
+mark.kw {
+  color: inherit;
+  border-radius: 2px;
+}
+
+.popover .keywords {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.popover .keywords textarea {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  resize: vertical;
+}

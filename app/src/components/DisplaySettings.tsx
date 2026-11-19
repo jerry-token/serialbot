@@ -11,6 +11,9 @@ interface Props {
   onFrameGap: (ms: number) => void;
   ansi: boolean;
   onAnsi: (on: boolean) => void;
+  /** Keywords to mark, one per line. */
+  keywords: string;
+  onKeywords: (text: string) => void;
 }
 
 /** Less frequent view settings, behind one icon. */
@@ -22,6 +25,8 @@ export function DisplaySettings({
   onFrameGap,
   ansi,
   onAnsi,
+  keywords,
+  onKeywords,
 }: Props) {
   return (
     <Popover
@@ -62,6 +67,17 @@ export function DisplaySettings({
           aria-label={t.ansiColors}
           checked={ansi}
           onChange={(e) => onAnsi(e.target.checked)}
+        />
+      </label>
+      <label title={t.keywordsHint} className="popover-wide keywords">
+        {t.keywords}
+        <textarea
+          aria-label={t.keywords}
+          rows={3}
+          spellCheck={false}
+          placeholder={"ERROR\nWARN"}
+          value={keywords}
+          onChange={(e) => onKeywords(e.target.value)}
         />
       </label>
     </Popover>

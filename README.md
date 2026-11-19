@@ -37,6 +37,7 @@ English · [简体中文](README.zh-CN.md)
   Data goes out as raw bytes, exactly as typed: no framing or protocol is added, only the line ending you pick (none for HEX).
 - 🧮 **Checksums** for HEX data: CRC-8, CRC-16 (Modbus, CCITT), CRC-32, XOR, SUM8 and LRC are appended as you send.
 - 🔎 **Search and filter**: `Ctrl/Cmd+F` finds text in the log; "Only matching lines" hides the rest. **Δt** shows the time since the line before, which in HEX view is the gap between frames.
+- 🖍️ **Keyword highlight**: list words such as `ERROR` or `WARN` in the display settings (⚙️) and they are marked in color wherever they appear.
 - 📋 **Command lists**: saved commands in groups; click one to send it, or run a group in order with a delay after each.
 - 📄 **Send a file** in chunks, with an optional pause between chunks for devices without flow control.
 - 💾 **Save the log** once or keep writing it to a file as data arrives.

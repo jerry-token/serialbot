@@ -1001,6 +1001,31 @@ describe("App", () => {
     await waitFor(() => expect(chip()).toHaveAttribute("aria-pressed", "true"));
   });
 
+  it("highlights keywords in the log and remembers them", async () => {
+    const { backend, user, storage } = setup();
+    await openPort(user);
+    act(() => backend.receive(1, "boot ok\nERROR 42: no flash\nwarn: low\n"));
+    await waitFor(() => expect(log()).toHaveTextContent("warn: low"));
+    expect(log().querySelector("mark")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Display settings" }));
+    await user.type(screen.getByRole("textbox", { name: "Highlight" }), "error{Enter}WARN");
+    const marks = () => [...log().querySelectorAll("mark.kw")].map((m) => m.textContent);
+    await waitFor(() => expect(marks()).toEqual(["ERROR", "warn"]));
+    expect(storage.getItem("serialbot.keywords")).toBe("error\nWARN");
+    await user.clear(screen.getByRole("textbox", { name: "Highlight" }));
+    await waitFor(() => expect(marks()).toEqual([]));
+  });
+
+  it("starts with the stored keywords and marks ANSI-colored text too", async () => {
+    const storage = memoryStorage();
+    storage.setItem("serialbot.keywords", "fail");
+    const { backend, user } = setup(new FakeBackend(), undefined, storage);
+    await openPort(user);
+    act(() => backend.receive(1, "\u001b[31mtest fail\u001b[0m and plain fail\n"));
+    await waitFor(() => expect(log()).toHaveTextContent("plain fail"));
+    expect(log().querySelectorAll("mark.kw")).toHaveLength(2);
+  });
+
   it("shows the failure reason of a failed session", async () => {
     const { backend, user } = setup();
     await openPort(user);
