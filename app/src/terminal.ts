@@ -30,7 +30,14 @@ import { toHex } from "./bytes";
 export type LineKind = "rx" | "tx" | "marker" | "info";
 
 export interface Line {
+  /** Unique for the terminal's lifetime; a re-render gives new ids. */
   id: number;
+  /**
+   * Line number shown in the gutter, from 1. Trimming old lines keeps the
+   * numbers of the rest; clearing or re-rendering (HEX toggle, encoding)
+   * counts again from the oldest kept data.
+   */
+  no?: number;
   kind: LineKind;
   timestampUs: number;
   /** Plain text (escape sequences removed), used for search. */
@@ -92,6 +99,7 @@ export class Terminal {
   private rawBytes = 0;
   private lines: Line[] = [];
   private nextId = 0;
+  private lineNo = 0;
   private openRx: Line | null = null;
   private openHex: Line | null = null;
   private encoding = "utf-8";
@@ -218,6 +226,7 @@ export class Terminal {
 
   private resetView(): void {
     this.lines = [];
+    this.lineNo = 0;
     this.openRx = null;
     this.openHex = null;
     this.pendingCr = false;
@@ -236,7 +245,7 @@ export class Terminal {
   }
 
   private add(kind: LineKind, timestampUs: number, text: string, style: Style | null = null): Line {
-    const line: Line = { id: this.nextId++, kind, timestampUs, text };
+    const line: Line = { id: this.nextId++, no: ++this.lineNo, kind, timestampUs, text };
     if (style) line.parts = [{ text, style }];
     this.lines.push(line);
     return line;

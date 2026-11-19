@@ -154,6 +154,7 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
   const [hexView, setHexView] = useState(false);
   const [showSent, setShowSent] = useState(true);
   const [showDelta, setShowDelta] = useState(false);
+  const [showLineNumbers, setShowLineNumbers] = useState(false);
   const [filterMatches, setFilterMatches] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
   const [mcp, setMcp] = useState<McpStatus | null>(null);
@@ -758,6 +759,12 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
                 onChange={setShowTimestamps}
               />
               <Toggle
+                label={t.showLineNumbers}
+                hint={t.showLineNumbersHint}
+                pressed={showLineNumbers}
+                onChange={setShowLineNumbers}
+              />
+              <Toggle
                 label={t.showDelta}
                 hint={t.showDeltaHint}
                 pressed={showDelta}
@@ -868,6 +875,7 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
                     lines={visibleLines}
                     showTimestamps={showTimestamps}
                     showDelta={showDelta}
+                    showLineNumbers={showLineNumbers}
                     autoScroll={autoScroll && !paused}
                     version={version}
                     matches={new Set(matchIds)}
