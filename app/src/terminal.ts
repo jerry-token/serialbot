@@ -37,6 +37,8 @@ export interface Line {
   text: string;
   /** Styled runs of `text`, present only when some of it is styled. */
   parts?: Part[];
+  /** Sent or marked by an AI agent. */
+  ai?: boolean;
 }
 
 export interface TerminalLimits {
@@ -78,6 +80,7 @@ interface RawEntry {
   timestampUs: number;
   bytes: Uint8Array;
   label: string | null;
+  ai: boolean;
 }
 
 type RawItem = { entry: RawEntry } | { info: string; timestampUs: number };
@@ -160,6 +163,7 @@ export class Terminal {
         timestampUs: e.timestampUs,
         bytes: Uint8Array.from(e.data),
         label: e.label,
+        ai: e.ai === true,
       };
       this.keep({ entry }, entry.bytes.length);
       this.render({ entry });
@@ -224,6 +228,10 @@ export class Terminal {
     return line;
   }
 
+  private byAi(line: Line, ai: boolean): void {
+    if (ai) line.ai = true;
+  }
+
   /** Splits decoded received text into styled parts (or one plain part). */
   private styled(text: string): Part[] {
     if (this.ansi) return this.parser.feed(text);
@@ -285,12 +293,12 @@ export class Terminal {
     const { entry } = item;
     if (entry.kind === "marker") {
       this.closeRx();
-      this.add("marker", entry.timestampUs, entry.label ?? "");
+      this.byAi(this.add("marker", entry.timestampUs, entry.label ?? ""), entry.ai);
       return;
     }
     const { bytes } = entry;
     if (this.hex) {
-      this.renderHex(entry.kind, entry.timestampUs, bytes);
+      this.renderHex(entry.kind, entry.timestampUs, bytes, entry.ai);
       return;
     }
     if (entry.kind === "tx") {
@@ -298,7 +306,9 @@ export class Terminal {
       const text = new TextDecoder(this.encoding)
         .decode(bytes)
         .replace(/(\r\n|\r|\n)$/, "");
-      for (const part of text.split(/\r\n|\r|\n/)) this.add("tx", entry.timestampUs, visible(part));
+      for (const part of text.split(/\r\n|\r|\n/)) {
+        this.byAi(this.add("tx", entry.timestampUs, visible(part)), entry.ai);
+      }
       return;
     }
     if (this.afterGap(entry.timestampUs) && this.openRx) {
@@ -311,10 +321,10 @@ export class Terminal {
     this.renderRx(this.styled(this.decoder.decode(bytes, { stream: true })), entry.timestampUs);
   }
 
-  private renderHex(kind: "rx" | "tx", timestampUs: number, bytes: Uint8Array): void {
+  private renderHex(kind: "rx" | "tx", timestampUs: number, bytes: Uint8Array, ai: boolean): void {
     if (kind === "tx") {
       this.openHex = null;
-      this.add("tx", timestampUs, toHex(bytes));
+      this.byAi(this.add("tx", timestampUs, toHex(bytes)), ai);
       return;
     }
     if (bytes.length === 0) return;

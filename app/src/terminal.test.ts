@@ -89,6 +89,17 @@ describe("Terminal hex view", () => {
     t.setHex(false);
     expect(texts(t)).toEqual(["rx:AB", "tx:\ufffd", "info:note", "rx:"]);
   });
+
+  it("flags what an AI agent sent, in text and hex", () => {
+    const t = new Terminal();
+    const ai = (e: LogEntry): LogEntry => ({ ...e, ai: true });
+    t.push([entry("tx", "me\n"), ai(entry("tx", "AT\n")), ai(entry("marker", "step"))]);
+    t.push([entry("rx", "OK\n")]);
+    const flags = () => t.view.map((l) => `${l.text}:${l.ai === true}`);
+    expect(flags()).toEqual(["me:false", "AT:true", "step:true", "OK:false"]);
+    t.setHex(true);
+    expect(flags()).toEqual(["6d 65 0a:false", "41 54 0a:true", "step:true", "4f 4b 0a:false"]);
+  });
 });
 
 describe("Terminal limits", () => {

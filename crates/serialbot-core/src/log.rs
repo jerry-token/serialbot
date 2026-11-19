@@ -56,6 +56,17 @@ impl EntryKind {
     }
 }
 
+/// Who caused a log entry: the person at the app (or the device, for
+/// received data) or an AI agent through MCP.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Actor {
+    /// The user, the app, or the device.
+    #[default]
+    User,
+    /// An AI agent.
+    Ai,
+}
+
 /// One record in the log.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
@@ -66,6 +77,8 @@ pub struct Entry {
     pub timestamp_us: u64,
     /// Content of the entry.
     pub kind: EntryKind,
+    /// Who caused it, so the UI can show what an agent did.
+    pub actor: Actor,
 }
 
 impl Entry {
@@ -169,12 +182,18 @@ impl LogBuffer {
     /// Appends an entry and returns its sequence number, evicting the
     /// oldest entries if the budget would be exceeded.
     pub fn push(&mut self, timestamp_us: u64, kind: EntryKind) -> u64 {
+        self.push_as(timestamp_us, kind, Actor::User)
+    }
+
+    /// Like [`Self::push`], recording who caused the entry.
+    pub fn push_as(&mut self, timestamp_us: u64, kind: EntryKind, actor: Actor) -> u64 {
         let seq = self.next_seq;
         self.next_seq += 1;
         let entry = Entry {
             seq,
             timestamp_us,
             kind,
+            actor,
         };
         self.used += entry.cost();
         self.entries.push_back(entry);

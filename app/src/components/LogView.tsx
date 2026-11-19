@@ -80,15 +80,17 @@ export function LogView({
           if (!line) return null;
           const match = matches?.has(line.id) ? " match" : "";
           const current = line.id === currentMatch ? " current" : "";
+          const ai = line.ai ? " ai" : "";
           return (
             <div
               key={item.key}
               data-index={item.index}
               ref={virtualizer.measureElement}
-              className={`line ${line.kind}${match}${current}`}
+              className={`line ${line.kind}${ai}${match}${current}`}
               style={{ transform: `translateY(${item.start}px)` }}
             >
               {showTimestamps && <span className="ts">[{formatTime(line.timestampUs)}] </span>}
+              {line.ai && <span className="ai-tag">AI</span>}
               {PREFIX[line.kind]}
               {line.parts
                 ? line.parts.map((part, i) =>

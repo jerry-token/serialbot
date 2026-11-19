@@ -37,6 +37,8 @@ export interface SessionInfo {
   error: string | null;
   /** Whether the port is reopened by itself after the device comes back. */
   autoReconnect: boolean;
+  /** Whether AI agents (MCP) may use the session. */
+  aiAccess: boolean;
 }
 
 export interface LogEntry {
@@ -46,6 +48,8 @@ export interface LogEntry {
   kind: "rx" | "tx" | "marker";
   data: number[];
   label: string | null;
+  /** Whether an AI agent sent the data or set the marker. */
+  ai?: boolean;
 }
 
 export interface LogChunk {
@@ -123,6 +127,8 @@ export interface Backend {
   /** Reopens the port of a disconnected or failed session; its log continues. */
   reconnectSession(id: number): Promise<void>;
   setAutoReconnect(id: number, on: boolean): Promise<void>;
+  /** Lets AI agents use the session, or withholds it from them. */
+  setAiAccess(id: number, allowed: boolean): Promise<void>;
   /** Called with the new port list when a device is plugged in or removed. */
   onPortsChanged(handler: (ports: PortInfo[]) => void): Promise<Unlisten>;
   writeData(id: number, data: Uint8Array): Promise<number>;
@@ -174,6 +180,7 @@ export const tauriBackend: Backend = {
   closeSession: (id) => invoke("close_session", { id }),
   reconnectSession: (id) => invoke("reconnect", { id }),
   setAutoReconnect: (id, on) => invoke("set_auto_reconnect", { id, on }),
+  setAiAccess: (id, allowed) => invoke("set_ai_access", { id, allowed }),
   onPortsChanged: (handler) =>
     listen<PortInfo[]>("ports-changed", (event) => handler(event.payload)),
   writeData: (id, data) => invoke("write_data", { id, data: Array.from(data) }),

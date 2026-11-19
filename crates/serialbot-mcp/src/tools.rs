@@ -21,8 +21,8 @@ use serialbot_core::transport::serial::{
 };
 use serialbot_core::transport::{TransportError, TransportKind};
 use serialbot_core::{
-    Cursor, Direction, EntryKind, Session, SessionId, SessionManager, SessionState, SessionSummary,
-    WaitMatch,
+    Actor, Cursor, Direction, EntryKind, Session, SessionId, SessionManager, SessionState,
+    SessionSummary, WaitMatch,
 };
 
 use crate::payload::{self, Format};
@@ -320,6 +320,9 @@ pub(crate) struct SessionOut {
     pub state: String,
     /// Reason, when the state is "failed".
     pub error: Option<String>,
+    /// Whether the user lets AI agents use this session; tools refuse it
+    /// otherwise.
+    pub ai_access: bool,
 }
 
 impl From<SessionSummary> for SessionOut {
@@ -344,6 +347,7 @@ impl From<SessionSummary> for SessionOut {
             .into(),
             state: state.into(),
             error,
+            ai_access: s.ai_access,
         }
     }
 }
@@ -405,6 +409,8 @@ pub(crate) struct EntryOut {
     pub kind: String,
     /// Data in the requested format, or the marker label.
     pub data: String,
+    /// Whether an AI agent caused the entry (sent the data or set the marker).
+    pub ai: bool,
 }
 
 /// Result of `io.read`.
@@ -607,6 +613,7 @@ fn entry_out(e: serialbot_core::Entry, format: Format) -> EntryOut {
         timestamp_us: e.timestamp_us,
         kind: kind.into(),
         data,
+        ai: e.actor == Actor::Ai,
     }
 }
 
@@ -681,15 +688,22 @@ impl SerialTools {
     }
 
     /// Resolves a session id (`"s1"`) or alias. Ids win over aliases.
+    /// Sessions the user withheld from AI agents are refused.
     fn session(&self, name: &str) -> Result<Arc<Session>, String> {
-        if let Some(id) = parse_session_id(name)
-            && let Ok(session) = self.manager.get(id)
-        {
-            return Ok(session);
+        let session = match parse_session_id(name).and_then(|id| self.manager.get(id).ok()) {
+            Some(session) => session,
+            None => self
+                .manager
+                .find_by_alias(name)
+                .map_err(|_| format!("no session {name:?}; call session.list"))?,
+        };
+        if !self.manager.ai_access(session.id()) {
+            return Err(format!(
+                "session {} is not shared with AI agents; the user can allow it in SerialBot",
+                session.id()
+            ));
         }
-        self.manager
-            .find_by_alias(name)
-            .map_err(|_| format!("no session {name:?}; call session.list"))
+        Ok(session)
     }
 
     /// The summary of one session as a tool result.
@@ -791,7 +805,9 @@ impl SerialTools {
         let session = self.session(&args.session)?;
         blocking(move || {
             let cursor = session.end();
-            let seq = session.write(&data).map_err(|e| e.to_string())?;
+            let seq = session
+                .write_as(&data, Actor::Ai)
+                .map_err(|e| e.to_string())?;
             Ok(Json(WriteOut {
                 bytes: data.len(),
                 seq,
@@ -867,10 +883,14 @@ impl SerialTools {
         let session = self.session(&args.session)?;
         blocking(move || {
             if let Some(level) = args.dtr {
-                session.set_dtr(level).map_err(|e| e.to_string())?;
+                session
+                    .set_dtr_as(level, Actor::Ai)
+                    .map_err(|e| e.to_string())?;
             }
             if let Some(level) = args.rts {
-                session.set_rts(level).map_err(|e| e.to_string())?;
+                session
+                    .set_rts_as(level, Actor::Ai)
+                    .map_err(|e| e.to_string())?;
             }
             let outputs = session.output_signals();
             let (lines, input_error) = match session.line_states() {
@@ -912,7 +932,7 @@ impl SerialTools {
         blocking(move || {
             let from = session.end();
             let found = session
-                .send_and_expect(&data, &pattern, timeout, DEFAULT_MATCH_WINDOW)
+                .send_and_expect_as(&data, &pattern, timeout, DEFAULT_MATCH_WINDOW, Actor::Ai)
                 .map_err(|e| e.to_string())?;
             Ok(Json(WaitOut::from_result(found, from, format)))
         })
@@ -1036,7 +1056,7 @@ impl SerialTools {
             return Err("label must not be empty".into());
         }
         let session = self.session(&args.session)?;
-        let seq = session.mark(&args.label);
+        let seq = session.mark_as(&args.label, Actor::Ai);
         Ok(Json(MarkOut {
             seq,
             cursor: seq + 1,

@@ -899,3 +899,21 @@ button.signal.on:hover:not(:disabled) {
   background: var(--bg-soft, rgba(127, 127, 127, 0.08));
   font-size: 12px;
 }
+
+/* Lines an AI agent sent or marked through MCP. */
+.line.ai {
+  background: color-mix(in srgb, var(--ai, #7c5cff) 9%, transparent);
+}
+
+.ai-tag {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--ai, #7c5cff);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+  vertical-align: 1px;
+}

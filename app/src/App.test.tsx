@@ -143,6 +143,28 @@ class FakeBackend implements Backend {
     this.appendMarker(id, "reconnected");
   }
 
+  async setAiAccess(id: number, allowed: boolean) {
+    const session = this.sessions.get(id);
+    if (!session) throw `no session s${id}`;
+    session.info = { ...session.info, aiAccess: allowed };
+    this.notify([]);
+  }
+
+  /** What an agent does through MCP: sends data and sets a marker. */
+  agentWrites(id: number, text: string, marker: string) {
+    const session = this.sessions.get(id);
+    if (!session) return;
+    const data = Array.from(new TextEncoder().encode(text));
+    for (const entry of [
+      { kind: "tx" as const, data, label: null },
+      { kind: "marker" as const, data: [], label: marker },
+    ]) {
+      const timestampUs = Date.now() * 1000;
+      session.log.push({ seq: session.log.length, timestampUs, ai: true, ...entry });
+    }
+    this.notify([id]);
+  }
+
   async setAutoReconnect(id: number, on: boolean) {
     const session = this.sessions.get(id);
     if (!session) throw `no session s${id}`;
@@ -336,6 +358,7 @@ class FakeBackend implements Backend {
       state: "open",
       error: null,
       autoReconnect: true,
+      aiAccess: true,
     };
     this.sessions.set(info.id, { info, log: [] });
     this.notify([info.id]);
@@ -889,6 +912,28 @@ describe("App", () => {
     await user.selectOptions(kind, "serial");
     expect(screen.getByLabelText("Port")).toHaveValue("COM3");
     expect(screen.getByLabelText("Baud")).toBeInTheDocument();
+  });
+
+  it("marks what AI agents send and lets the user withhold a session", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    await user.type(screen.getByLabelText("Send"), "by hand{Enter}");
+    act(() => backend.agentWrites(1, "AT+GMR\r\n", "agent check"));
+    await waitFor(() => expect(log()).toHaveTextContent("AT+GMR"));
+    const lines = [...log().querySelectorAll(".line")];
+    const byText = (text: string) => lines.find((l) => l.textContent?.includes(text));
+    expect(byText("by hand")).not.toHaveClass("ai");
+    expect(byText("AT+GMR")).toHaveClass("ai");
+    expect(byText("AT+GMR")?.querySelector(".ai-tag")).toHaveTextContent("AI");
+    expect(byText("agent check")).toHaveClass("ai");
+
+    const chip = () => screen.getByRole("button", { name: "AI access" });
+    expect(chip()).toHaveAttribute("aria-pressed", "true");
+    await user.click(chip());
+    await waitFor(() => expect(chip()).toHaveAttribute("aria-pressed", "false"));
+    expect(backend.sessions.get(1)?.info.aiAccess).toBe(false);
+    await user.click(chip());
+    await waitFor(() => expect(chip()).toHaveAttribute("aria-pressed", "true"));
   });
 
   it("shows the failure reason of a failed session", async () => {

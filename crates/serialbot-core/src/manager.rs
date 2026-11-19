@@ -72,6 +72,8 @@ pub struct SessionSummary {
     /// Whether the manager reopens the port when the device comes back
     /// (see [`SessionManager::reconnect_lost`]).
     pub auto_reconnect: bool,
+    /// Whether AI agents may use it (see [`SessionManager::set_ai_access`]).
+    pub ai_access: bool,
 }
 
 /// Owns all sessions of the process.
@@ -106,6 +108,8 @@ struct Registry {
     /// Sessions whose port was handed back on purpose: not reconnected
     /// automatically until reopened by hand.
     released: HashSet<SessionId>,
+    /// Sessions the user withheld from AI agents.
+    ai_blocked: HashSet<SessionId>,
 }
 
 impl SessionManager {
@@ -311,6 +315,27 @@ impl SessionManager {
             .collect()
     }
 
+    /// Lets AI agents use a session or withholds it from them. Sessions
+    /// start shared; the MCP tools refuse withheld ones.
+    pub fn set_ai_access(&self, id: SessionId, allowed: bool) -> Result<(), ManagerError> {
+        let mut reg = self.lock();
+        if !reg.sessions.contains_key(&id) {
+            return Err(ManagerError::UnknownSession(id));
+        }
+        if allowed {
+            reg.ai_blocked.remove(&id);
+        } else {
+            reg.ai_blocked.insert(id);
+        }
+        Ok(())
+    }
+
+    /// Whether AI agents may use the session (unknown sessions: false).
+    pub fn ai_access(&self, id: SessionId) -> bool {
+        let reg = self.lock();
+        reg.sessions.contains_key(&id) && !reg.ai_blocked.contains(&id)
+    }
+
     /// Lists every session, open or not, in id order.
     pub fn list(&self) -> Vec<SessionSummary> {
         let reg = self.lock();
@@ -322,6 +347,7 @@ impl SessionManager {
                 info: s.info().clone(),
                 state: s.state(),
                 auto_reconnect: reg.auto.contains(&s.id()),
+                ai_access: !reg.ai_blocked.contains(&s.id()),
             })
             .collect()
     }
@@ -373,6 +399,7 @@ impl SessionManager {
             reg.configs.remove(&id);
             reg.auto.remove(&id);
             reg.released.remove(&id);
+            reg.ai_blocked.remove(&id);
             reg.sessions
                 .remove(&id)
                 .ok_or(ManagerError::UnknownSession(id))?
@@ -490,6 +517,26 @@ mod tests {
         while s.state() == SessionState::Open {
             std::thread::sleep(Duration::from_millis(1));
         }
+    }
+
+    #[test]
+    fn sessions_can_be_withheld_from_ai() {
+        let (m, _present, _devices) = pluggable();
+        let s = m.open(&cfg("COM3"), None).unwrap();
+        assert!(m.ai_access(s.id()));
+        assert!(m.list()[0].ai_access);
+        m.set_ai_access(s.id(), false).unwrap();
+        assert!(!m.ai_access(s.id()));
+        assert!(!m.list()[0].ai_access);
+        m.set_ai_access(s.id(), true).unwrap();
+        assert!(m.ai_access(s.id()));
+        m.set_ai_access(s.id(), false).unwrap();
+        m.remove(s.id()).unwrap();
+        assert!(!m.ai_access(s.id()), "unknown sessions are not accessible");
+        assert!(matches!(
+            m.set_ai_access(s.id(), true),
+            Err(ManagerError::UnknownSession(_))
+        ));
     }
 
     #[test]

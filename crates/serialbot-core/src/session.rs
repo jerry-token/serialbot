@@ -14,7 +14,7 @@ use bytes::Bytes;
 use regex::bytes::Regex;
 
 use crate::clock::Clock;
-use crate::log::{Cursor, Direction, EntryKind, LogBuffer, LogError, ReadResult};
+use crate::log::{Actor, Cursor, Direction, EntryKind, LogBuffer, LogError, ReadResult};
 use crate::transport::{
     Connection, LineStates, TransportControl, TransportError, TransportInfo, TransportReader,
 };
@@ -242,8 +242,19 @@ impl Session {
     /// Inserts a marker (for example "reset") and returns its sequence
     /// number. Works in any state so markers can annotate a dead session.
     pub fn mark(&self, label: &str) -> u64 {
+        self.mark_as(label, Actor::User)
+    }
+
+    /// Like [`Session::mark`], recording who set the marker.
+    pub fn mark_as(&self, label: &str, actor: Actor) -> u64 {
         let now = self.shared.clock.now_us();
-        let seq = self.shared.lock().log.push_marker(now, label);
+        let seq = self.shared.lock().log.push_as(
+            now,
+            EntryKind::Marker {
+                label: label.to_owned(),
+            },
+            actor,
+        );
         self.shared.changed.notify_all();
         seq
     }
@@ -256,20 +267,28 @@ impl Session {
     /// write then fails, a `TX failed: …` marker is logged after the entry
     /// and the error is returned.
     pub fn write(&self, data: &[u8]) -> Result<u64, SessionError> {
+        self.write_as(data, Actor::User)
+    }
+
+    /// Like [`Session::write`], recording who sent the data.
+    pub fn write_as(&self, data: &[u8], actor: Actor) -> Result<u64, SessionError> {
         self.ensure_open()?;
         // Holding the control lock keeps concurrent writers' entries in the
         // order their bytes go out.
         let mut control = lock(&self.control);
         let now = self.shared.clock.now_us();
-        let seq =
-            self.shared
-                .lock()
-                .log
-                .push_data(now, Direction::Tx, Bytes::copy_from_slice(data));
+        let seq = self.shared.lock().log.push_as(
+            now,
+            EntryKind::Data {
+                direction: Direction::Tx,
+                bytes: Bytes::copy_from_slice(data),
+            },
+            actor,
+        );
         self.shared.changed.notify_all();
         if let Err(e) = control.write_all(data) {
             drop(control);
-            self.mark(&format!("TX failed: {e}"));
+            self.mark_as(&format!("TX failed: {e}"), actor);
             return Err(e.into());
         }
         Ok(seq)
@@ -278,9 +297,14 @@ impl Session {
     /// Drives DTR. On success the level is remembered and a `DTR=0`/`DTR=1`
     /// marker is logged, so resets are visible in the timeline.
     pub fn set_dtr(&self, level: bool) -> Result<(), SessionError> {
+        self.set_dtr_as(level, Actor::User)
+    }
+
+    /// Like [`Session::set_dtr`], recording who changed the line.
+    pub fn set_dtr_as(&self, level: bool, actor: Actor) -> Result<(), SessionError> {
         self.with_control(|c| c.set_dtr(level))?;
         lock(&self.outputs).dtr = Some(level);
-        self.mark(&format!("DTR={}", u8::from(level)));
+        self.mark_as(&format!("DTR={}", u8::from(level)), actor);
         Ok(())
     }
 
@@ -292,6 +316,11 @@ impl Session {
     ///
     /// [`Capabilities::manual_rts`]: crate::transport::Capabilities::manual_rts
     pub fn set_rts(&self, level: bool) -> Result<(), SessionError> {
+        self.set_rts_as(level, Actor::User)
+    }
+
+    /// Like [`Session::set_rts`], recording who changed the line.
+    pub fn set_rts_as(&self, level: bool, actor: Actor) -> Result<(), SessionError> {
         if !self.info.capabilities.manual_rts {
             return Err(SessionError::Transport(TransportError::Unsupported(
                 "setting RTS while RTS/CTS hardware flow control is on",
@@ -299,7 +328,7 @@ impl Session {
         }
         self.with_control(|c| c.set_rts(level))?;
         lock(&self.outputs).rts = Some(level);
-        self.mark(&format!("RTS={}", u8::from(level)));
+        self.mark_as(&format!("RTS={}", u8::from(level)), actor);
         Ok(())
     }
 
@@ -383,12 +412,24 @@ impl Session {
         timeout: Duration,
         match_window: usize,
     ) -> Result<Option<WaitMatch>, SessionError> {
+        self.send_and_expect_as(data, pattern, timeout, match_window, Actor::User)
+    }
+
+    /// Like [`Session::send_and_expect`], recording who sent the data.
+    pub fn send_and_expect_as(
+        &self,
+        data: &[u8],
+        pattern: &Regex,
+        timeout: Duration,
+        match_window: usize,
+        actor: Actor,
+    ) -> Result<Option<WaitMatch>, SessionError> {
         // Take the cursor *before* writing: a fast device can answer before
         // the TX entry is logged, giving the reply a smaller sequence number
         // than the command. Only RX data is matched, so starting here never
         // matches the command itself.
         let from = self.end();
-        self.write(data)?;
+        self.write_as(data, actor)?;
         self.wait_for(pattern, from, timeout, match_window)
     }
 
@@ -1079,6 +1120,62 @@ mod tests {
         s.write(b"hi").unwrap();
         assert_eq!(d2.take_written(), b"hi");
         assert!(rx_bytes(&s).starts_with(b"before"), "the history is kept");
+    }
+
+    #[test]
+    fn entries_record_who_caused_them() {
+        let (s, d, _c) = session();
+        s.write(b"user").unwrap();
+        s.write_as(b"agent", Actor::Ai).unwrap();
+        s.set_dtr_as(true, Actor::Ai).unwrap();
+        s.set_rts(false).unwrap();
+        s.mark_as("checkpoint", Actor::Ai);
+        let re = regex::bytes::Regex::new("OK").unwrap();
+        d.send(b"OK");
+        s.send_and_expect_as(b"AT", &re, Duration::from_secs(5), 64, Actor::Ai)
+            .unwrap();
+        let actors: Vec<Actor> = s
+            .read(Cursor(0), usize::MAX)
+            .unwrap()
+            .entries
+            .iter()
+            .filter(|e| {
+                !matches!(
+                    e.kind,
+                    EntryKind::Data {
+                        direction: Direction::Rx,
+                        ..
+                    }
+                )
+            })
+            .map(|e| e.actor)
+            .collect();
+        assert_eq!(
+            actors,
+            [
+                Actor::User,
+                Actor::Ai,
+                Actor::Ai,
+                Actor::User,
+                Actor::Ai,
+                Actor::Ai
+            ]
+        );
+        assert!(
+            s.read(Cursor(0), usize::MAX)
+                .unwrap()
+                .entries
+                .iter()
+                .filter(|e| matches!(
+                    e.kind,
+                    EntryKind::Data {
+                        direction: Direction::Rx,
+                        ..
+                    }
+                ))
+                .all(|e| e.actor == Actor::User),
+            "received data belongs to the device"
+        );
     }
 
     #[test]

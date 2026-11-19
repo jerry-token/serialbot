@@ -864,6 +864,19 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
               {t.autoReconnect}
             </button>
           )}
+          {active && active.state !== "closed" && (
+            <button
+              type="button"
+              className="chip"
+              aria-pressed={active.aiAccess}
+              title={t.aiAccessHint}
+              onClick={() =>
+                void sessionCall((id) => backend.setAiAccess(id, !active.aiAccess))
+              }
+            >
+              {t.aiAccess}
+            </button>
+          )}
           <span>
             {t.rxBytes} {activeView?.rx ?? 0} · {t.txBytes} {activeView?.tx ?? 0}
           </span>
