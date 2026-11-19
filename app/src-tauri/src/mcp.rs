@@ -37,6 +37,9 @@ pub struct McpStatus {
     /// Why the server is not running although enabled, or why the settings
     /// file was ignored.
     pub error: Option<String>,
+    /// Program that stdio-only MCP clients start, with the argument `mcp`
+    /// (see [`crate::cli`]).
+    pub stdio_command: Option<String>,
 }
 
 struct Running {
@@ -104,6 +107,7 @@ impl McpController {
                 .as_ref()
                 .map(|r| format!("http://127.0.0.1:{}{MCP_PATH}", r.port)),
             error: inner.error.clone(),
+            stdio_command: crate::cli::launcher(),
         }
     }
 

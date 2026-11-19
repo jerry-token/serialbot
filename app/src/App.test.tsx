@@ -67,6 +67,7 @@ class FakeBackend implements Backend {
     running: false,
     url: null,
     error: null,
+    stdioCommand: "/Applications/SerialBot.app/Contents/MacOS/serialbot",
   };
   lines: Record<number, SignalsInfo> = {};
   failSignals = false;
@@ -317,6 +318,7 @@ class FakeBackend implements Backend {
       running: settings.enabled,
       url: settings.enabled ? `http://127.0.0.1:${settings.port}/mcp` : null,
       error: null,
+      stdioCommand: this.mcp.stdioCommand,
     };
     return this.mcp;
   }
@@ -1323,9 +1325,22 @@ describe("MCP panel", () => {
     const command =
       'claude mcp add --transport http serialbot http://127.0.0.1:9633/mcp --header "Authorization: Bearer token-0123456789abcdef"';
     expect(within(panel).getByText(command)).toBeInTheDocument();
-    await user.click(within(panel).getByRole("button", { name: "Copy" }));
+    await user.click(within(panel).getByRole("button", { name: "Copy Claude Code command" }));
     expect(copy).toHaveBeenCalledWith(command);
     await waitFor(() => expect(within(panel).getByText("Copied")).toBeInTheDocument());
+
+    // Claude Desktop starts the stdio bridge: `serialbot mcp`.
+    await user.click(within(panel).getByRole("button", { name: "Copy Claude Desktop config" }));
+    const copied: unknown[][] = copy.mock.calls;
+    const config: unknown = JSON.parse(String(copied.at(-1)?.[0]));
+    expect(config).toEqual({
+      mcpServers: {
+        serialbot: {
+          command: "/Applications/SerialBot.app/Contents/MacOS/serialbot",
+          args: ["mcp"],
+        },
+      },
+    });
 
     expect(status()).toHaveTextContent("MCP :9633");
     await user.click(screen.getByRole("button", { name: "Terminal" }));
@@ -1373,7 +1388,7 @@ describe("MCP panel", () => {
     const { user } = setup(backend, copy);
     const panel = await openPanel(user);
     expect(within(panel).getByText("port 9633 in use")).toBeInTheDocument();
-    await user.click(within(panel).getByRole("button", { name: "Copy" }));
+    await user.click(within(panel).getByRole("button", { name: "Copy Claude Code command" }));
     await waitFor(() => expect(within(panel).getByText("clipboard denied")).toBeInTheDocument());
 
     backend.failMcp = "the token must be at least 16 characters";

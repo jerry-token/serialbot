@@ -11,6 +11,7 @@
 //! removed. The same thread retries lost sessions that have auto-reconnect
 //! on.
 
+pub mod cli;
 pub mod commands;
 pub mod export;
 pub mod filesend;

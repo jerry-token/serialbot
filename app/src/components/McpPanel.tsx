@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { McpSettings, McpStatus } from "../api";
-import { claudeCommand } from "../api";
+import { claudeCommand, claudeDesktopConfig } from "../api";
 import type { Strings } from "../i18n";
 
 interface Props {
@@ -34,6 +34,13 @@ export function McpPanel({ t, status, onApply, onRegenerate, copy }: Props) {
   };
 
   const command = status.url ? claudeCommand(status.url, status.settings.token) : null;
+  const desktop =
+    status.url && status.stdioCommand ? claudeDesktopConfig(status.stdioCommand) : null;
+  const copyNote = (text: string) =>
+    copy(text).then(
+      () => setNote(t.copied),
+      (e: unknown) => setNote(String(e)),
+    );
 
   return (
     <section className="card mcp-panel" aria-label={t.mcpTitle}>
@@ -80,15 +87,16 @@ export function McpPanel({ t, status, onApply, onRegenerate, copy }: Props) {
         <div className="row">
           <span className="muted">{t.mcpClaude}</span>
           <code className="grow">{command}</code>
-          <button
-            type="button"
-            onClick={() =>
-              copy(command).then(
-                () => setNote(t.copied),
-                (e: unknown) => setNote(String(e)),
-              )
-            }
-          >
+          <button type="button" aria-label={t.copyCommand} onClick={() => copyNote(command)}>
+            {t.copy}
+          </button>
+        </div>
+      )}
+      {desktop && (
+        <div className="row">
+          <span className="muted">{t.mcpDesktop}</span>
+          <pre className="grow config">{desktop}</pre>
+          <button type="button" aria-label={t.copyDesktop} onClick={() => copyNote(desktop)}>
             {t.copy}
           </button>
         </div>

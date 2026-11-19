@@ -911,3 +911,69 @@ async fn http_requests_are_authenticated_and_validated() {
         "browser page: any Origin"
     );
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_stdio_bridge_forwards_to_the_http_server() {
+    use serialbot_mcp::bridge::{self, Bridge, BridgeError};
+
+    let h = Harness::start().await;
+    // The first candidate is closed; the bridge moves on to the app's port.
+    let closed = format!(
+        "http://127.0.0.1:{}/mcp",
+        std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port()
+    );
+    let upstream = bridge::connect(&[closed.clone(), h.url()], TOKEN)
+        .await
+        .unwrap();
+    let bridged = Bridge::new(&upstream);
+    let (ours, theirs) = tokio::io::duplex(64 * 1024);
+    let server = tokio::spawn(async move {
+        bridged.serve(ours).await.unwrap().waiting().await.unwrap();
+    });
+    let client = ClientConfig::default().serve(theirs).await.unwrap();
+
+    let info = client.peer_info().unwrap();
+    assert_eq!(info.server_info.as_ref().unwrap().name, "serialbot");
+    assert!(
+        info.instructions
+            .as_deref()
+            .unwrap()
+            .contains("session.release")
+    );
+    let direct = h.client().await.list_all_tools().await.unwrap().len();
+    assert_eq!(client.list_all_tools().await.unwrap().len(), direct);
+
+    ok(&client, "session.open", json!({"port": "mock0"})).await;
+    ok(
+        &client,
+        "io.write",
+        json!({"session": "s1", "text": "AT\r\n"}),
+    )
+    .await;
+    assert_eq!(h.device("mock0").take_written(), b"AT\r\n");
+    // Tool errors pass through unchanged.
+    assert!(
+        err(&client, "io.write", json!({"session": "zz", "text": "x"}))
+            .await
+            .contains("no session")
+    );
+
+    client.cancel().await.unwrap();
+    server.await.unwrap();
+    upstream.cancel().await.unwrap();
+
+    // A wrong token or no server: a clear error naming what was tried.
+    let e = bridge::connect(&[closed.clone(), h.url()], "wrong-token-0123456789")
+        .await
+        .unwrap_err();
+    assert!(matches!(e, BridgeError::Unreachable { .. }));
+    let text = e.to_string();
+    assert!(
+        text.contains(&closed) && text.contains("turn the MCP server on"),
+        "{text}"
+    );
+}

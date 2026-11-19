@@ -1,4 +1,4 @@
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 # Product name used in doc comments.
-doc-valid-idents = ["SerialBot", ".."]
+doc-valid-idents = ["SerialBot", "AppImage", ".."]

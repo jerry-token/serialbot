@@ -3285,6 +3285,7 @@ dependencies = [
 name = "serialbot-app"
 version = "0.1.0"
 dependencies = [
+ "dirs",
  "serde",
  "serde_json",
  "serialbot-core",
