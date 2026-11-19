@@ -35,6 +35,7 @@ English · [简体中文](README.zh-CN.md)
   - stays smooth with tens of thousands of lines
 - ✍️ **Send**: multi-line text or HEX, with a choice of line ending. `Enter` sends, `Shift+Enter` adds a line, `↑` recalls history; timed send.
   Data goes out as raw bytes, exactly as typed: no framing or protocol is added, only the line ending you pick (none for HEX).
+- 🧮 **Checksums** for HEX data: CRC-8, CRC-16 (Modbus, CCITT), CRC-32, XOR, SUM8 and LRC are appended as you send.
 - 📋 **Command lists**: saved commands in groups; click one to send it, or run a group in order with a delay after each.
 - 📄 **Send a file** in chunks, with an optional pause between chunks for devices without flow control.
 - 💾 **Save the log** once or keep writing it to a file as data arrives.

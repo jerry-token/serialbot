@@ -586,7 +586,8 @@ describe("App", () => {
     await waitFor(() => expect(log()).not.toHaveTextContent("→ AT"));
 
     await user.click(screen.getByRole("checkbox", { name: "Hex" }));
-    expect(screen.getByLabelText("Line ending")).toBeDisabled();
+    // HEX has no line ending; a checksum can be appended instead.
+    expect(screen.queryByLabelText("Line ending")).not.toBeInTheDocument();
     await user.clear(input);
     await user.type(input, "01 ff{Enter}");
     await waitFor(() => expect(backend.written[2]).toEqual([1, [1, 255]]));
@@ -594,6 +595,21 @@ describe("App", () => {
     await user.type(input, " z{Enter}");
     expect(status()).toHaveTextContent("Invalid hex");
     expect(backend.written).toHaveLength(3);
+
+    const checksum = screen.getByLabelText("Checksum appended to HEX data");
+    await user.selectOptions(checksum, "crc16-modbus");
+    expect(checksum).toHaveAttribute("title", "Checksum appended to HEX data");
+    await user.clear(input);
+    await user.type(input, "01 03 00 00 00 01");
+    expect(checksum).toHaveAttribute("title", "Appends 84 0a");
+    await user.keyboard("{Enter}");
+    await waitFor(() =>
+      expect(backend.written[3]).toEqual([1, [1, 3, 0, 0, 0, 1, 0x84, 0x0a]]),
+    );
+    await user.selectOptions(checksum, "none");
+    expect(checksum).toHaveAttribute("title", "Checksum appended to HEX data");
+    await user.click(screen.getByRole("checkbox", { name: "Hex" }));
+    expect(screen.getByLabelText("Line ending")).toHaveValue("lf");
   });
 
   it("shows sessions opened by MCP clients as tabs with their own logs", async () => {

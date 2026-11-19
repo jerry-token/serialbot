@@ -1,12 +1,15 @@
 import { type PointerEvent as ReactPointerEvent, type ReactNode, useRef, useState } from "react";
 import type { RepeatStatus } from "../api";
-import type { LineEnding } from "../bytes";
+import { type LineEnding, parseHex, toHex } from "../bytes";
+import { CHECKSUMS, CHECKSUM_NAMES, type Checksum, checksumBytes } from "../checksum";
 import type { Strings } from "../i18n";
 
 export interface SendSettings {
   text: string;
   hex: boolean;
   ending: LineEnding;
+  /** Appended to HEX data (text is sent with its line ending instead). */
+  checksum: Checksum;
   /** Send repeatedly every `intervalMs` until stopped. */
   repeat: boolean;
   intervalMs: string;
@@ -162,18 +165,32 @@ export function SendBar({
             />
             {t.hexInput}
           </label>
-          <select
-            aria-label={t.lineEnding}
-            title={t.lineEnding}
-            value={settings.ending}
-            disabled={settings.hex}
-            onChange={(e) => set({ ending: e.target.value as LineEnding })}
-          >
-            <option value="none">{t.endingNone}</option>
-            <option value="lf">\n</option>
-            <option value="crlf">\r\n</option>
-            <option value="cr">\r</option>
-          </select>
+          {settings.hex ? (
+            <select
+              aria-label={t.checksum}
+              title={checksumTitle(t, settings)}
+              value={settings.checksum}
+              onChange={(e) => set({ checksum: e.target.value as Checksum })}
+            >
+              {CHECKSUMS.map((kind) => (
+                <option key={kind} value={kind}>
+                  {kind === "none" ? t.noChecksum : CHECKSUM_NAMES[kind]}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <select
+              aria-label={t.lineEnding}
+              title={t.lineEnding}
+              value={settings.ending}
+              onChange={(e) => set({ ending: e.target.value as LineEnding })}
+            >
+              <option value="none">{t.endingNone}</option>
+              <option value="lf">\n</option>
+              <option value="crlf">\r\n</option>
+              <option value="cr">\r</option>
+            </select>
+          )}
         </div>
         <div className="send-row" title={t.repeatHint}>
           <label className="check">
@@ -210,4 +227,14 @@ export function SendBar({
       </div>
     </form>
   );
+}
+
+/** Tooltip of the checksum picker: what it appends to the typed HEX. */
+function checksumTitle(t: Strings, settings: SendSettings): string {
+  if (settings.checksum === "none") return t.checksum;
+  try {
+    return t.checksumAppends(toHex(checksumBytes(settings.checksum, parseHex(settings.text))));
+  } catch {
+    return t.checksum;
+  }
 }
