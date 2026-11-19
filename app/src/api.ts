@@ -109,6 +109,8 @@ export interface McpStatus {
   running: boolean;
   url: string | null;
   error: string | null;
+  /** Program stdio-only MCP clients start with the argument `mcp`. */
+  stdioCommand: string | null;
 }
 
 export type Unlisten = () => void;
@@ -240,6 +242,14 @@ export function formatBytes(n: number): string {
 /** The command that adds this server to Claude Code. */
 export function claudeCommand(url: string, token: string): string {
   return `claude mcp add --transport http serialbot ${url} --header "Authorization: Bearer ${token}"`;
+}
+
+/**
+ * Claude Desktop entry (claude_desktop_config.json) that starts
+ * `serialbot mcp`, the stdio bridge to the running app.
+ */
+export function claudeDesktopConfig(command: string): string {
+  return JSON.stringify({ mcpServers: { serialbot: { command, args: ["mcp"] } } }, null, 2);
 }
 
 /** Text for a rejected backend call (Tauri rejects with plain strings). */

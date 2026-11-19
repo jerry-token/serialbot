@@ -25,6 +25,7 @@
 //! ```
 
 mod auth;
+pub mod bridge;
 mod payload;
 mod tools;
 

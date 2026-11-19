@@ -108,6 +108,14 @@ Get the file for your system from [Releases](https://github.com/jerry-token/seri
    ```
 3. Ask Claude Code: *"List the serial ports, open the ESP32 one and send `version`."* 🎉
 
+**Claude Desktop** (and other clients that only start stdio servers): copy the second snippet on the AI page into `claude_desktop_config.json`. It runs `serialbot mcp`, a small bridge to the running app, so SerialBot must be open with the MCP server on:
+
+```json
+{ "mcpServers": { "serialbot": { "command": "/Applications/SerialBot.app/Contents/MacOS/serialbot", "args": ["mcp"] } } }
+```
+
+On Windows the command is the path of `serialbot.exe` (installed or portable); on Linux the path of the AppImage or `/usr/bin/serialbot`.
+
 | Tool | What it does |
 |---|---|
 | `port.list` / `session.list` | List ports / open sessions |

@@ -890,3 +890,12 @@ button.signal.on:hover:not(:disabled) {
 .command-row .delay {
   width: 72px;
 }
+
+.mcp-panel pre.config {
+  margin: 0;
+  padding: 6px 8px;
+  overflow-x: auto;
+  border-radius: 6px;
+  background: var(--bg-soft, rgba(127, 127, 127, 0.08));
+  font-size: 12px;
+}
