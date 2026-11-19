@@ -22,6 +22,13 @@ interface Props {
   currentMatch?: number | null;
   /** Marks the user's keywords, if any. */
   highlight?: Highlighter | null;
+  /** Ids of bookmarked lines; with `onToggleBookmark`, each row gets a ☆. */
+  bookmarks?: ReadonlySet<number> | undefined;
+  onToggleBookmark?: (id: number) => void;
+  /** A line to bring into view once; a new `seq` scrolls again. */
+  jumpTo?: { id: number; seq: number } | null;
+  /** Names the ☆ of line `no` for screen readers. */
+  bookmarkLabel?: (no: number) => string;
 }
 
 /** `text` with the keywords marked, or as is without a highlighter. */
@@ -87,6 +94,10 @@ export function LogView({
   matches,
   currentMatch = null,
   highlight = null,
+  bookmarks,
+  onToggleBookmark,
+  jumpTo = null,
+  bookmarkLabel = (no) => `Bookmark line ${no}`,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
@@ -111,6 +122,13 @@ export function LogView({
     // `lines` changes with `version`; the virtualizer object is stable.
   }, [version, autoScroll, currentMatch, lines.length]);
 
+  // A jump scrolls once; later data does not pull the view back to it.
+  useLayoutEffect(() => {
+    if (!jumpTo) return;
+    const index = lines.findIndex((line) => line.id === jumpTo.id);
+    if (index >= 0) virtualizer.scrollToIndex(index, { align: "center" });
+  }, [jumpTo?.seq]);
+
   // The gutter is as wide as the largest number shown.
   const gutter = `${String(lines.at(-1)?.no ?? 0).length + 1}ch`;
   return (
@@ -128,14 +146,28 @@ export function LogView({
           const match = matches?.has(line.id) ? " match" : "";
           const current = line.id === currentMatch ? " current" : "";
           const ai = line.ai ? " ai" : "";
+          const isMarked = bookmarks?.has(line.id) ?? false;
+          const bookmark = isMarked ? " bookmarked" : "";
+          const jumped = line.id === jumpTo?.id ? " jumped" : "";
           return (
             <div
               key={item.key}
               data-index={item.index}
               ref={virtualizer.measureElement}
-              className={`line ${line.kind}${ai}${match}${current}`}
+              className={`line ${line.kind}${ai}${match}${current}${bookmark}${jumped}`}
               style={{ transform: `translateY(${item.start}px)` }}
             >
+              {onToggleBookmark && (
+                <button
+                  type="button"
+                  className="bm"
+                  aria-pressed={isMarked}
+                  aria-label={bookmarkLabel(line.no ?? 0)}
+                  onClick={() => onToggleBookmark(line.id)}
+                >
+                  {isMarked ? "★" : "☆"}
+                </button>
+              )}
               {showLineNumbers && (
                 <span className="ln" aria-hidden="true">
                   {line.no ?? ""}

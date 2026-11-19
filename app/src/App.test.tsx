@@ -1388,6 +1388,60 @@ describe("App", () => {
     expect(gutter[0]).toHaveAttribute("aria-hidden", "true");
   });
 
+  it("bookmarks lines and jumps back to them", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    act(() => backend.receive(1, "boot\nERROR 42\nready\n"));
+    await waitFor(() => expect(log()).toHaveTextContent("ready"));
+    const list = () => screen.getByRole("button", { name: /^Bookmarks/ });
+    await user.click(list());
+    expect(screen.getByRole("dialog")).toHaveTextContent("No bookmarks yet");
+    await user.click(list());
+
+    const star = screen.getByRole("button", { name: "Bookmark line 2" });
+    await user.click(star);
+    expect(star).toHaveAttribute("aria-pressed", "true");
+    expect(star.closest(".line")).toHaveClass("bookmarked");
+    await user.click(screen.getByRole("button", { name: "Bookmark line 3" }));
+    expect(list()).toHaveAccessibleName("Bookmarks (2)");
+
+    // Jumping stops auto-scroll so the view stays at the bookmark.
+    await user.click(list());
+    const entries = within(screen.getByRole("dialog"));
+    expect(entries.getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      expect.stringContaining("ERROR 42"),
+      expect.stringContaining("ready"),
+    ]);
+    await user.click(entries.getByRole("button", { name: /ERROR 42/ }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Auto-scroll to new data" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(star.closest(".line")).toHaveClass("jumped");
+
+    await user.click(list());
+    await user.click(screen.getByRole("button", { name: "Remove the bookmark on line 3" }));
+    expect(within(screen.getByRole("dialog")).getAllByRole("listitem")).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: "Remove all bookmarks" }));
+    expect(list()).toHaveAccessibleName("Bookmarks");
+    // Clicking ★ again also removes a bookmark.
+    await user.keyboard("{Escape}");
+    await user.click(star);
+    await user.click(star);
+    expect(star).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("drops bookmarks of lines that leave the log", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    act(() => backend.receive(1, "old\n"));
+    await waitFor(() => expect(log()).toHaveTextContent("old"));
+    await user.click(screen.getByRole("button", { name: "Bookmark line 1" }));
+    await user.click(screen.getByRole("button", { name: "Clear" }));
+    expect(screen.getByRole("button", { name: /^Bookmarks/ })).toHaveAccessibleName("Bookmarks");
+  });
+
   it("shows the time between lines", async () => {
     const { backend, user } = setup();
     await openPort(user);
