@@ -24,7 +24,7 @@ English · [简体中文](README.zh-CN.md)
 
 ## ✨ Features
 
-- 🪶 **Lightweight**: a 3.5 MB Windows installer, or a 16 MB portable exe that runs without installing.
+- 🪶 **Lightweight**: a Windows installer under 4 MB, or a portable exe of about 17 MB that runs without installing.
 - 💻 **Cross-platform**: Windows, macOS (Apple Silicon and Intel) and Linux.
 - 🗂️ **Many ports at once**: one tab per port, each with its own log and counters.
 - 🌈 **Receive view**:
@@ -76,8 +76,8 @@ Get the file for your system from [Releases](https://github.com/jerry-token/seri
 
 | System | File | Notes |
 |---|---|---|
-| 🪟 Windows 10/11 | `SerialBot_*_x64-setup.exe` | Installer (~3.5 MB, compressed), no admin rights needed |
-| 🪟 Windows 10/11 | `serialbot_windows_x64.exe` | Portable (~16 MB, uncompressed), just run it |
+| 🪟 Windows 10/11 | `SerialBot_*_x64-setup.exe` | Installer (under 4 MB, compressed), no admin rights needed |
+| 🪟 Windows 10/11 | `serialbot_windows_x64.exe` | Portable (~17 MB, uncompressed), just run it |
 | 🍎 macOS 11+ | `SerialBot_*_universal.dmg` | Apple Silicon and Intel |
 | 🐧 Ubuntu / Debian | `SerialBot_*_amd64.deb` | `sudo apt install ./SerialBot_*.deb` |
 | 🐧 Other Linux | `SerialBot_*_amd64.AppImage` | `chmod +x`, then run |
@@ -152,6 +152,10 @@ On Windows the command is the path of `serialbot.exe` (installed or portable); o
 - [x] Save received data to a file, export
 - [x] Hot-plug detection, auto-reconnect
 - [x] TCP client / server, UDP
+- [x] AI write confirmation, per-session AI access, AI-sent lines tagged
+- [x] Checksums, BREAK, timed DTR/RTS sequences
+- [x] Log filter, Δt, keyword highlight; settings page
+- [ ] Line numbers and favorites, TCP server with several clients, command list in its own window
 - [ ] Built-in AI assistant "Bo"
 
 ## 🛠️ Build from source
