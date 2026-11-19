@@ -1,0 +1,477 @@
+/* SerialBot site. A datasheet page: pale blue-grey paper, navy ink, the
+   UART line in PCB copper, and the app's AI violet for what the agent does. */
+
+:root {
+  --paper: #eef2f6;
+  --sheet: #ffffff;
+  --ink: #13233a;
+  --ink-soft: #4a5b72;
+  --grid: #c9d4e0;
+  --copper: #b8742a;
+  --violet: #6d4aff;
+  --measure: 68ch;
+  --sans: "Archivo", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 17px / 1.6 var(--sans);
+  font-stretch: 100%;
+}
+
+a {
+  color: var(--ink);
+  text-decoration-color: var(--copper);
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  color: var(--copper);
+}
+
+:focus-visible {
+  outline: 2px solid var(--violet);
+  outline-offset: 3px;
+}
+
+code,
+pre {
+  font-family: var(--mono);
+  font-size: 0.88em;
+}
+
+h1,
+h2,
+h3 {
+  font-stretch: 118%;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+h1 {
+  max-width: 20ch;
+  margin: 0 0 24px;
+  font-size: clamp(40px, 6.5vw, 76px);
+  font-weight: 760;
+}
+
+h2 {
+  margin: 0 0 16px;
+  font-size: clamp(26px, 3.4vw, 36px);
+  font-weight: 700;
+}
+
+h3 {
+  margin: 0 0 12px;
+  font-size: 19px;
+  font-weight: 650;
+}
+
+/* ---- frame ------------------------------------------------------------ */
+
+.top,
+main > section,
+footer {
+  width: min(1120px, 100% - 48px);
+  margin-inline: auto;
+}
+
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 28px;
+  padding: 22px 0;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-stretch: 118%;
+  text-decoration: none;
+}
+
+.top nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 22px;
+  font-size: 15px;
+}
+
+.top nav a {
+  text-decoration: none;
+}
+
+main > section {
+  padding: 72px 0;
+  border-top: 1px solid var(--grid);
+}
+
+main > section.hero {
+  padding-top: 56px;
+  border-top: none;
+}
+
+/* ---- hero: the wire --------------------------------------------------- */
+
+.lede {
+  max-width: 60ch;
+  margin: 0 0 28px;
+  color: var(--ink-soft);
+  font-size: 20px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0 0 56px;
+}
+
+.button {
+  display: inline-block;
+  padding: 11px 22px;
+  border: 1.5px solid var(--ink);
+  border-radius: 6px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.button.primary {
+  background: var(--ink);
+  color: var(--sheet);
+}
+
+.button.primary:hover {
+  background: var(--copper);
+  border-color: var(--copper);
+  color: var(--sheet);
+}
+
+.scope {
+  margin: 0;
+  padding: 28px 24px 18px;
+  overflow-x: auto;
+  background:
+    linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 100% 22px,
+    var(--sheet);
+  border: 1px solid var(--grid);
+  border-radius: 10px;
+}
+
+.uart {
+  display: block;
+  width: 100%;
+  min-width: 720px;
+  height: auto;
+}
+
+.uart .wire {
+  fill: none;
+  stroke: var(--copper);
+  stroke-width: 2.5;
+  stroke-linejoin: miter;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: trace 2.4s cubic-bezier(0.3, 0, 0.2, 1) both;
+}
+
+@keyframes trace {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+
+.uart .frame rect {
+  fill: color-mix(in srgb, var(--copper) 7%, transparent);
+  stroke: none;
+}
+
+.uart text {
+  font-family: var(--mono);
+  text-anchor: middle;
+}
+
+.uart .char {
+  fill: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.uart .hex {
+  fill: var(--ink-soft);
+  font-size: 10px;
+}
+
+.scope figcaption {
+  margin: 16px -24px -18px;
+  padding: 12px 24px 16px;
+  background: var(--sheet);
+  border-top: 1px solid var(--grid);
+  color: var(--ink-soft);
+  font-size: 15px;
+}
+
+/* ---- the loop --------------------------------------------------------- */
+
+.intro,
+.note,
+.mcp p,
+.small {
+  max-width: var(--measure);
+}
+
+.intro {
+  color: var(--ink-soft);
+}
+
+.cycle {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  margin: 36px 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.cycle li {
+  position: relative;
+  padding: 18px 22px 0 0;
+  border-top: 3px solid var(--violet);
+  counter-increment: step;
+}
+
+.cycle li::before {
+  content: counter(step);
+  display: block;
+  margin-bottom: 8px;
+  color: var(--violet);
+  font: 700 28px / 1 var(--sans);
+  font-stretch: 118%;
+}
+
+/* The last step leads back to the first. */
+.cycle li:last-child::after {
+  content: "↺";
+  position: absolute;
+  top: -19px;
+  right: 0;
+  padding-left: 6px;
+  background: var(--paper);
+  color: var(--violet);
+  font-size: 22px;
+}
+
+.cycle strong {
+  display: block;
+}
+
+.ai {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--violet);
+  color: var(--sheet);
+  font: 600 12px / 1.4 var(--sans);
+}
+
+/* ---- the boundary ----------------------------------------------------- */
+
+.split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 28px;
+  border: 1px solid var(--grid);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.split > div {
+  padding: 26px 28px;
+  background: var(--sheet);
+}
+
+.split > .yours {
+  background: transparent;
+  border-left: 1px dashed var(--grid);
+}
+
+.split ul {
+  margin: 0;
+  padding-left: 1.1em;
+}
+
+.split li + li {
+  margin-top: 6px;
+}
+
+.split .yours li::marker {
+  color: var(--violet);
+}
+
+.split > div:first-child li::marker {
+  color: var(--copper);
+}
+
+/* ---- demo, features, MCP ---------------------------------------------- */
+
+.demo figure {
+  margin: 0;
+}
+
+.demo img {
+  display: block;
+  width: 100%;
+  max-width: 800px;
+  height: auto;
+  border: 1px solid var(--grid);
+  border-radius: 10px;
+}
+
+.demo figcaption {
+  margin-top: 12px;
+  color: var(--ink-soft);
+  font-size: 15px;
+}
+
+.features dl {
+  display: grid;
+  grid-template-columns: minmax(130px, 200px) minmax(0, 62ch);
+  gap: 14px 32px;
+  margin: 28px 0 0;
+}
+
+.features dt {
+  font-weight: 650;
+  font-stretch: 112%;
+}
+
+.features dd {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.mcp pre {
+  max-width: 76ch;
+  margin: 20px 0;
+  padding: 18px 20px;
+  overflow-x: auto;
+  background: var(--ink);
+  color: #e6edf5;
+  border-radius: 8px;
+  line-height: 1.5;
+}
+
+/* ---- download --------------------------------------------------------- */
+
+.download table {
+  width: 100%;
+  max-width: 900px;
+  margin: 18px 0;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+.download th,
+.download td {
+  padding: 10px 12px 10px 0;
+  border-bottom: 1px solid var(--grid);
+  text-align: left;
+}
+
+.download th {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.download td a {
+  font-family: var(--mono);
+  font-size: 13.5px;
+  word-break: break-all;
+}
+
+.download .size {
+  white-space: nowrap;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.release,
+.small {
+  color: var(--ink-soft);
+  font-size: 15px;
+}
+
+footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 24px;
+  padding: 32px 0 48px;
+  border-top: 1px solid var(--grid);
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+
+footer p {
+  margin: 0;
+}
+
+footer p a + a {
+  margin-left: 18px;
+}
+
+/* ---- small screens and motion ----------------------------------------- */
+
+@media (max-width: 760px) {
+  body {
+    font-size: 16px;
+  }
+
+  .cycle {
+    grid-template-columns: 1fr 1fr;
+    row-gap: 28px;
+  }
+
+  .split,
+  .features dl {
+    grid-template-columns: 1fr;
+  }
+
+  .split > .yours {
+    border-left: none;
+    border-top: 1px dashed var(--grid);
+  }
+
+  .features dd {
+    margin-bottom: 8px;
+  }
+
+  main > section {
+    padding: 52px 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .uart .wire {
+    animation: none;
+  }
+}
