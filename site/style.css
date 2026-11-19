@@ -1,6 +1,20 @@
 /* SerialBot site. A datasheet page: pale blue-grey paper, navy ink, the
    UART line in PCB copper, and the app's AI violet for what the agent does. */
 
+@font-face {
+  font-family: "Archivo";
+  src: url("fonts/archivo.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("fonts/jetbrains-mono.woff2") format("woff2");
+  font-weight: 100 800;
+  font-display: swap;
+}
+
 :root {
   --paper: #eef2f6;
   --sheet: #ffffff;
@@ -27,7 +41,6 @@ body {
   background: var(--paper);
   color: var(--ink);
   font: 400 17px / 1.6 var(--sans);
-  font-stretch: 100%;
 }
 
 a {
@@ -54,7 +67,6 @@ pre {
 h1,
 h2,
 h3 {
-  font-stretch: 118%;
   line-height: 1.15;
   letter-spacing: -0.01em;
 }
@@ -101,7 +113,6 @@ footer {
   align-items: center;
   gap: 10px;
   font-weight: 700;
-  font-stretch: 118%;
   text-decoration: none;
 }
 
@@ -226,6 +237,20 @@ main > section.hero {
   font-size: 15px;
 }
 
+/* ---- verification ------------------------------------------------------ */
+
+.verify .columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 40px;
+  max-width: 1000px;
+}
+
+.verify p {
+  margin: 0;
+  max-width: 60ch;
+}
+
 /* ---- the loop --------------------------------------------------------- */
 
 .intro,
@@ -262,7 +287,6 @@ main > section.hero {
   margin-bottom: 8px;
   color: var(--violet);
   font: 700 28px / 1 var(--sans);
-  font-stretch: 118%;
 }
 
 /* The last step leads back to the first. */
@@ -357,7 +381,6 @@ main > section.hero {
 
 .features dt {
   font-weight: 650;
-  font-stretch: 112%;
 }
 
 .features dd {
@@ -448,6 +471,7 @@ footer p a + a {
   }
 
   .split,
+  .verify .columns,
   .features dl {
     grid-template-columns: 1fr;
   }

@@ -1,7 +1,7 @@
 {
  "html_lang": "en",
- "title": "SerialBot — let your AI agent use the serial port",
- "description": "A lightweight serial, TCP and UDP debugging tool with a built-in MCP server. Your AI agent flashes the board, reads the log and debugs on its own; you approve what it does.",
+ "title": "SerialBot — the verification loop for embedded hardware",
+ "description": "Coding agents earn trust by verifying their own work. SerialBot gives them the serial port, so they can flash a board, read its log and check the result themselves, while you approve every change.",
  "home": "",
  "nav_label": "Sections",
  "nav_why": "Why",
@@ -10,14 +10,14 @@
  "other_lang_href": "zh/",
  "other_lang": "zh",
  "other_lang_name": "中文",
- "hero_title": "Let the agent read the serial port itself.",
- "hero_lede": "SerialBot is a small serial, TCP and UDP debugging tool for Windows, macOS and Linux with a built-in MCP server. Your AI agent flashes the board, reads the log and debugs on its own, and you approve what it does.",
+ "hero_title": "The verification loop for embedded hardware.",
+ "hero_lede": "Coding agents earn trust by checking their own work. On a board, checking means watching what the firmware does, and that comes out of the serial port. SerialBot hands the agent that port: it flashes, reads the log and verifies on its own, and you approve every change.",
  "cta_download": "Download",
  "cta_source": "Source on GitHub",
  "uart_title": "UART waveform of the command AT+GMR followed by CR LF, 8N1",
  "uart_caption": "<code>AT+GMR\\r\\n</code> on the wire: start bit, eight data bits from the least significant, stop bit. This is what SerialBot passes to the agent, and nothing else.",
- "loop_title": "The debug loop, without you in the middle",
- "loop_intro": "Today a person relays the log: flash the board, watch the terminal, copy the interesting lines into the chat, explain what happened. SerialBot lets the agent go around the loop itself.",
+ "loop_title": "Closing the loop on the bench",
+ "loop_intro": "With the serial port in reach, the agent goes around the loop itself instead of waiting for you to paste the log back.",
  "loop_steps": [
   "<strong>Flash.</strong> The agent hands the port to your flashing tool and takes it back afterwards. The log keeps going.",
   "<strong>Read the log.</strong> It waits for the line it expects, or notices the timeout.",
@@ -70,5 +70,7 @@
  "dl_appimage_arm": "Other Linux arm64",
  "download_note": "SerialBot is in alpha. The builds are not signed yet, so macOS and Windows warn on first launch; the release notes say how to open them.",
  "footer_license": "SerialBot is open source under GPL-3.0.",
- "footer_issues": "Report a problem"
+ "footer_issues": "Report a problem",
+ "verify_title": "Agents you can trust check their own work",
+ "verify_body": "<p>The teams getting the most out of coding agents treat verification as the core of the work, not an afterthought. <a href=\"https://x.com/poteto\">Lauren Tan (@poteto)</a>, who builds Grok Bot, describes letting agents run the app, take traces and test it the way a user would, and keep going until it really works. Closing that loop is what makes their pull requests trustworthy.</p><p>Firmware has had no such loop. The truth about embedded code is on the board, and the board speaks through its serial port, so a person has had to watch the terminal and relay what it said. SerialBot is the missing piece: it lets the agent run the board and read the answer itself.</p>"
 }

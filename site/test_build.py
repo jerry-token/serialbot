@@ -48,6 +48,15 @@ class BuildTest(unittest.TestCase):
                     target = target / "index.html"
                 self.assertTrue(target.exists(), f"{lang}: {ref}")
 
+    def test_fonts_are_served_from_the_site(self):
+        # No third-party font host: it is slow or blocked in some regions.
+        for page in self.pages.values():
+            self.assertNotIn("fonts.googleapis", page.read_text(encoding="utf-8"))
+        css = (self.out / "style.css").read_text(encoding="utf-8")
+        for url in re.findall(r'url\("([^"]+)"\)', css):
+            self.assertTrue((self.out / url).exists(), url)
+        self.assertNotIn("font-stretch", css)
+
     def test_the_custom_domain_is_kept(self):
         self.assertEqual((self.out / "CNAME").read_text().strip(), "serialbot.aiany.cc")
 
