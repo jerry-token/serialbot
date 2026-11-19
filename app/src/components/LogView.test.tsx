@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Line } from "../terminal";
 import { layout } from "../test-setup";
-import { LogView } from "./LogView";
+import { formatDelta, LogView } from "./LogView";
 
 const lines: Line[] = Array.from({ length: 10_000 }, (_, i) => ({
   id: i,
@@ -10,6 +10,18 @@ const lines: Line[] = Array.from({ length: 10_000 }, (_, i) => ({
   timestampUs: 0,
   text: `line ${i}`,
 }));
+
+describe("formatDelta", () => {
+  it("picks a unit by size", () => {
+    expect(formatDelta(0)).toBe("+0.0ms");
+    expect(formatDelta(850)).toBe("+0.8ms");
+    expect(formatDelta(9_999)).toBe("+10.0ms");
+    expect(formatDelta(12_400)).toBe("+12ms");
+    expect(formatDelta(1_234_567)).toBe("+1.235s");
+    expect(formatDelta(123_000_000)).toBe("+2m03s");
+    expect(formatDelta(-5)).toBe("+0.0ms");
+  });
+});
 
 describe("LogView virtualization", () => {
   beforeEach(() => {

@@ -11,10 +11,26 @@ interface Props {
   total: number;
   onStep: (delta: 1 | -1) => void;
   onClose: () => void;
+  /** Whether the log shows only matching lines. */
+  filter: boolean;
+  onFilter: (on: boolean) => void;
 }
 
-/** Find bar over the log: Enter / Shift+Enter step through matches, Escape closes. */
-export function SearchBar({ t, query, onQuery, current, total, onStep, onClose }: Props) {
+/**
+ * Find bar over the log: Enter / Shift+Enter step through matches, Escape
+ * closes. With the filter on, the log shows only the matching lines.
+ */
+export function SearchBar({
+  t,
+  query,
+  onQuery,
+  current,
+  total,
+  onStep,
+  onClose,
+  filter,
+  onFilter,
+}: Props) {
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => {
     input.current?.focus();
@@ -40,6 +56,10 @@ export function SearchBar({ t, query, onQuery, current, total, onStep, onClose }
           }
         }}
       />
+      <label className="check filter" title={t.filterMatches}>
+        <input type="checkbox" checked={filter} onChange={(e) => onFilter(e.target.checked)} />
+        {t.filterMatches}
+      </label>
       <span className="count" aria-live="polite">
         {query ? t.searchCount(current, total) : ""}
       </span>
