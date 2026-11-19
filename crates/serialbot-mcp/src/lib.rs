@@ -26,6 +26,7 @@
 
 mod auth;
 pub mod bridge;
+pub mod guard;
 mod payload;
 mod tools;
 

@@ -25,6 +25,7 @@ use serialbot_core::{
     SessionSummary, WaitMatch,
 };
 
+use crate::guard::{self, Action, AllowAll, Guard};
 use crate::payload::{self, Format};
 
 /// Lists the ports present on the machine; replaceable in tests.
@@ -53,7 +54,9 @@ io.wait_for to catch replies that arrive very fast. Before running an external \
 tool on the same port (a flasher), call session.release, then session.reopen \
 afterwards: the log continues. log.mark sets a named point and log.query \
 summarizes or searches what happened after it. command.list shows further \
-commands, run with command.call.";
+commands, run with command.call. The user may have to approve sending and \
+other changes in SerialBot, so a call can take a while; if the user declines \
+or a session is not shared with AI agents, do not retry: ask the user.";
 
 /// Longest `session.reopen` wait for a device to come back.
 pub(crate) const MAX_REOPEN_WAIT_MS: u64 = 60_000;
@@ -67,6 +70,7 @@ pub(crate) const DEFAULT_QUERY_BYTES: usize = 16 * 1024;
 pub struct SerialTools {
     manager: Arc<SessionManager>,
     list_ports: Arc<PortLister>,
+    guard: Arc<dyn Guard>,
     tool_router: ToolRouter<Self>,
 }
 
@@ -683,8 +687,36 @@ impl SerialTools {
         Self {
             manager,
             list_ports,
+            guard: Arc::new(AllowAll),
             tool_router: Self::tool_router() + Self::more_tools(),
         }
+    }
+
+    /// Asks `guard` before every action that sends data, changes lines or
+    /// settings, or opens, closes, releases or reopens a port. Without one,
+    /// everything is allowed ([`AllowAll`]).
+    #[must_use]
+    pub fn with_guard(mut self, guard: Arc<dyn Guard>) -> Self {
+        self.guard = guard;
+        self
+    }
+
+    /// Waits for the guard to approve `tool` on `session` (or on `port` when
+    /// opening a new one).
+    async fn ask(
+        &self,
+        tool: &str,
+        session: Option<&Session>,
+        port: &str,
+        detail: String,
+    ) -> Result<(), String> {
+        let action = Action {
+            tool: tool.into(),
+            session: session.map(Session::id),
+            port: session.map_or_else(|| port.to_owned(), |s| s.info().name.clone()),
+            detail,
+        };
+        self.guard.approve(action).await
     }
 
     /// Resolves a session id (`"s1"`) or alias. Ids win over aliases.
@@ -772,6 +804,8 @@ impl SerialTools {
         {
             return Err(format!("alias {alias:?} looks like a session id"));
         }
+        let detail = format!("{} baud", config.baud_rate);
+        self.ask("session.open", None, &config.path, detail).await?;
         let manager = Arc::clone(&self.manager);
         let id = blocking(move || {
             manager
@@ -803,6 +837,8 @@ impl SerialTools {
     ) -> Result<Json<WriteOut>, String> {
         let data = payload::outgoing(args.text.as_deref(), args.hex.as_deref())?;
         let session = self.session(&args.session)?;
+        self.ask("io.write", Some(&session), "", guard::preview(&data))
+            .await?;
         blocking(move || {
             let cursor = session.end();
             let seq = session
@@ -881,6 +917,16 @@ impl SerialTools {
         Parameters(args): Parameters<SignalsArgs>,
     ) -> Result<Json<SignalsOut>, String> {
         let session = self.session(&args.session)?;
+        let changes: Vec<String> = [("DTR", args.dtr), ("RTS", args.rts)]
+            .into_iter()
+            .filter_map(|(line, level)| {
+                level.map(|on| format!("{line} {}", if on { "on" } else { "off" }))
+            })
+            .collect();
+        if !changes.is_empty() {
+            self.ask("io.signals", Some(&session), "", changes.join(", "))
+                .await?;
+        }
         blocking(move || {
             if let Some(level) = args.dtr {
                 session
@@ -928,6 +974,13 @@ impl SerialTools {
         let pattern = compile(&args.pattern)?;
         let timeout = timeout(args.timeout_ms)?;
         let session = self.session(&args.session)?;
+        let detail = format!(
+            "{}, then wait for /{}/",
+            guard::preview(&data),
+            args.pattern
+        );
+        self.ask("io.send_and_expect", Some(&session), "", detail)
+            .await?;
         let format = args.format;
         blocking(move || {
             let from = session.end();
@@ -955,7 +1008,10 @@ impl SerialTools {
         &self,
         Parameters(args): Parameters<SessionArgs>,
     ) -> Result<Json<SessionOut>, String> {
-        let id = self.session(&args.session)?.id();
+        let session = self.session(&args.session)?;
+        self.ask("session.close", Some(&session), "", String::new())
+            .await?;
+        let id = session.id();
         let manager = Arc::clone(&self.manager);
         blocking(move || manager.close(id).map_err(|e| e.to_string())).await?;
         self.summary(id)
@@ -974,7 +1030,10 @@ impl SerialTools {
         &self,
         Parameters(args): Parameters<SessionArgs>,
     ) -> Result<Json<SessionOut>, String> {
-        let id = self.session(&args.session)?.id();
+        let session = self.session(&args.session)?;
+        self.ask("session.release", Some(&session), "", String::new())
+            .await?;
+        let id = session.id();
         let manager = Arc::clone(&self.manager);
         blocking(move || manager.release(id).map_err(|e| e.to_string())).await?;
         self.summary(id)
@@ -996,7 +1055,10 @@ impl SerialTools {
         if args.wait_ms > MAX_REOPEN_WAIT_MS {
             return Err(format!("wait_ms must be at most {MAX_REOPEN_WAIT_MS}"));
         }
-        let id = self.session(&args.session)?.id();
+        let session = self.session(&args.session)?;
+        self.ask("session.reopen", Some(&session), "", String::new())
+            .await?;
+        let id = session.id();
         let manager = Arc::clone(&self.manager);
         let wait = Duration::from_millis(args.wait_ms);
         blocking(move || {
@@ -1031,7 +1093,11 @@ impl SerialTools {
         &self,
         Parameters(args): Parameters<ConfigureArgs>,
     ) -> Result<Json<SessionOut>, String> {
-        let id = self.session(&args.session)?.id();
+        let session = self.session(&args.session)?;
+        let detail = format!("{} baud", args.baud_rate);
+        self.ask("session.configure", Some(&session), "", detail)
+            .await?;
+        let id = session.id();
         let manager = Arc::clone(&self.manager);
         blocking(move || {
             manager
@@ -1132,6 +1198,11 @@ impl SerialTools {
                     }
                     _ => return Err("args.alias must be a non-empty string or null".into()),
                 };
+                let detail = alias
+                    .as_deref()
+                    .map_or("remove the alias".into(), |a| format!("alias {a:?}"));
+                self.ask("command.call session.rename", Some(&session), "", detail)
+                    .await?;
                 self.manager
                     .set_alias(id, alias.clone())
                     .map_err(|e| e.to_string())?;
@@ -1139,6 +1210,14 @@ impl SerialTools {
             }
             "session.auto_reconnect" => {
                 let on = arg("on").as_bool().ok_or("args.on must be true or false")?;
+                let detail = if on { "on" } else { "off" }.to_owned();
+                self.ask(
+                    "command.call session.auto_reconnect",
+                    Some(&session),
+                    "",
+                    detail,
+                )
+                .await?;
                 self.manager
                     .set_auto_reconnect(id, on)
                     .map_err(|e| e.to_string())?;
@@ -1152,6 +1231,13 @@ impl SerialTools {
                         .filter(|ms| (1..=5000).contains(ms))
                         .ok_or("args.ms must be a whole number of milliseconds from 1 to 5000")?,
                 };
+                self.ask(
+                    "command.call io.break",
+                    Some(&session),
+                    "",
+                    format!("{ms} ms"),
+                )
+                .await?;
                 blocking(move || {
                     session
                         .send_break(Duration::from_millis(ms))

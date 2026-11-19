@@ -20,6 +20,7 @@ use serialbot_core::transport::mock::{self, MockDevice};
 use serialbot_core::transport::serial::{PortInfo, PortKind};
 use serialbot_core::transport::{Connection, TransportError};
 use serialbot_core::{SessionManager, SessionOptions, SystemClock};
+use serialbot_mcp::guard::{Action, AllowAll, Approval, Guard};
 use serialbot_mcp::{McpOptions, SerialTools, router, serve};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
@@ -38,6 +39,11 @@ struct Harness {
 impl Harness {
     /// Starts a server whose ports named `mock*` open as mock devices.
     async fn start() -> Self {
+        Self::start_with(Arc::new(AllowAll)).await
+    }
+
+    /// Like [`Harness::start`], asking `guard` before every action.
+    async fn start_with(guard: Arc<dyn Guard>) -> Self {
         let devices: Devices = Arc::default();
         let registry = Arc::clone(&devices);
         let opener = move |config: &serialbot_core::transport::serial::SerialConfig| -> Result<Connection, TransportError> {
@@ -71,7 +77,7 @@ impl Harness {
                 },
             ])
         };
-        let tools = SerialTools::new(Arc::clone(&manager), Arc::new(lister));
+        let tools = SerialTools::new(Arc::clone(&manager), Arc::new(lister)).with_guard(guard);
         let shutdown = CancellationToken::new();
         let options = McpOptions::new(TOKEN).unwrap();
         let app = router(tools, &options, &shutdown);
@@ -1048,5 +1054,129 @@ async fn withheld_sessions_are_refused_and_ai_entries_are_flagged() {
         .set_ai_access(serialbot_core::SessionId(1), true)
         .unwrap();
     ok(&client, "io.read", json!({"session": "s1"})).await;
+    client.cancel().await.unwrap();
+}
+
+/// Records every action and refuses those whose detail mentions "no".
+#[derive(Default)]
+struct Recorder(Mutex<Vec<Action>>);
+
+impl Guard for Recorder {
+    fn approve(&self, action: Action) -> Approval<'_> {
+        let refuse = action.detail.contains("no");
+        self.0.lock().unwrap().push(action);
+        Box::pin(async move {
+            if refuse {
+                Err("the user declined".to_owned())
+            } else {
+                Ok(())
+            }
+        })
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_guard_is_asked_before_every_change() {
+    let recorder = Arc::new(Recorder::default());
+    let h = Harness::start_with(Arc::clone(&recorder) as Arc<dyn Guard>).await;
+    let client = h.client().await;
+    let s1 = json!({"session": "s1"});
+    ok(
+        &client,
+        "session.open",
+        json!({"port": "mock0", "baud_rate": 9600}),
+    )
+    .await;
+    ok(
+        &client,
+        "io.write",
+        json!({"session": "s1", "text": "AT\r\n"}),
+    )
+    .await;
+    let declined = err(&client, "io.write", json!({"session": "s1", "text": "no"})).await;
+    assert!(declined.contains("the user declined"), "{declined}");
+    ok(
+        &client,
+        "io.signals",
+        json!({"session": "s1", "dtr": true, "rts": false}),
+    )
+    .await;
+    // Reading the lines, the log and the list never asks.
+    ok(&client, "io.signals", s1.clone()).await;
+    ok(&client, "io.read", s1.clone()).await;
+    ok(&client, "log.mark", json!({"session": "s1", "label": "x"})).await;
+    ok(&client, "session.list", json!({})).await;
+    let send = json!({"session": "s1", "hex": "01 02", "pattern": "OK", "timeout_ms": 20});
+    ok(&client, "io.send_and_expect", send).await;
+    let written = h.device("mock0").take_written();
+    assert_eq!(written, b"AT\r\n\x01\x02", "a declined write sends nothing");
+    ok(
+        &client,
+        "session.configure",
+        json!({"session": "s1", "baud_rate": 115_200}),
+    )
+    .await;
+    let call = |name: &str, args: Value| json!({"name": name, "args": args});
+    let rename = call("session.rename", json!({"session": "s1", "alias": "esp"}));
+    ok(&client, "command.call", rename).await;
+    let auto = call(
+        "session.auto_reconnect",
+        json!({"session": "s1", "on": true}),
+    );
+    ok(&client, "command.call", auto).await;
+    ok(
+        &client,
+        "command.call",
+        call("io.break", json!({"session": "s1", "ms": 10})),
+    )
+    .await;
+    ok(&client, "session.release", s1.clone()).await;
+    ok(&client, "session.reopen", s1.clone()).await;
+    ok(&client, "session.close", s1.clone()).await;
+
+    let asked: Vec<(String, Option<u32>, String, String)> = recorder
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|a| {
+            (
+                a.tool.clone(),
+                a.session.map(|s| s.0),
+                a.port.clone(),
+                a.detail.clone(),
+            )
+        })
+        .collect();
+    let on = |tool: &str, detail: &str| {
+        (
+            tool.to_owned(),
+            Some(1),
+            "mock0".to_owned(),
+            detail.to_owned(),
+        )
+    };
+    assert_eq!(
+        asked,
+        [
+            (
+                "session.open".to_owned(),
+                None,
+                "mock0".to_owned(),
+                "9600 baud".to_owned()
+            ),
+            on("io.write", r#""AT\r\n" (4 bytes)"#),
+            on("io.write", r#""no" (2 bytes)"#),
+            on("io.signals", "DTR on, RTS off"),
+            on("io.send_and_expect", "01 02 (2 bytes), then wait for /OK/"),
+            on("session.configure", "115200 baud"),
+            on("command.call session.rename", r#"alias "esp""#),
+            on("command.call session.auto_reconnect", "on"),
+            on("command.call io.break", "10 ms"),
+            on("session.release", ""),
+            on("session.reopen", ""),
+            on("session.close", ""),
+        ]
+    );
     client.cancel().await.unwrap();
 }
