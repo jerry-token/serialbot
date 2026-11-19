@@ -243,3 +243,106 @@ fn modem_lines_on_a_pty_are_reported_as_unsupported() {
         Err(TransportError::Unsupported(_))
     ));
 }
+
+/// Byte `i` of the stress stream: depends on the position, so a lost,
+/// repeated or reordered byte shows up as a mismatch.
+fn pattern(i: u64) -> u8 {
+    // The top byte of a multiplicative hash of the position.
+    i.wrapping_mul(0x9E37_79B9_7F4A_7C15).to_be_bytes()[0]
+}
+
+/// Sustained-throughput test (Spike 1): a peer sends 2 Mbit/s (250 kB/s)
+/// into a session for `SERIALBOT_STRESS_SECS` seconds (3 by default; the
+/// stress workflow runs an hour), while a consumer reads the log like the
+/// window does: 256 KiB per read, every 16 ms. Every byte must arrive, in
+/// order, with no log entry evicted before it was read.
+#[test]
+fn sustained_2_mbps_is_received_without_loss() {
+    use serialbot_core::{Cursor, Direction, EntryKind, SessionManager};
+
+    const RATE: u64 = 250_000; // bytes per second
+    const TICK_MS: u64 = 10;
+    const TICK: Duration = Duration::from_millis(TICK_MS);
+    let Some(pair) = virtual_pair("stress") else {
+        return;
+    };
+    let secs: u64 = std::env::var("SERIALBOT_STRESS_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(3);
+    let total = RATE * secs;
+
+    let manager = SessionManager::with_serial_ports();
+    let session = manager
+        .open(
+            &SerialConfig::new(pair.a.to_str().unwrap(), 2_000_000),
+            None,
+        )
+        .unwrap();
+    let mut peer = open(&pair.b);
+
+    let writer = std::thread::spawn(move || {
+        let start = Instant::now();
+        let per_tick = RATE * TICK_MS / 1000;
+        let mut sent = 0u64;
+        let mut chunk = Vec::with_capacity(per_tick as usize);
+        while sent < total {
+            // Paced against the start, so short stalls are made up.
+            let due = start + TICK * u32::try_from(sent / per_tick).unwrap();
+            if let Some(wait) = due.checked_duration_since(Instant::now()) {
+                std::thread::sleep(wait);
+            }
+            let n = per_tick.min(total - sent);
+            chunk.clear();
+            chunk.extend((sent..sent + n).map(pattern));
+            peer.control.write_all(&chunk).unwrap();
+            sent += n;
+        }
+        start.elapsed()
+    });
+
+    let deadline = Instant::now() + Duration::from_secs(secs * 2 + 30);
+    let mut cursor = Cursor(0);
+    let mut received = 0u64;
+    let mut reads = 0u64;
+    let mut slowest_read = Duration::ZERO;
+    while received < total {
+        assert!(
+            Instant::now() < deadline,
+            "only {received} of {total} bytes arrived"
+        );
+        std::thread::sleep(Duration::from_millis(16));
+        let started = Instant::now();
+        let chunk = session.read(cursor, 256 * 1024).unwrap();
+        slowest_read = slowest_read.max(started.elapsed());
+        reads += 1;
+        assert_eq!(
+            chunk.missed, 0,
+            "log entries were evicted before being read"
+        );
+        for entry in &chunk.entries {
+            if let EntryKind::Data {
+                direction: Direction::Rx,
+                bytes,
+            } = &entry.kind
+            {
+                for (k, &b) in bytes.iter().enumerate() {
+                    let at = received + k as u64;
+                    assert_eq!(b, pattern(at), "byte {at} is wrong (lost or out of order)");
+                }
+                received += bytes.len() as u64;
+            }
+        }
+        cursor = chunk.next;
+    }
+    let sending = writer.join().unwrap();
+    assert_eq!(received, total, "more bytes arrived than were sent");
+    #[allow(clippy::cast_precision_loss)]
+    let rate = total as f64 * 8.0 / sending.as_secs_f64() / 1e6;
+    eprintln!(
+        "stress: {total} bytes in {sending:.1?} ({rate:.2} Mbit/s), {reads} reads, \
+         slowest read {slowest_read:?}"
+    );
+    assert!(rate > 1.9, "the peer only managed {rate:.2} Mbit/s");
+    manager.close_all();
+}

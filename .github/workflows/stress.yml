@@ -1,0 +1,39 @@
+name: Stress
+
+# Spike 1 / MVP gate: 2 Mbit/s into a session for an hour without losing a
+# byte (tests/serial_socat.rs, `sustained_2_mbps_is_received_without_loss`).
+# Too long for every pull request, which runs it for 3 seconds instead.
+on:
+  schedule:
+    - cron: "41 4 * * 3"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: How long to send, in seconds
+        default: "3600"
+
+env:
+  CARGO_TERM_COLOR: always
+  SERIALBOT_REQUIRE_SOCAT: "1"
+  SERIALBOT_STRESS_SECS: ${{ inputs.seconds || '3600' }}
+
+jobs:
+  throughput:
+    name: 2 Mbit/s (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq libudev-dev socat time
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo test --release --locked -p serialbot-core --test serial_socat --no-run
+      - name: Send for ${{ env.SERIALBOT_STRESS_SECS }} s
+        run: |
+          /usr/bin/time -v cargo test --release --locked -p serialbot-core \
+            --test serial_socat sustained_2_mbps -- --nocapture 2> >(tee stderr.txt >&2)
+          grep -E "stress:|Maximum resident" stderr.txt >> "$GITHUB_STEP_SUMMARY"
