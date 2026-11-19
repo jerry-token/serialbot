@@ -24,7 +24,7 @@
 
 ## ✨ 特性
 
-- 🪶 **轻量**：Windows 安装版约 3.5 MB；免安装单文件版约 16 MB，不用安装直接运行。
+- 🪶 **轻量**：Windows 安装版不到 4 MB；免安装单文件版约 17 MB，不用安装直接运行。
 - 💻 **跨平台**：Windows、macOS（Apple Silicon 和 Intel）、Linux 都能用。
 - 🗂️ **多串口同时打开**：每个串口一个标签页，各自有日志和收发计数。
 - 🌈 **接收显示**：
@@ -75,8 +75,8 @@
 
 | 系统 | 文件 | 说明 |
 |---|---|---|
-| 🪟 Windows 10/11 | `SerialBot_*_x64-setup.exe` | 安装版（约 3.5 MB，已压缩），不需要管理员权限 |
-| 🪟 Windows 10/11 | `serialbot_windows_x64.exe` | 免安装版（约 16 MB，未压缩），双击直接运行 |
+| 🪟 Windows 10/11 | `SerialBot_*_x64-setup.exe` | 安装版（不到 4 MB，已压缩），不需要管理员权限 |
+| 🪟 Windows 10/11 | `serialbot_windows_x64.exe` | 免安装版（约 17 MB，未压缩），双击直接运行 |
 | 🍎 macOS 11+ | `SerialBot_*_universal.dmg` | Apple Silicon 和 Intel 通用 |
 | 🐧 Ubuntu / Debian | `SerialBot_*_amd64.deb` | `sudo apt install ./SerialBot_*.deb` |
 | 🐧 其他 Linux | `SerialBot_*_amd64.AppImage` | `chmod +x` 后直接运行 |
@@ -151,6 +151,10 @@ Windows 上 command 填 `serialbot.exe` 的路径（安装版或免安装版都�
 - [x] 接收存文件、导出
 - [x] 热插拔检测、自动重连
 - [x] TCP Client / Server、UDP
+- [x] AI 写入确认、按会话控制 AI 权限、AI 发送内容标记
+- [x] 校验和、BREAK、DTR/RTS 时序
+- [x] 日志过滤、Δt、关键字高亮；设置页
+- [ ] 行号与收藏、TCP 服务端多客户端、命令列表独立窗口
 - [ ] 内置 AI 助手「小波」
 
 ## 🛠️ 从源码构建

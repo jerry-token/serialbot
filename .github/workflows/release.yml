@@ -124,6 +124,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@v7
+      # The notes list the sizes of the files actually built, so they never go stale.
+      - name: Add download sizes to the notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+        run: |
+          api="repos/${{ github.repository }}/releases/$RELEASE_ID"
+          sizes=$(gh api "$api" | python3 .github/scripts/release_sizes.py)
+          printf '%s\n\n%s\n' "$(cat .github/release-notes.md)" "$sizes" > notes.md
+          gh api -X PATCH "$api" -F body=@notes.md --jq .id
       - env:
           GH_TOKEN: ${{ github.token }}
         run: gh release edit "$TAG" --draft=false --repo "${{ github.repository }}"
