@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   Backend,
   McpSettings,
@@ -16,6 +16,7 @@ import type {
 import { errorMessage, formatBytes, saveFileName } from "./api";
 import { encodeInput, withEndings } from "./bytes";
 import { withChecksum } from "./checksum";
+import { makeHighlighter, parseHighlights } from "./highlight";
 import {
   type Command,
   type CommandGroup,
@@ -45,6 +46,8 @@ import { type Line, Terminal } from "./terminal";
 
 /** Storage key of the DTR/RTS sequence. */
 const SEQUENCE_KEY = "serialbot.signalSequence";
+/** Storage key of the highlighted keywords. */
+const KEYWORDS_KEY = "serialbot.keywords";
 
 /** Reads a stored string; storage may be missing or refuse access. */
 function readItem(storage: Storage | null, key: string): string | null {
@@ -297,6 +300,10 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
   // The DTR/RTS sequence last typed, kept across restarts.
   const [sequence, setSequence] = useState(() => readItem(storage, SEQUENCE_KEY) ?? "");
   useEffect(() => writeItem(storage, SEQUENCE_KEY, sequence), [storage, sequence]);
+  // Keywords marked in the log, one per line, kept across restarts.
+  const [keywords, setKeywords] = useState(() => readItem(storage, KEYWORDS_KEY) ?? "");
+  useEffect(() => writeItem(storage, KEYWORDS_KEY, keywords), [storage, keywords]);
+  const highlight = useMemo(() => makeHighlighter(parseHighlights(keywords)), [keywords]);
 
   // A run does not outlive the window.
   useEffect(() => () => runStop.current?.abort(), []);
@@ -792,6 +799,8 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
                 onFrameGap={changeFrameGap}
                 ansi={ansi}
                 onAnsi={changeAnsi}
+                keywords={keywords}
+                onKeywords={setKeywords}
               />
               <button
                 type="button"
@@ -839,6 +848,7 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
                     version={version}
                     matches={new Set(matchIds)}
                     currentMatch={currentMatch}
+                    highlight={highlight}
                   />
                 </div>
               ) : (

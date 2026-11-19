@@ -1,6 +1,7 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { type CSSProperties, useLayoutEffect, useRef } from "react";
+import { type CSSProperties, type ReactNode, useLayoutEffect, useRef } from "react";
 import type { Style } from "../ansi";
+import type { Highlighter } from "../highlight";
 import type { Line } from "../terminal";
 import { formatTime } from "../timefmt";
 
@@ -17,6 +18,23 @@ interface Props {
   matches?: ReadonlySet<number>;
   /** The match to scroll to. */
   currentMatch?: number | null;
+  /** Marks the user's keywords, if any. */
+  highlight?: Highlighter | null;
+}
+
+/** `text` with the keywords marked, or as is without a highlighter. */
+function marked(text: string, highlight: Highlighter | null): ReactNode {
+  if (!highlight) return text;
+  // Segments never reorder within a text, so the index is a stable key.
+  return highlight(text).map((s, i) =>
+    s.color ? (
+      <mark key={i} className="kw" style={{ backgroundColor: s.color }}>
+        {s.text}
+      </mark>
+    ) : (
+      s.text
+    ),
+  );
 }
 
 const PREFIX: Record<Line["kind"], string> = { rx: "", tx: "→ ", marker: "# ", info: "! " };
@@ -65,6 +83,7 @@ export function LogView({
   version,
   matches,
   currentMatch = null,
+  highlight = null,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
@@ -121,13 +140,13 @@ export function LogView({
                     part.style ? (
                       // Parts never reorder within a line, so the index is a stable key.
                       <span key={i} style={styleCss(part.style)}>
-                        {part.text}
+                        {marked(part.text, highlight)}
                       </span>
                     ) : (
-                      part.text
+                      <span key={i}>{marked(part.text, highlight)}</span>
                     ),
                   )
-                : line.text}
+                : marked(line.text, highlight)}
             </div>
           );
         })}
