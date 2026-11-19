@@ -518,6 +518,16 @@ mod tests {
             .port()
     }
 
+    /// A UDP port the OS hands out. A free TCP port may sit in a range
+    /// Windows reserves for UDP (bind fails with WSAEACCES, os error 10013).
+    fn free_udp_port() -> u16 {
+        UdpSocket::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port()
+    }
+
     #[test]
     fn parses_endpoints() {
         assert!(Endpoint::parse("COM3").is_none());
@@ -676,7 +686,7 @@ mod tests {
         device
             .set_read_timeout(Some(Duration::from_secs(5)))
             .unwrap();
-        let local = free_port();
+        let local = free_udp_port();
         let path = format!(
             "udp://{}?local=127.0.0.1:{local}",
             device.local_addr().unwrap()
@@ -705,7 +715,7 @@ mod tests {
 
     #[test]
     fn udp_without_remote_answers_the_last_sender() {
-        let local = free_port();
+        let local = free_udp_port();
         let mut u = open(&format!("udp://?local=127.0.0.1:{local}"), T).unwrap();
         assert!(
             u.control
