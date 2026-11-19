@@ -106,7 +106,24 @@ export interface McpSettings {
   /** Preferred port; the next free one of the following nine is used if taken. */
   port: number;
   token: string;
+  /** Whether the user confirms each change an agent makes. */
+  confirm: boolean;
 }
+
+/** An agent action waiting for the user's answer. */
+export interface ApprovalRequest {
+  id: number;
+  /** Tool name, e.g. "io.write" or "command.call io.break". */
+  tool: string;
+  /** Target session; null when the agent opens a new port. */
+  session: number | null;
+  port: string;
+  /** What is sent or changed, in one line; may be empty. */
+  detail: string;
+}
+
+/** "session" also allows every later change on the same session. */
+export type Decision = "once" | "session" | "deny";
 
 export interface McpStatus {
   settings: McpSettings;
@@ -170,6 +187,10 @@ export interface Backend {
   mcpStatus(): Promise<McpStatus>;
   mcpApply(settings: McpSettings): Promise<McpStatus>;
   mcpRegenerateToken(): Promise<McpStatus>;
+  pendingApprovals(): Promise<ApprovalRequest[]>;
+  answerApproval(id: number, decision: Decision): Promise<void>;
+  /** Called with the whole queue whenever a request arrives or leaves. */
+  onApprovalsChanged(handler: (queue: ApprovalRequest[]) => void): Promise<Unlisten>;
 }
 
 /** The backend inside the Tauri app. Errors reject with the message string. */
@@ -222,6 +243,10 @@ export const tauriBackend: Backend = {
   mcpStatus: () => invoke("mcp_status"),
   mcpApply: (settings) => invoke("mcp_apply", { settings }),
   mcpRegenerateToken: () => invoke("mcp_regenerate_token"),
+  pendingApprovals: () => invoke("pending_approvals"),
+  answerApproval: (id, decision) => invoke("answer_approval", { id, decision }),
+  onApprovalsChanged: (handler) =>
+    listen<ApprovalRequest[]>("approvals-changed", (event) => handler(event.payload)),
 };
 
 /** The local time zone in minutes east of UTC (as the backend expects). */

@@ -917,3 +917,33 @@ button.signal.on:hover:not(:disabled) {
   line-height: 14px;
   vertical-align: 1px;
 }
+
+/* AI approval dialog */
+.approval-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 35%);
+}
+
+.approval {
+  width: min(480px, calc(100vw - 32px));
+  box-shadow: 0 12px 40px rgb(0 0 0 / 30%);
+}
+
+.approval-detail {
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: var(--bg);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.approval-actions {
+  justify-content: flex-end;
+}

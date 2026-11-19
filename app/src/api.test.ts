@@ -46,7 +46,7 @@ describe("tauriBackend", () => {
     await tauriBackend.writeData(1, new Uint8Array([1, 2]));
     await tauriBackend.readLog(1, 5, 100);
     await tauriBackend.listSessions();
-    const settings = { enabled: true, port: 9633, token: "t" };
+    const settings = { enabled: true, port: 9633, token: "t", confirm: true };
     await tauriBackend.mcpStatus();
     await tauriBackend.mcpApply(settings);
     await tauriBackend.mcpRegenerateToken();
@@ -61,6 +61,8 @@ describe("tauriBackend", () => {
     await tauriBackend.signals(1);
     await tauriBackend.setSignals(1, { dtr: true });
     await tauriBackend.setSignals(1, { rts: false });
+    await tauriBackend.pendingApprovals();
+    await tauriBackend.answerApproval(3, "session");
     expect(invoke.mock.calls).toEqual([
       ["list_ports"],
       ["open_session", { request }],
@@ -82,6 +84,8 @@ describe("tauriBackend", () => {
       ["signals", { id: 1 }],
       ["set_signals", { id: 1, dtr: true, rts: null }],
       ["set_signals", { id: 1, dtr: null, rts: false }],
+      ["pending_approvals"],
+      ["answer_approval", { id: 3, decision: "session" }],
     ]);
   });
 
@@ -101,11 +105,16 @@ describe("tauriBackend", () => {
     await tauriBackend.onLogChanged(logs);
     const lines = vi.fn();
     await tauriBackend.onSignalsChanged(lines);
+    const approvals = vi.fn();
+    await tauriBackend.onApprovalsChanged(approvals);
     expect(listen.mock.calls.map((c) => c[0])).toEqual([
       "sessions-changed",
       "log-changed",
       "signals-changed",
+      "approvals-changed",
     ]);
+    listen.mock.calls[3]?.[1]({ payload: [{ id: 7 }] });
+    expect(approvals).toHaveBeenCalledWith([{ id: 7 }]);
     listen.mock.calls[0]?.[1]({ payload: [{ id: 1 }] });
     listen.mock.calls[1]?.[1]({ payload: [1, 2] });
     listen.mock.calls[2]?.[1]({ payload: { id: 1 } });

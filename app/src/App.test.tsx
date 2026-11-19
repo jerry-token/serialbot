@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import type {
+  ApprovalRequest,
+  Decision,
   Backend,
   LogChunk,
   LogEntry,
@@ -63,7 +65,7 @@ class FakeBackend implements Backend {
   failClose = false;
   failMcp: string | null = null;
   mcp: McpStatus = {
-    settings: { enabled: false, port: 9633, token: "token-0123456789abcdef" },
+    settings: { enabled: false, port: 9633, token: "token-0123456789abcdef", confirm: true },
     running: false,
     url: null,
     error: null,
@@ -74,6 +76,10 @@ class FakeBackend implements Backend {
   signalListeners = new Set<(s: SignalsInfo) => void>();
   sessionListeners = new Set<(s: SessionInfo[]) => void>();
   logListeners = new Set<(ids: number[]) => void>();
+  approvals: ApprovalRequest[] = [];
+  answers: Array<[number, Decision]> = [];
+  failAnswer = false;
+  approvalListeners = new Set<(queue: ApprovalRequest[]) => void>();
   private nextId = 1;
 
   async listPorts() {
@@ -343,6 +349,28 @@ class FakeBackend implements Backend {
       stdioCommand: this.mcp.stdioCommand,
     };
     return this.mcp;
+  }
+
+  async pendingApprovals() {
+    return this.approvals;
+  }
+
+  async answerApproval(id: number, decision: Decision) {
+    if (this.failAnswer) throw `request ${id} is no longer waiting`;
+    this.answers.push([id, decision]);
+    this.approvals = this.approvals.filter((r) => r.id !== id);
+    for (const l of this.approvalListeners) l(this.approvals);
+  }
+
+  async onApprovalsChanged(handler: (queue: ApprovalRequest[]) => void) {
+    this.approvalListeners.add(handler);
+    return () => this.approvalListeners.delete(handler);
+  }
+
+  /** An agent asks to carry out an action. */
+  agentAsks(request: Omit<ApprovalRequest, "id">) {
+    this.approvals = [...this.approvals, { id: this.approvals.length + 1, ...request }];
+    for (const l of this.approvalListeners) l(this.approvals);
   }
 
   async mcpRegenerateToken() {
@@ -1352,6 +1380,55 @@ describe("App", () => {
   });
 });
 
+describe("AI approvals", () => {
+  it("asks about each agent action in turn", async () => {
+    const { backend, user } = setup();
+    await waitFor(() => expect(backend.approvalListeners.size).toBe(1));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    act(() => {
+      const detail = '"AT\\r\\n" (4 bytes)';
+      backend.agentAsks({ tool: "io.write", session: 1, port: "COM3", detail });
+      backend.agentAsks({ tool: "session.open", session: null, port: "COM4", detail: "9600 baud" });
+      backend.agentAsks({ tool: "session.close", session: 1, port: "COM3", detail: "" });
+    });
+    const title = "An AI agent wants to make a change";
+    const dialog = () => screen.getByRole("alertdialog", { name: title });
+    expect(dialog()).toHaveTextContent("io.write On COM3");
+    expect(dialog()).toHaveTextContent('"AT\\r\\n" (4 bytes)');
+    expect(dialog()).toHaveTextContent("2 more waiting");
+    expect(within(dialog()).getByRole("button", { name: "Deny" })).toHaveFocus();
+    await user.click(within(dialog()).getByRole("button", { name: "Allow for this session" }));
+
+    await waitFor(() => expect(dialog()).toHaveTextContent("session.open Open COM4"));
+    expect(dialog()).toHaveTextContent("1 more waiting");
+    expect(within(dialog()).queryByRole("button", { name: "Allow for this session" })).toBeNull();
+    await user.click(within(dialog()).getByRole("button", { name: "Allow" }));
+
+    await waitFor(() => expect(dialog()).toHaveTextContent("session.close On COM3"));
+    expect(dialog()).not.toHaveTextContent("waiting");
+    expect(dialog().querySelector("pre")).toBeNull();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(backend.answers).toEqual([
+      [1, "session"],
+      [2, "once"],
+      [3, "deny"],
+    ]);
+  });
+
+  it("shows requests that were waiting before the window loaded", async () => {
+    const waiting = new FakeBackend();
+    waiting.approvals = [{ id: 4, tool: "io.signals", session: 2, port: "COM5", detail: "DTR on" }];
+    waiting.failAnswer = true;
+    const { backend, user } = setup(waiting);
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("DTR on");
+    await user.click(within(dialog).getByRole("button", { name: "Deny" }));
+    await waitFor(() => expect(status()).toHaveTextContent("request 4 is no longer waiting"));
+    expect(backend.answers).toEqual([]);
+  });
+});
+
 describe("MCP panel", () => {
   async function openPanel(user: ReturnType<typeof userEvent.setup>) {
     await user.click(screen.getByRole("button", { name: "AI" }));
@@ -1411,8 +1488,12 @@ describe("MCP panel", () => {
         enabled: false,
         port: 9700,
         token: "my-own-token-123456",
+        confirm: true,
       }),
     );
+    // Confirming agents' changes can be turned off.
+    await user.click(within(panel).getByLabelText(/Ask before AI agents/));
+    await waitFor(() => expect(backend.mcp.settings.confirm).toBe(false));
 
     await user.click(within(panel).getByRole("button", { name: "New token" }));
     await waitFor(() => expect(token).toHaveValue("fresh-token-0123456789"));
