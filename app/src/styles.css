@@ -650,6 +650,89 @@ label.check {
   max-width: 760px;
 }
 
+/* ---- help page ---------------------------------------------------------- */
+
+.help {
+  max-width: 680px;
+  line-height: 1.55;
+}
+
+.help h2 {
+  margin: 4px 0 2px;
+  font-size: 20px;
+}
+
+.help header p {
+  margin: 0;
+}
+
+.help-version {
+  margin-left: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.help section {
+  margin-top: 22px;
+}
+
+.help h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.help p,
+.help ol {
+  margin: 0;
+}
+
+.help ol {
+  padding-left: 20px;
+}
+
+.help ol li + li {
+  margin-top: 4px;
+}
+
+.help-pairs {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 16px;
+  row-gap: 6px;
+}
+
+.help-pairs > div {
+  display: contents;
+}
+
+.help-pairs dt {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.help-pairs dd {
+  margin: 0;
+}
+
+.help-links {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+
+.help-links a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.help-links a:hover,
+.help-links a:focus-visible {
+  text-decoration: underline;
+}
+
 /* ---- modem signals ----------------------------------------------------- */
 
 .signals {

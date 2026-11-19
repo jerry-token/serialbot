@@ -318,6 +318,20 @@ class FakeBackend implements Backend {
   commandWindows: string[] = [];
   failCommandWindow = false;
 
+  openedLinks: string[] = [];
+  failLink = false;
+  versionAsked = 0;
+
+  async appVersion() {
+    this.versionAsked++;
+    return "0.2.0";
+  }
+
+  async openLink(url: string) {
+    if (this.failLink) throw `could not open ${url}`;
+    this.openedLinks.push(url);
+  }
+
   async openCommandWindow(title: string) {
     if (this.failCommandWindow) throw "window could not be created";
     this.commandWindows.push(title);
@@ -778,6 +792,40 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Commands" }));
     expect(panel().getByRole("button", { name: "Send version" })).toBeDisabled();
     expect(panel().getByRole("button", { name: "Send raw" })).toHaveTextContent("rawhex 01 02");
+  });
+
+  it("has a help page with the version and links", async () => {
+    const { backend, user } = setup();
+    expect(backend.versionAsked).toBe(0);
+    await user.click(screen.getByRole("button", { name: "Help" }));
+    const help = within(screen.getByRole("article", { name: "About SerialBot" }));
+    expect(await help.findByText("Version 0.2.0")).toBeInTheDocument();
+    expect(help.getByRole("heading", { name: "Getting started" })).toBeInTheDocument();
+    expect(help.getByText("TTY")).toBeInTheDocument();
+    await user.click(help.getByRole("link", { name: "Report a problem" }));
+    await user.click(help.getByRole("link", { name: "Email support@aiany.cc" }));
+    expect(backend.openedLinks).toEqual([
+      "https://github.com/jerry-token/serialbot/issues",
+      "mailto:support@aiany.cc",
+    ]);
+    backend.failLink = true;
+    await user.click(help.getByRole("link", { name: "Website" }));
+    await waitFor(() =>
+      expect(status()).toHaveTextContent("could not open https://serialbot.aiany.cc"),
+    );
+    // Back and forth: the version is asked for once.
+    await user.click(screen.getByRole("button", { name: "Terminal" }));
+    await user.click(screen.getByRole("button", { name: "Help" }));
+    expect(await screen.findByText("Version 0.2.0")).toBeInTheDocument();
+    expect(backend.versionAsked).toBe(1);
+  });
+
+  it("shows the help page in Chinese", async () => {
+    const user = userEvent.setup();
+    render(<App backend={new FakeBackend()} lang="zh" storage={memoryStorage()} />);
+    await user.click(screen.getByRole("button", { name: "帮助" }));
+    expect(await screen.findByRole("heading", { name: "快速上手" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "反馈问题" })).toBeInTheDocument();
   });
 
   it("opens the command list in its own window", async () => {

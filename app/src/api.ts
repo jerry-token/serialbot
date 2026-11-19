@@ -1,6 +1,7 @@
 // Typed access to the Rust backend (app/src-tauri/src/commands.rs).
 // Components receive a `Backend` so tests can substitute a fake.
 
+import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -190,6 +191,10 @@ export interface Backend {
   setSignals(id: number, levels: { dtr?: boolean; rts?: boolean }): Promise<SignalsInfo>;
   /** Opens the command list in its own window, or brings it to the front. */
   openCommandWindow(title: string): Promise<void>;
+  /** The app version, e.g. "0.2.0". */
+  appVersion(): Promise<string>;
+  /** Opens a SerialBot web link or mail address outside the app (only the help page's links). */
+  openLink(url: string): Promise<void>;
   /** Keeps the window above other windows, or stops doing so. */
   setAlwaysOnTop(on: boolean): Promise<void>;
   /** Runs a DTR/RTS sequence with pauses timed by the backend. */
@@ -255,6 +260,8 @@ export const tauriBackend: Backend = {
   onSignalsChanged: (handler) =>
     listen<SignalsInfo>("signals-changed", (event) => handler(event.payload)),
   setAlwaysOnTop: (on) => getCurrentWindow().setAlwaysOnTop(on),
+  appVersion: () => getVersion(),
+  openLink: (url) => invoke("open_link", { url }),
   openCommandWindow: async (title) => {
     const open = await WebviewWindow.getByLabel(COMMAND_WINDOW);
     if (open) return open.setFocus();

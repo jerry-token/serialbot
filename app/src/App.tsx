@@ -27,6 +27,7 @@ import {
 import { CommandPanel } from "./components/CommandPanel";
 import { DisplaySettings } from "./components/DisplaySettings";
 import { FileSend, type FileSendOptions } from "./components/FileSend";
+import { HelpPanel } from "./components/HelpPanel";
 import { endpointPath, isNetworkPath } from "./endpoint";
 import { SearchBar } from "./components/SearchBar";
 import { ConnectionBar, type PortSettings } from "./components/ConnectionBar";
@@ -185,6 +186,15 @@ export function App({
   const [mcp, setMcp] = useState<McpStatus | null>(null);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [page, setPage] = useState<Page>("terminal");
+  // The version is shown on the help page; it is only asked for there.
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+  useEffect(() => {
+    if (page !== "help" || appVersion !== null) return;
+    backend.appVersion().then(setAppVersion, () => undefined);
+  }, [backend, page, appVersion]);
+  const openLink = (url: string) => {
+    backend.openLink(url).catch((e: unknown) => setError(errorMessage(e)));
+  };
   const [signals, setSignals] = useState<Record<number, SignalsInfo>>({});
   const storeSignals = useCallback(
     (info: SignalsInfo) => setSignals((all) => ({ ...all, [info.id]: info })),
@@ -1036,6 +1046,10 @@ export function App({
               }
             />
           </>
+        ) : page === "help" ? (
+          <div className="page">
+            <HelpPanel t={t} version={appVersion} onOpenLink={openLink} />
+          </div>
         ) : page === "settings" ? (
           <div className="page">
             <SettingsPanel t={t} prefs={prefs} onChange={setPrefs} />

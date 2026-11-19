@@ -1,7 +1,7 @@
 import type { Strings } from "../i18n";
-import { AiIcon, GearIcon, TerminalIcon } from "./icons";
+import { AiIcon, GearIcon, HelpIcon, TerminalIcon } from "./icons";
 
-export type Page = "terminal" | "ai" | "settings";
+export type Page = "terminal" | "ai" | "help" | "settings";
 
 interface Props {
   t: Strings;
@@ -30,6 +30,7 @@ export function Sidebar({ t, page, onSelect, mcpRunning }: Props) {
       {item("terminal", t.navTerminal, <TerminalIcon />)}
       {item("ai", t.navAi, <AiIcon />, mcpRunning)}
       <span className="spacer" />
+      {item("help", t.navHelp, <HelpIcon />)}
       {item("settings", t.navSettings, <GearIcon />)}
     </nav>
   );
