@@ -24,7 +24,7 @@ English · [简体中文](README.zh-CN.md)
 
 ## ✨ Features
 
-- 🪶 **Lightweight**: a Windows installer under 4 MB, or a portable exe of about 17 MB that runs without installing.
+- 🪶 **Lightweight**: a Windows installer of about 4.5 MB, or a portable exe of about 19 MB that runs without installing.
 - 💻 **Cross-platform**: Windows, macOS (Apple Silicon and Intel) and Linux.
 - 🗂️ **Many ports at once**: one tab per port, each with its own log and counters.
 - 🌈 **Receive view**:
@@ -76,11 +76,11 @@ Get the file for your system from [Releases](https://github.com/jerry-token/seri
 
 | System | File | Notes |
 |---|---|---|
-| 🪟 Windows 10/11 | `SerialBot_*_x64-setup.exe` | Installer (under 4 MB, compressed), no admin rights needed |
-| 🪟 Windows 10/11 | `serialbot_windows_x64.exe` | Portable (~17 MB, uncompressed), just run it |
-| 🍎 macOS 11+ | `SerialBot_*_universal.dmg` | Apple Silicon and Intel |
-| 🐧 Ubuntu / Debian | `SerialBot_*_amd64.deb` | `sudo apt install ./SerialBot_*.deb` |
-| 🐧 Other Linux | `SerialBot_*_amd64.AppImage` | `chmod +x`, then run |
+| 🪟 Windows 10/11 | `SerialBot_*_x64-setup.exe` | Installer (~4.5 MB, compressed), no admin rights needed |
+| 🪟 Windows 10/11 | `serialbot_windows_x64.exe` | Portable (~19 MB, uncompressed), just run it |
+| 🍎 macOS 11+ | `SerialBot_*_universal.dmg` | Apple Silicon and Intel (~11 MB) |
+| 🐧 Ubuntu / Debian | `SerialBot_*_amd64.deb` | ~6 MB; `sudo apt install ./SerialBot_*.deb` |
+| 🐧 Other Linux | `SerialBot_*_amd64.AppImage` | ~80 MB (bundles its libraries); `chmod +x`, then run |
 
 <details>
 <summary>⚠️ Warning on first launch?</summary>
