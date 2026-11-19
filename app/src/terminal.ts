@@ -92,6 +92,9 @@ interface RawEntry {
 
 type RawItem = { entry: RawEntry } | { info: string; timestampUs: number };
 
+/** What a terminal-mode screen is told: received bytes, or that the log was cleared. */
+export type RawEvent = { kind: "rx"; bytes: Uint8Array } | { kind: "clear" };
+
 export class Terminal {
   /** Kept items are raw[rawHead..]; dropping advances the head (O(1)). */
   private raw: RawItem[] = [];
@@ -100,6 +103,7 @@ export class Terminal {
   private lines: Line[] = [];
   private nextId = 0;
   private lineNo = 0;
+  private listeners = new Set<(event: RawEvent) => void>();
   private openRx: Line | null = null;
   private openHex: Line | null = null;
   private encoding = "utf-8";
@@ -177,6 +181,25 @@ export class Terminal {
     this.rebuild();
   }
 
+  /**
+   * Received bytes still kept, oldest first, so a terminal-mode screen can
+   * replay them (bounded by `maxRawBytes`, like re-rendering).
+   */
+  received(): Uint8Array[] {
+    const out: Uint8Array[] = [];
+    for (let i = this.rawHead; i < this.raw.length; i++) {
+      const item = this.raw[i];
+      if (item && "entry" in item && item.entry.kind === "rx") out.push(item.entry.bytes);
+    }
+    return out;
+  }
+
+  /** Calls `listener` with every received chunk and on clear; returns an unsubscribe. */
+  subscribe(listener: (event: RawEvent) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
   /** Appends entries from the backend. */
   push(entries: readonly LogEntry[]): void {
     for (const e of entries) {
@@ -189,6 +212,9 @@ export class Terminal {
       };
       this.keep({ entry }, entry.bytes.length);
       this.render({ entry });
+      if (entry.kind === "rx") {
+        for (const l of this.listeners) l({ kind: "rx", bytes: entry.bytes });
+      }
     }
     this.trimLines();
   }
@@ -207,6 +233,7 @@ export class Terminal {
     this.rawHead = 0;
     this.rawBytes = 0;
     this.resetView();
+    for (const l of this.listeners) l({ kind: "clear" });
   }
 
   private keep(item: RawItem, bytes: number): void {

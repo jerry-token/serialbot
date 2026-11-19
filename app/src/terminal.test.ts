@@ -127,6 +127,25 @@ describe("Terminal line numbers", () => {
   });
 });
 
+describe("Terminal feed for terminal mode", () => {
+  const text = (b: Uint8Array) => new TextDecoder().decode(b);
+
+  it("replays kept received bytes and reports new ones and clears", () => {
+    const t = new Terminal({ maxLines: 100, maxRawBytes: 6 });
+    t.push([entry("rx", "\u001b[2Jab"), entry("tx", "ls\r"), entry("rx", "cd")]);
+    // Only received data, within the byte budget (the oldest chunk is gone).
+    expect(t.received().map(text)).toEqual(["cd"]);
+
+    const events: string[] = [];
+    const stop = t.subscribe((e) => events.push(e.kind === "rx" ? text(e.bytes) : "clear"));
+    t.push([entry("tx", "x"), entry("rx", "ef")]);
+    t.clear();
+    stop();
+    t.push([entry("rx", "gh")]);
+    expect(events).toEqual(["ef", "clear"]);
+  });
+});
+
 describe("Terminal limits", () => {
   it("drops the oldest lines", () => {
     const t = new Terminal({ maxLines: 2, maxRawBytes: 1000 });

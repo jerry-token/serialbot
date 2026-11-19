@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { SignalStep } from "./signals";
+import { type Screen, type ScreenOptions, themeFromCss } from "./screen";
 import { App } from "./App";
 import type {
   ApprovalRequest,
@@ -1604,6 +1605,157 @@ describe("App", () => {
     expect(backend.logListeners.size).toBe(0);
     expect(backend.sessionListeners.size).toBe(0);
     expect(backend.signalListeners.size).toBe(0);
+  });
+});
+
+/** A terminal emulator stand-in that records what it is given. */
+class FakeScreen implements Screen {
+  static last: FakeScreen | null = null;
+  written = "";
+  resets = 0;
+  fits = 0;
+  focused = false;
+  disposed = false;
+  options: ScreenOptions;
+  private handler: ((data: string) => void) | null = null;
+
+  constructor(options: ScreenOptions) {
+    this.options = options;
+    FakeScreen.last = this;
+  }
+
+  write(data: Uint8Array) {
+    this.written += new TextDecoder().decode(data);
+  }
+  reset() {
+    this.resets++;
+    this.written = "";
+  }
+  onInput(handler: (data: string) => void) {
+    this.handler = handler;
+  }
+  /** The user types into the screen. */
+  type(data: string) {
+    this.handler?.(data);
+  }
+  fit() {
+    this.fits++;
+  }
+  focus() {
+    this.focused = true;
+  }
+  setOptions(options: ScreenOptions) {
+    this.options = options;
+  }
+  dispose() {
+    this.disposed = true;
+  }
+}
+
+const fakeScreen = (_el: HTMLElement, options: ScreenOptions) => new FakeScreen(options);
+
+describe("Terminal mode", () => {
+  function setupTty(backend = new FakeBackend()) {
+    const user = userEvent.setup();
+    const storage = memoryStorage();
+    render(
+      <App backend={backend} lang="en" storage={storage} createScreen={fakeScreen} />,
+    );
+    return { backend, user, storage };
+  }
+  const ttyToggle = () => screen.getByRole("button", { name: /^Terminal mode/ });
+
+  it("hands the session to a terminal emulator and sends keys as typed", async () => {
+    const { backend, user } = setupTty();
+    await openPort(user);
+    act(() => backend.receive(1, "login: "));
+    await waitFor(() => expect(log()).toHaveTextContent("login:"));
+
+    await user.click(ttyToggle());
+    expect(ttyToggle()).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("application", { name: "Terminal on COM3" })).toBeInTheDocument();
+    expect(screen.queryByRole("log")).not.toBeInTheDocument();
+    const tty = FakeScreen.last!;
+    // History is replayed, then the screen fits and takes the keyboard.
+    expect(tty.written).toBe("login: ");
+    expect(tty.fits).toBeGreaterThan(0);
+    expect(tty.focused).toBe(true);
+
+    act(() => tty.type("root\r"));
+    const typed = [...new TextEncoder().encode("root\r")];
+    await waitFor(() => expect(backend.written).toEqual([[1, typed]]));
+    // The device's echo and answers are drawn; what was sent is not.
+    act(() => backend.receive(1, "root\r\n\u001b[1;32m# \u001b[0m"));
+    await waitFor(() => expect(tty.written).toBe("login: root\r\n\u001b[1;32m# \u001b[0m"));
+
+    // Clearing the log resets the screen.
+    await user.click(screen.getByRole("button", { name: "Clear" }));
+    expect(tty.resets).toBe(1);
+
+    // A bigger font reaches the screen.
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    const font = screen.getByLabelText("Log font size (px)");
+    await user.clear(font);
+    await user.type(font, "16{Enter}");
+    await user.click(screen.getByRole("button", { name: "Terminal" }));
+    expect(FakeScreen.last!.options.fontSize).toBe(16);
+
+    // Off again: the screen goes away and the log is back.
+    await user.click(ttyToggle());
+    expect(FakeScreen.last!.disposed).toBe(true);
+    act(() => backend.receive(1, "after\n"));
+    await waitFor(() => expect(log()).toHaveTextContent("after"));
+  });
+
+  it("copes with an emulator that loads late or not at all", async () => {
+    let finish: (s: Screen) => void = () => {};
+    let broken = false;
+    const loader = () =>
+      broken
+        ? Promise.reject(new Error("emulator failed to load"))
+        : new Promise<Screen>((resolve) => {
+            finish = resolve;
+          });
+    const user = userEvent.setup();
+    render(
+      <App backend={new FakeBackend()} lang="en" storage={memoryStorage()} createScreen={loader} />,
+    );
+    await openPort(user);
+    await user.click(ttyToggle());
+    // Switched off before it loaded: the late screen is thrown away.
+    await user.click(ttyToggle());
+    const late = new FakeScreen({ fontSize: 12, theme: themeFromCss(document.body.style) });
+    await act(async () => finish(late));
+    expect(late.disposed).toBe(true);
+
+    broken = true;
+    await user.click(ttyToggle());
+    await waitFor(() => expect(status()).toHaveTextContent("emulator failed to load"));
+  });
+
+  it("encodes keys in the chosen encoding and reports send failures", async () => {
+    const backend = new FakeBackend();
+    const { user } = setupTty(backend);
+    await openPort(user);
+    await user.click(screen.getByRole("button", { name: "Display settings" }));
+    await user.selectOptions(screen.getByLabelText("Encoding"), "gbk");
+    await user.keyboard("{Escape}");
+    await user.click(ttyToggle());
+    act(() => FakeScreen.last!.type("你"));
+    await waitFor(() => expect(backend.written.at(-1)?.[1]).toEqual([0xc4, 0xe3]));
+
+    backend.failWrite = true;
+    act(() => FakeScreen.last!.type("x"));
+    await waitFor(() => expect(status()).toHaveTextContent("session is Disconnected"));
+
+    // Keys typed into a session that is no longer open are dropped.
+    backend.failWrite = false;
+    act(() => backend.setState(1, "disconnected"));
+    await screen.findByRole("button", { name: "Reconnect" });
+    const before = backend.written.length;
+    act(() => FakeScreen.last!.type("y"));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(backend.written).toHaveLength(before);
   });
 });
 

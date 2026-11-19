@@ -41,6 +41,11 @@ const en = {
   showDeltaHint: "Show the time since the line before (frame gaps in HEX view)",
   showLineNumbers: "#",
   showLineNumbersHint: "Show line numbers",
+  tty: "TTY",
+  ttyHint:
+    "Terminal mode: a full terminal (cursor, colors, full-screen programs); " +
+    "keys go straight to the device",
+  ttyLabel: (name: string) => `Terminal on ${name}`,
   bookmarks: (n: number) => (n === 0 ? "Bookmarks" : `Bookmarks (${n})`),
   noBookmarks: "No bookmarks yet. Click ☆ at the start of a line to keep it here.",
   bookmarkLine: (no: number) => `Bookmark line ${no}`,
@@ -246,6 +251,9 @@ const zh: Strings = {
   showDeltaHint: "显示与上一行的时间差（HEX 视图下即帧间隔）",
   showLineNumbers: "#",
   showLineNumbersHint: "显示行号",
+  tty: "TTY",
+  ttyHint: "终端模式：完整的终端（光标、颜色、全屏程序），按键直接发给设备",
+  ttyLabel: (name: string) => `${name} 的终端`,
   bookmarks: (n: number) => (n === 0 ? "收藏" : `收藏（${n}）`),
   noBookmarks: "还没有收藏。点行首的 ☆ 就能把这一行收藏到这里。",
   bookmarkLine: (no: number) => `收藏第 ${no} 行`,

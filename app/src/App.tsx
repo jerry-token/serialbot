@@ -35,6 +35,8 @@ import { LogView } from "./components/LogView";
 import { McpPanel } from "./components/McpPanel";
 import { ApprovalDialog } from "./components/ApprovalDialog";
 import { Bookmarks } from "./components/Bookmarks";
+import { TtyView } from "./components/TtyView";
+import { loadXtermScreen, type ScreenFactory, type ScreenTheme, themeFromCss } from "./screen";
 import { SaveMenu } from "./components/SaveMenu";
 import { SendBar, type SendSettings } from "./components/SendBar";
 import { BREAK_MS, SignalBar } from "./components/SignalBar";
@@ -89,6 +91,8 @@ interface Props {
   copy?: (text: string) => Promise<void>;
   /** Where saved commands are kept (replaceable in tests). */
   storage?: Storage | null;
+  /** Terminal emulator for terminal mode (replaceable in tests). */
+  createScreen?: ScreenFactory;
 }
 
 /** What the window keeps per session: its rendered log and read position. */
@@ -110,7 +114,13 @@ const nowUs = () => Date.now() * 1000;
 
 const defaultCopy = (text: string) => navigator.clipboard.writeText(text);
 
-export function App({ backend, lang, copy = defaultCopy, storage = browserStorage() }: Props) {
+export function App({
+  backend,
+  lang,
+  copy = defaultCopy,
+  storage = browserStorage(),
+  createScreen = loadXtermScreen,
+}: Props) {
   // App preferences, read first: the language decides every string.
   const [prefs, setPrefs] = useState(() => loadPrefs(storage));
   const uiLang = resolveLanguage(prefs.language, lang);
@@ -158,6 +168,10 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
   const [showSent, setShowSent] = useState(true);
   const [showDelta, setShowDelta] = useState(false);
   const [showLineNumbers, setShowLineNumbers] = useState(false);
+  /** Sessions shown in terminal mode. */
+  const [ttyIds, setTtyIds] = useState<ReadonlySet<number>>(new Set());
+  /** Colors for terminal mode, read after each theme change. */
+  const [screenTheme, setScreenTheme] = useState<ScreenTheme | null>(null);
   const [jumpTo, setJumpTo] = useState<{ id: number; seq: number } | null>(null);
   const [filterMatches, setFilterMatches] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -319,12 +333,15 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
   useEffect(() => {
     saveGroups(storage, groups);
   }, [storage, groups]);
-  // The DTR/RTS sequence last typed, kept across restarts.
   // Theme and font are applied to the document.
   useEffect(() => savePrefs(storage, prefs), [storage, prefs]);
   useEffect(() => {
     const media = window.matchMedia?.("(prefers-color-scheme: dark)");
-    const apply = () => applyAppearance(document.documentElement, prefs, media?.matches ?? false);
+    const apply = () => {
+      applyAppearance(document.documentElement, prefs, media?.matches ?? false);
+      // Terminal mode draws with the palette now in effect.
+      setScreenTheme(themeFromCss(getComputedStyle(document.documentElement)));
+    };
     apply();
     media?.addEventListener("change", apply);
     return () => media?.removeEventListener("change", apply);
@@ -336,6 +353,7 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
     for (const view of views.current.values()) view.terminal.setMaxLines(prefs.maxLines);
     redraw();
   }, [prefs.maxLines]);
+  // The DTR/RTS sequence last typed, kept across restarts.
   const [sequence, setSequence] = useState(() => readItem(storage, SEQUENCE_KEY) ?? "");
   useEffect(() => writeItem(storage, SEQUENCE_KEY, sequence), [storage, sequence]);
   // Keywords marked in the log, one per line, kept across restarts.
@@ -430,6 +448,36 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
       setBusy(false);
     }
   };
+
+  // Terminal mode: keys go to the device as typed; the device echoes.
+  const typeIntoDevice = async (data: string) => {
+    if (!active || !activeOpen) return;
+    try {
+      const bytes =
+        encoding === "utf-8"
+          ? new TextEncoder().encode(data)
+          : Uint8Array.from(await backend.encodeText(data, encoding));
+      await backend.writeData(active.id, bytes);
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  };
+  const toggleTty = (on: boolean) => {
+    if (activeId === null) return;
+    setTtyIds((ids) => {
+      const next = new Set(ids);
+      if (on) next.add(activeId);
+      else next.delete(activeId);
+      return next;
+    });
+  };
+  const screenOptions = useMemo(
+    () => ({
+      fontSize: prefs.fontSize,
+      theme: screenTheme ?? themeFromCss(getComputedStyle(document.documentElement)),
+    }),
+    [prefs.fontSize, screenTheme],
+  );
 
   const sendData = async () => {
     if (!active) return;
@@ -775,6 +823,12 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
               onClose={(id) => void close(id)}
             >
               <Toggle
+                label={t.tty}
+                hint={t.ttyHint}
+                pressed={activeId !== null && ttyIds.has(activeId)}
+                onChange={toggleTty}
+              />
+              <Toggle
                 label={t.showTimestamps}
                 hint={t.showTimestampsHint}
                 pressed={showTimestamps}
@@ -883,45 +937,57 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
             <div className="work">
               {active ? (
                 <div className="log-area">
-                  {searchOpen && (
-                    <SearchBar
-                      t={t}
-                      query={query}
-                      onQuery={(q) => {
-                        setQuery(q);
-                        setMatchPos(null);
-                      }}
-                      filter={filterMatches}
-                      onFilter={setFilterMatches}
-                      current={matchIndex + 1}
-                      total={matchIds.length}
-                      onStep={(delta) =>
-                        setMatchPos(
-                          (matchIndex + delta + matchIds.length) % matchIds.length,
-                        )
-                      }
-                      onClose={() => {
-                        setSearchOpen(false);
-                        setMatchPos(null);
-                      }}
+                  {activeId !== null && ttyIds.has(activeId) && activeView ? (
+                    <TtyView
+                      key={activeId}
+                      terminal={activeView.terminal}
+                      options={screenOptions}
+                      onInput={(data) => void typeIntoDevice(data)}
+                      createScreen={createScreen}
+                      label={t.ttyLabel(active.alias ?? active.port)}
+                      onError={setError}
                     />
+                  ) : (
+                    <>
+                      {searchOpen && (
+                        <SearchBar
+                          t={t}
+                          query={query}
+                          onQuery={(q) => {
+                            setQuery(q);
+                            setMatchPos(null);
+                          }}
+                          filter={filterMatches}
+                          onFilter={setFilterMatches}
+                          current={matchIndex + 1}
+                          total={matchIds.length}
+                          onStep={(delta) =>
+                            setMatchPos((matchIndex + delta + matchIds.length) % matchIds.length)
+                          }
+                          onClose={() => {
+                            setSearchOpen(false);
+                            setMatchPos(null);
+                          }}
+                        />
+                      )}
+                      <LogView
+                        key={activeId ?? 0}
+                        lines={visibleLines}
+                        showTimestamps={showTimestamps}
+                        showDelta={showDelta}
+                        showLineNumbers={showLineNumbers}
+                        autoScroll={autoScroll && !paused}
+                        version={version}
+                        matches={new Set(matchIds)}
+                        currentMatch={currentMatch}
+                        highlight={highlight}
+                        bookmarks={activeView?.bookmarks}
+                        onToggleBookmark={toggleBookmark}
+                        jumpTo={jumpTo}
+                        bookmarkLabel={t.bookmarkLine}
+                      />
+                    </>
                   )}
-                  <LogView
-                    key={activeId ?? 0}
-                    lines={visibleLines}
-                    showTimestamps={showTimestamps}
-                    showDelta={showDelta}
-                    showLineNumbers={showLineNumbers}
-                    autoScroll={autoScroll && !paused}
-                    version={version}
-                    matches={new Set(matchIds)}
-                    currentMatch={currentMatch}
-                    highlight={highlight}
-                    bookmarks={activeView?.bookmarks}
-                    onToggleBookmark={toggleBookmark}
-                    jumpTo={jumpTo}
-                    bookmarkLabel={t.bookmarkLine}
-                  />
                 </div>
               ) : (
                 <div className="log empty" role="log">
