@@ -64,15 +64,16 @@ ports. Plan of record: the "AI 串口助手 · 开工前计划" doc.
   - `src/App.tsx` + `src/components/` — UI; tests use a fake `Backend`
   - Frontend gate: `npm run typecheck`, `npm run coverage` (≥ 85% lines), `npm run build`
 - `.github/workflows/ci.yml` — fmt, clippy, tests, MSRV, docs, coverage gate,
-  license/advisory checks. PRs run on Linux; the Windows/macOS/Linux matrix
-  runs on `main`, weekly and on demand (Actions minutes for macOS/Windows
-  are expensive). A red `main` run is fixed before anything else is merged.
+  license/advisory checks. PRs run on Linux x64; the Windows/macOS/Linux x64
+  and arm64 matrix runs on `main`, weekly and on demand (Actions minutes for
+  macOS/Windows are expensive), and so does the Linux arm64 packaging check.
+  A red `main` run is fixed before anything else is merged.
 
 ## Releases
 
 - `.github/workflows/release.yml` builds Windows (NSIS installer + portable
   exe), macOS (universal .dmg/.app, ad-hoc signed, not notarized) and Linux
-  (.deb, .AppImage) and publishes them on the GitHub release page.
+  (.deb, .AppImage, x64 and arm64) and publishes them on the GitHub release page.
 - Release by pushing a tag from `main` (`git tag v0.1.0-alpha.2 && git push
   origin v0.1.0-alpha.2`) or with Actions → Release → "Run workflow" on
   `main`, entering the tag. Tags with `-alpha`/`-beta`/`-rc` are pre-releases.

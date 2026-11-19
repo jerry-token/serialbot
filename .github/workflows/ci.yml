@@ -1,8 +1,9 @@
 name: CI
 
-# Pull requests run on Linux only; macOS and Windows minutes cost 10x and
-# 2x, so the three-OS matrix runs after merging to main, weekly, and on
-# demand. Release builds cover all three platforms as well.
+# Pull requests run on Linux x64 only; macOS and Windows minutes cost 10x and
+# 2x, so the full matrix (Linux x64 and arm64, macOS, Windows) runs after
+# merging to main, weekly, and on demand. Release builds cover the same
+# platforms; the arm64 packages are also built weekly and on demand.
 on:
   push:
     branches: [main]
@@ -40,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest", "ubuntu-24.04-arm", "macos-latest", "windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -57,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest", "ubuntu-24.04-arm", "macos-latest", "windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -133,3 +134,38 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: EmbarkStudios/cargo-deny-action@v2
+
+  bundle-arm64:
+    name: Bundle (Linux arm64)
+    # Packaging is slow; it runs weekly and on demand, and in every release.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04-arm
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libwebkit2gtk-4.1-dev librsvg2-dev \
+            libayatana-appindicator3-dev libudev-dev patchelf
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+        working-directory: app
+      - run: npm run tauri build -- --bundles deb,appimage
+        working-directory: app
+      - name: Check the packages
+        run: |
+          ls -l target/release/bundle/deb/*.deb target/release/bundle/appimage/*.AppImage
+          dpkg-deb --info target/release/bundle/deb/*.deb | grep -q "Architecture: arm64"
+          file target/release/serialbot | grep -q "ARM aarch64"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: serialbot-linux-arm64
+          path: |
+            target/release/bundle/deb/*.deb
+            target/release/bundle/appimage/*.AppImage
+          retention-days: 7

@@ -83,6 +83,10 @@ jobs:
             platform: ubuntu-22.04
             args: --bundles deb,appimage
             plain_binary: false
+          - name: Linux arm64
+            platform: ubuntu-22.04-arm
+            args: --bundles deb,appimage
+            plain_binary: false
     runs-on: ${{ matrix.platform }}
     timeout-minutes: 60
     steps:

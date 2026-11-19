@@ -25,7 +25,7 @@
 ## ✨ 特性
 
 - 🪶 **轻量**：Windows 安装版约 4.5 MB；免安装单文件版约 19 MB，不用安装直接运行。
-- 💻 **跨平台**：Windows、macOS（Apple Silicon 和 Intel）、Linux 都能用。
+- 💻 **跨平台**：Windows、macOS（Apple Silicon 和 Intel）、Linux（x64 和 arm64）都能用。
 - 🗂️ **多串口同时打开**：每个串口一个标签页，各自有日志和收发计数。
 - 🌈 **接收显示**：
   - 文本 / HEX 两种显示方式，带毫秒级时间戳
@@ -79,6 +79,8 @@
 | 🪟 Windows 10/11 | `serialbot_windows_x64.exe` | 免安装版（约 19 MB，未压缩），双击直接运行 |
 | 🍎 macOS 11+ | `SerialBot_*_universal.dmg` | Apple Silicon 和 Intel 通用（约 11 MB） |
 | 🐧 Ubuntu / Debian | `SerialBot_*_amd64.deb` | 约 6 MB；`sudo apt install ./SerialBot_*.deb` |
+| 🐧 Ubuntu / Debian arm64 | `SerialBot_*_arm64.deb` | 树莓派 4/5（64 位系统）等 ARM 设备；`sudo apt install ./SerialBot_*_arm64.deb` |
+| 🐧 其他 Linux arm64 | `SerialBot_*_aarch64.AppImage` | `chmod +x` 后直接运行 |
 | 🐧 其他 Linux | `SerialBot_*_amd64.AppImage` | 约 80 MB（自带运行库）；`chmod +x` 后直接运行 |
 
 <details>

@@ -25,7 +25,7 @@ English · [简体中文](README.zh-CN.md)
 ## ✨ Features
 
 - 🪶 **Lightweight**: a Windows installer of about 4.5 MB, or a portable exe of about 19 MB that runs without installing.
-- 💻 **Cross-platform**: Windows, macOS (Apple Silicon and Intel) and Linux.
+- 💻 **Cross-platform**: Windows, macOS (Apple Silicon and Intel) and Linux (x64 and arm64).
 - 🗂️ **Many ports at once**: one tab per port, each with its own log and counters.
 - 🌈 **Receive view**:
   - text or HEX, with millisecond timestamps
@@ -80,6 +80,8 @@ Get the file for your system from [Releases](https://github.com/jerry-token/seri
 | 🪟 Windows 10/11 | `serialbot_windows_x64.exe` | Portable (~19 MB, uncompressed), just run it |
 | 🍎 macOS 11+ | `SerialBot_*_universal.dmg` | Apple Silicon and Intel (~11 MB) |
 | 🐧 Ubuntu / Debian | `SerialBot_*_amd64.deb` | ~6 MB; `sudo apt install ./SerialBot_*.deb` |
+| 🐧 Ubuntu / Debian arm64 | `SerialBot_*_arm64.deb` | Raspberry Pi 4/5 (64-bit OS) and other ARM boards; `sudo apt install ./SerialBot_*_arm64.deb` |
+| 🐧 Other Linux arm64 | `SerialBot_*_aarch64.AppImage` | `chmod +x`, then run |
 | 🐧 Other Linux | `SerialBot_*_amd64.AppImage` | ~80 MB (bundles its libraries); `chmod +x`, then run |
 
 <details>
