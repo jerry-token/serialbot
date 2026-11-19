@@ -23,8 +23,6 @@ env:
   # Virtual-port tests must run in CI, never silently skip.
   SERIALBOT_REQUIRE_SOCAT: "1"
   # The toolchain comes from rust-toolchain.toml (rustup installs it on first use).
-  # udev for port listing, socat for virtual-port tests, the rest for Tauri.
-  LINUX_DEPS: libudev-dev socat libwebkit2gtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev
 
 jobs:
   fmt:
@@ -48,7 +46,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Install system dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq $LINUX_DEPS
+        uses: ./.github/actions/linux-deps
       - run: rustup show active-toolchain
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
@@ -65,7 +63,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Install system dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq $LINUX_DEPS
+        uses: ./.github/actions/linux-deps
       - run: rustup show active-toolchain
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace --all-targets --locked
@@ -78,7 +76,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install system dependencies
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq $LINUX_DEPS
+        uses: ./.github/actions/linux-deps
       - run: rustup toolchain install 1.90 --profile minimal
       - uses: Swatinem/rust-cache@v2
       - run: cargo +1.90 check --workspace --locked
@@ -90,7 +88,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install system dependencies
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq $LINUX_DEPS
+        uses: ./.github/actions/linux-deps
       - run: rustup show active-toolchain
       - uses: Swatinem/rust-cache@v2
       - run: cargo doc --workspace --no-deps --locked
@@ -102,7 +100,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install system dependencies
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq $LINUX_DEPS
+        uses: ./.github/actions/linux-deps
       - run: rustup component add llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@cargo-llvm-cov
@@ -144,10 +142,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install system dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq libwebkit2gtk-4.1-dev librsvg2-dev \
-            libayatana-appindicator3-dev libudev-dev patchelf
+        uses: ./.github/actions/linux-deps
+        with:
+          packages: libwebkit2gtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev libudev-dev patchelf
       - uses: actions/setup-node@v7
         with:
           node-version: 22
