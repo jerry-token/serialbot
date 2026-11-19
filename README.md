@@ -52,6 +52,7 @@ You stay in charge. Every change to a port needs your approval, and every line t
 - 🌈 Text or HEX with millisecond timestamps, **ANSI colors** (Zephyr, ESP-IDF and other colored logs), and encodings such as UTF-8, GBK, GB18030, Big5 and Shift_JIS.
 - ✂️ Auto frame split by gap; **Δt** shows the time since the line before, so in HEX view you see the gaps between frames.
 - 🔎 `Ctrl/Cmd+F` search, "only matching lines" filter, and **keyword highlight** (`ERROR`, `WARN`, … in ⚙️).
+- 🔢 Line numbers (**#**) and ★ **bookmarks**: mark the lines that matter and jump back to them.
 - ⏸️ Pause, and smooth scrolling through tens of thousands of lines.
 - 💾 Save the log once, or keep writing it to a file as data arrives.
 
