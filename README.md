@@ -20,7 +20,7 @@ English · [简体中文](README.zh-CN.md) · 🌐 [serialbot.aiany.cc](https://
 </div>
 
 > [!NOTE]
-> 🚧 **Alpha.** Everyday debugging and AI control work. Please try it and [report problems](https://github.com/jerry-token/serialbot/issues).
+> 🧪 **Beta.** The features planned for the first release are in, and real hardware checks are under way. Please try it and [report problems](https://github.com/jerry-token/serialbot/issues).
 
 ## 💡 Why SerialBot
 
@@ -122,7 +122,7 @@ Get the file for your system from [Releases](https://github.com/jerry-token/seri
 <details>
 <summary>⚠️ Warning on first launch?</summary>
 
-- **macOS says the app "is damaged" or "can't be opened"**: the alpha is not notarized yet. Run once:
+- **macOS says the app "is damaged" or "can't be opened"**: the builds are not notarized yet. Run once:
   ```sh
   xattr -dr com.apple.quarantine /Applications/SerialBot.app
   ```

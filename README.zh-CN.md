@@ -20,7 +20,7 @@
 </div>
 
 > [!NOTE]
-> 🚧 **当前是 Alpha 测试版**：日常调试和 AI 控制都已可用，欢迎试用并[反馈问题](https://github.com/jerry-token/serialbot/issues)。
+> 🧪 **当前是 Beta 测试版**：首个正式版计划的功能已经齐全，真机验证正在进行。欢迎试用并[反馈问题](https://github.com/jerry-token/serialbot/issues)。
 
 ## 💡 为什么做 SerialBot
 
@@ -122,7 +122,7 @@ SerialBot 补上的就是这一环，让 Agent 直接面对设备：
 <details>
 <summary>⚠️ 首次打开遇到提示？</summary>
 
-- **macOS 提示「已损坏」或「无法打开」**：Alpha 版还没做苹果公证，在终端执行一次：
+- **macOS 提示「已损坏」或「无法打开」**：安装包还没做苹果公证，在终端执行一次：
   ```sh
   xattr -dr com.apple.quarantine /Applications/SerialBot.app
   ```

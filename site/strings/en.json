@@ -69,7 +69,7 @@
  "dl_appimage": "Other Linux x64",
  "dl_deb_arm": "Debian / Ubuntu arm64, Raspberry Pi 4/5",
  "dl_appimage_arm": "Other Linux arm64",
- "download_note": "SerialBot is in alpha. The builds are not signed yet, so macOS and Windows warn on first launch; the release notes say how to open them.",
+ "download_note": "SerialBot is in beta. The builds are not signed yet, so macOS and Windows warn on first launch; the release notes say how to open them.",
  "footer_license": "SerialBot is open source under GPL-3.0.",
  "footer_issues": "Report a problem",
  "verify_title": "Agents you can trust check their own work",
