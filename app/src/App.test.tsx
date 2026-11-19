@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { SignalStep } from "./signals";
 import { type Screen, type ScreenOptions, themeFromCss } from "./screen";
+import type { Chart, ChartFactory } from "./chart";
 import { App } from "./App";
 import type {
   ApprovalRequest,
@@ -1653,6 +1654,95 @@ class FakeScreen implements Screen {
 }
 
 const fakeScreen = (_el: HTMLElement, options: ScreenOptions) => new FakeScreen(options);
+
+/** A chart stand-in that records the last data it was given. */
+class FakeChart implements Chart {
+  static last: FakeChart | null = null;
+  times: number[] = [];
+  series: Array<[string, Array<number | null>]> = [];
+  disposed = false;
+  constructor() {
+    FakeChart.last = this;
+  }
+  setData(times: number[], series: Array<[string, Array<number | null>]>) {
+    this.times = [...times];
+    this.series = series.map(([n, v]) => [n, [...v]]);
+  }
+  resize() {}
+  dispose() {
+    this.disposed = true;
+  }
+}
+
+describe("Plot view", () => {
+  function setupPlot(createChart: ChartFactory = () => new FakeChart()) {
+    const backend = new FakeBackend();
+    const user = userEvent.setup();
+    render(
+      <App backend={backend} lang="en" storage={memoryStorage()} createChart={createChart} />,
+    );
+    return { backend, user };
+  }
+  const plotToggle = () => screen.getByRole("button", { name: /^Plot numbers/ });
+  const names = () => FakeChart.last?.series.map(([n]) => n);
+
+  it("plots the numbers in received lines, history included", async () => {
+    const { backend, user } = setupPlot();
+    await openPort(user);
+    act(() => backend.receiveAt(1, "boot ok\ntemp=20.5 hum=40\n", 1_000_000));
+    await waitFor(() => expect(log()).toHaveTextContent("hum=40"));
+
+    await user.click(plotToggle());
+    expect(plotToggle()).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("img", { name: "Plot of the numbers from COM3" })).toBeInTheDocument();
+    await waitFor(() => expect(names()).toEqual(["temp", "hum"]));
+    expect(FakeChart.last?.times).toEqual([1]);
+
+    act(() => backend.receiveAt(1, "temp=21\n", 2_000_000));
+    await waitFor(() =>
+      expect(FakeChart.last?.series).toEqual([
+        ["temp", [20.5, 21]],
+        ["hum", [40, null]],
+      ]),
+    );
+    // The log stays below the chart.
+    expect(log()).toHaveTextContent("temp=21");
+
+    // Clearing the log clears the plot.
+    await user.click(screen.getByRole("button", { name: "Clear" }));
+    await waitFor(() => expect(FakeChart.last?.times).toEqual([]));
+    expect(screen.getByText(/No numbers yet/)).toBeInTheDocument();
+
+    await user.click(plotToggle());
+    expect(FakeChart.last?.disposed).toBe(true);
+    expect(screen.queryByRole("img", { name: /Plot of/ })).not.toBeInTheDocument();
+    // Opening it again keeps collecting into the same data.
+    act(() => backend.receiveAt(1, "temp=22\n", 3_000_000));
+    await user.click(plotToggle());
+    await waitFor(() => expect(FakeChart.last?.series).toEqual([["temp", [22]]]));
+  });
+
+  it("reports a chart that cannot load, and drops one that loads too late", async () => {
+    let finish: (c: Chart) => void = () => {};
+    let broken = false;
+    const { user } = setupPlot(() =>
+      broken
+        ? Promise.reject(new Error("chart failed to load"))
+        : new Promise<Chart>((resolve) => {
+            finish = resolve;
+          }),
+    );
+    await openPort(user);
+    await user.click(plotToggle());
+    await user.click(plotToggle());
+    const late = new FakeChart();
+    await act(async () => finish(late));
+    expect(late.disposed).toBe(true);
+    broken = true;
+    await user.click(plotToggle());
+    await waitFor(() => expect(status()).toHaveTextContent("chart failed to load"));
+  });
+});
 
 describe("Terminal mode", () => {
   function setupTty(backend = new FakeBackend()) {

@@ -56,6 +56,7 @@ You stay in charge. Every change to a port needs your approval, and every line t
 - 🌈 Text or HEX with millisecond timestamps, **ANSI colors** (Zephyr, ESP-IDF and other colored logs), and encodings such as UTF-8, GBK, GB18030, Big5 and Shift_JIS.
 - ✂️ Auto frame split by gap; **Δt** shows the time since the line before, so in HEX view you see the gaps between frames.
 - 🔎 `Ctrl/Cmd+F` search, "only matching lines" filter, and **keyword highlight** (`ERROR`, `WARN`, … in ⚙️).
+- 📈 **Plot**: numbers in received lines (`temp=23.6 hum=41`, or `1.2, 3.4, 5.6`) become live curves, each on its own scale.
 - 🖥️ **Terminal mode (TTY)**: a full terminal emulator on any session (cursor, colors, `top`, `vi`); keys go straight to the device, so you can log in to a Linux board's shell.
 - 🔢 Line numbers (**#**) and ★ **bookmarks**: mark the lines that matter and jump back to them.
 - ⏸️ Pause, and smooth scrolling through tens of thousands of lines.
@@ -185,7 +186,7 @@ On Windows the command is the path of `serialbot.exe` (installed or portable); o
 - [x] Installers for Windows, macOS and Linux (x64 / arm64), published automatically
 - [ ] TCP server with several clients, command list in its own window
 - [x] Terminal mode (VT100, interactive shells)
-- [ ] Waveform plots
+- [x] Waveform plots of received numbers
 - [ ] Built-in AI assistant "Bo"
 - [ ] JS scripts
 - [ ] BLE
