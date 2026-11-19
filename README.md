@@ -42,6 +42,7 @@ English · [简体中文](README.zh-CN.md)
 - 🌐 **TCP and UDP** besides serial ports: TCP client, TCP server (one client at a time, connects and leaves are logged) and UDP. Pick the type at the left of the connection bar; for AI agents, open `tcp://host:port`, `tcp-server://:port` or `udp://host:port?local=:port` like a port.
 - 🔁 **Auto-reconnect**: unplug and replug the adapter and the session carries on; the port list follows hot-plug.
 - 🎛️ **Signals**: DTR / RTS switches, CTS / DSR / RI / CD lamps, and every change is marked in the log.
+  BRK sends a BREAK; ⏱ runs a timed DTR/RTS sequence such as `DTR=0 RTS=1, 100, RTS=0` (a reset pulse).
 - 🤖 **AI-ready**: a built-in MCP server lets Claude Code and other agents
   - list and open ports
   - send data and wait for a matching reply

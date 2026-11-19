@@ -947,3 +947,37 @@ button.signal.on:hover:not(:disabled) {
 .approval-actions {
   justify-content: flex-end;
 }
+
+/* DTR/RTS sequence popover in the status bar */
+.signals .popover-anchor {
+  display: inline-block;
+}
+
+.sequence-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 300px;
+  font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 12px;
+  white-space: normal;
+}
+
+.sequence-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sequence-form p {
+  margin: 0;
+}
+
+.sequence-form textarea {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  resize: vertical;
+}
+
+.sequence-form .primary {
+  align-self: flex-end;
+}

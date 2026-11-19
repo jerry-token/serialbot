@@ -1240,7 +1240,7 @@ impl SerialTools {
                 .await?;
                 blocking(move || {
                     session
-                        .send_break(Duration::from_millis(ms))
+                        .send_break_as(Duration::from_millis(ms), Actor::Ai)
                         .map_err(|e| e.to_string())
                 })
                 .await?;

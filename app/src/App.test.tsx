@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import type { SignalStep } from "./signals";
 import { App } from "./App";
 import type {
   ApprovalRequest,
@@ -304,6 +305,26 @@ class FakeBackend implements Backend {
     const lines = { ...this.linesOf(id), ...levels };
     this.lines[id] = lines;
     return lines;
+  }
+
+  sequences: Array<[number, SignalStep[]]> = [];
+  breaks: Array<[number, number]> = [];
+
+  async runSignals(id: number, steps: SignalStep[]) {
+    let lines = this.linesOf(id);
+    for (const step of steps) {
+      const levels: { dtr?: boolean; rts?: boolean } = {};
+      if (step.dtr !== null) levels.dtr = step.dtr;
+      if (step.rts !== null) levels.rts = step.rts;
+      lines = await this.setSignals(id, levels);
+    }
+    this.sequences.push([id, steps]);
+    return lines;
+  }
+
+  async sendBreak(id: number, ms: number) {
+    if (this.sessions.get(id)?.info.state !== "open") throw "session is Disconnected";
+    this.breaks.push([id, ms]);
   }
 
   async onSignalsChanged(handler: (s: SignalsInfo) => void) {
@@ -1107,6 +1128,60 @@ describe("App", () => {
 
     act(() => backend.setState(1, "disconnected"));
     await waitFor(() => expect(dtr).toBeDisabled());
+  });
+
+  it("sends a BREAK and runs DTR/RTS sequences", async () => {
+    const { backend, user, storage } = setup();
+    await openPort(user);
+    await user.click(screen.getByRole("button", { name: "BRK" }));
+    await waitFor(() => expect(backend.breaks).toEqual([[1, 250]]));
+
+    const open = () => user.click(screen.getByRole("button", { name: "Timed DTR/RTS sequence" }));
+    await open();
+    const box = screen.getByRole("textbox", { name: "Timed DTR/RTS sequence" });
+    await user.type(box, "DTR=0 RTS=1, 100, RTS=2");
+    await user.click(screen.getByRole("button", { name: "Run" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent('cannot read "RTS=2"');
+    expect(backend.sequences).toEqual([]);
+
+    await user.type(box, "{Backspace}0");
+    await user.click(screen.getByRole("button", { name: "Run" }));
+    await waitFor(() =>
+      expect(backend.sequences).toEqual([
+        [
+          1,
+          [
+            { dtr: false, rts: true, waitMs: 100 },
+            { dtr: null, rts: false, waitMs: 0 },
+          ],
+        ],
+      ]),
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^RTS/ })).toHaveAttribute("aria-pressed", "false"),
+    );
+    expect(storage.getItem("serialbot.signalSequence")).toBe("DTR=0 RTS=1, 100, RTS=0");
+
+    act(() => backend.setState(1, "disconnected"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "BRK" })).toBeDisabled());
+    expect(screen.getByRole("button", { name: "Timed DTR/RTS sequence" })).toBeDisabled();
+  });
+
+  it("reports BREAK and sequence failures", async () => {
+    const storage = memoryStorage();
+    storage.setItem("serialbot.signalSequence", "DTR=1");
+    const { backend, user } = setup(new FakeBackend(), undefined, storage);
+    await openPort(user);
+    backend.sessions.get(1)!.info = { ...backend.sessions.get(1)!.info, state: "failed" };
+    await user.click(screen.getByRole("button", { name: "BRK" }));
+    await waitFor(() => expect(status()).toHaveTextContent("session is Disconnected"));
+    await user.click(screen.getByRole("button", { name: "Timed DTR/RTS sequence" }));
+    expect(screen.getByRole("textbox", { name: "Timed DTR/RTS sequence" })).toHaveValue("DTR=1");
+    await user.click(screen.getByRole("button", { name: "Run" }));
+    await waitFor(() => expect(status()).toHaveTextContent("session is Disconnected"));
+    expect(backend.breaks).toEqual([]);
+    expect(backend.sequences).toEqual([]);
   });
 
   it("locks RTS while hardware flow control drives it", async () => {

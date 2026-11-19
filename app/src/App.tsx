@@ -35,12 +35,34 @@ import { McpPanel } from "./components/McpPanel";
 import { ApprovalDialog } from "./components/ApprovalDialog";
 import { SaveMenu } from "./components/SaveMenu";
 import { SendBar, type SendSettings } from "./components/SendBar";
-import { SignalBar } from "./components/SignalBar";
+import { BREAK_MS, SignalBar } from "./components/SignalBar";
+import type { SignalStep } from "./signals";
 import { SessionTabs, Toggle } from "./components/SessionTabs";
 import { type Page, Sidebar } from "./components/Sidebar";
 import { ClearIcon, ListIcon, SearchIcon } from "./components/icons";
 import { type Lang, strings } from "./i18n";
 import { type Line, Terminal } from "./terminal";
+
+/** Storage key of the DTR/RTS sequence. */
+const SEQUENCE_KEY = "serialbot.signalSequence";
+
+/** Reads a stored string; storage may be missing or refuse access. */
+function readItem(storage: Storage | null, key: string): string | null {
+  try {
+    return storage?.getItem(key) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Stores a string if storage allows it. */
+function writeItem(storage: Storage | null, key: string, value: string): void {
+  try {
+    storage?.setItem(key, value);
+  } catch {
+    // Private mode or a full quota: the value just is not kept.
+  }
+}
 
 /** Payload budget of one log read. */
 export const READ_BYTES = 256 * 1024;
@@ -270,6 +292,9 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
   useEffect(() => {
     saveGroups(storage, groups);
   }, [storage, groups]);
+  // The DTR/RTS sequence last typed, kept across restarts.
+  const [sequence, setSequence] = useState(() => readItem(storage, SEQUENCE_KEY) ?? "");
+  useEffect(() => writeItem(storage, SEQUENCE_KEY, sequence), [storage, sequence]);
 
   // A run does not outlive the window.
   useEffect(() => () => runStop.current?.abort(), []);
@@ -289,6 +314,16 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
     backend
       .setSignals(active.id, levels)
       .then(storeSignals, (e: unknown) => setError(errorMessage(e)));
+  };
+  const runSignalSequence = (steps: SignalStep[]) => {
+    if (!active) return;
+    backend
+      .runSignals(active.id, steps)
+      .then(storeSignals, (e: unknown) => setError(errorMessage(e)));
+  };
+  const sendBreak = () => {
+    if (!active) return;
+    backend.sendBreak(active.id, BREAK_MS).catch((e: unknown) => setError(errorMessage(e)));
   };
   const activeView = activeId !== null ? views.current.get(activeId) : undefined;
   // What the bar would open: a serial port or a network endpoint URL.
@@ -894,6 +929,10 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
               signals={signals[active.id] ?? null}
               enabled={activeOpen}
               onSet={setLines}
+              onBreak={sendBreak}
+              sequence={sequence}
+              onSequenceChange={setSequence}
+              onRunSequence={runSignalSequence}
             />
           )}
           {active && captures[active.id]?.active && (

@@ -61,6 +61,8 @@ describe("tauriBackend", () => {
     await tauriBackend.signals(1);
     await tauriBackend.setSignals(1, { dtr: true });
     await tauriBackend.setSignals(1, { rts: false });
+    await tauriBackend.runSignals(1, [{ dtr: true, rts: null, waitMs: 5 }]);
+    await tauriBackend.sendBreak(1, 250);
     await tauriBackend.pendingApprovals();
     await tauriBackend.answerApproval(3, "session");
     expect(invoke.mock.calls).toEqual([
@@ -84,6 +86,8 @@ describe("tauriBackend", () => {
       ["signals", { id: 1 }],
       ["set_signals", { id: 1, dtr: true, rts: null }],
       ["set_signals", { id: 1, dtr: null, rts: false }],
+      ["run_signals", { id: 1, steps: [{ dtr: true, rts: null, waitMs: 5 }] }],
+      ["send_break", { id: 1, ms: 250 }],
       ["pending_approvals"],
       ["answer_approval", { id: 3, decision: "session" }],
     ]);

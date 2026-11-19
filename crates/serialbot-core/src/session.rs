@@ -342,9 +342,17 @@ impl Session {
         self.with_control(|c| c.line_states())
     }
 
-    /// Holds a BREAK for `duration`.
+    /// Holds a BREAK for `duration` and logs a `BREAK <ms> ms` marker once
+    /// it is over (nothing is logged if it fails).
     pub fn send_break(&self, duration: Duration) -> Result<(), SessionError> {
-        self.with_control(|c| c.send_break(duration))
+        self.send_break_as(duration, Actor::User)
+    }
+
+    /// Like [`Session::send_break`], recording who sent the BREAK.
+    pub fn send_break_as(&self, duration: Duration, actor: Actor) -> Result<(), SessionError> {
+        self.with_control(|c| c.send_break(duration))?;
+        self.mark_as(&format!("BREAK {} ms", duration.as_millis()), actor);
+        Ok(())
     }
 
     /// Changes the baud rate without closing the port.
@@ -1130,6 +1138,9 @@ mod tests {
         s.set_dtr_as(true, Actor::Ai).unwrap();
         s.set_rts(false).unwrap();
         s.mark_as("checkpoint", Actor::Ai);
+        s.send_break_as(Duration::from_millis(5), Actor::Ai)
+            .unwrap();
+        s.send_break(Duration::from_millis(5)).unwrap();
         let re = regex::bytes::Regex::new("OK").unwrap();
         d.send(b"OK");
         s.send_and_expect_as(b"AT", &re, Duration::from_secs(5), 64, Actor::Ai)
@@ -1158,6 +1169,8 @@ mod tests {
                 Actor::Ai,
                 Actor::User,
                 Actor::Ai,
+                Actor::Ai,
+                Actor::User,
                 Actor::Ai
             ]
         );
