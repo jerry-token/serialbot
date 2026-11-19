@@ -103,7 +103,21 @@ export class Terminal {
   private lastRxUs = 0;
   private pendingCr = false;
 
-  constructor(private readonly limits: TerminalLimits = DEFAULT_LIMITS) {}
+  private limits: TerminalLimits;
+
+  constructor(limits: TerminalLimits = DEFAULT_LIMITS) {
+    this.limits = { ...limits };
+  }
+
+  /**
+   * Changes how many lines are kept. A lower limit drops the oldest lines
+   * at once; a higher one keeps lines that arrive from now on.
+   */
+  setMaxLines(maxLines: number): void {
+    this.limits.maxLines = Math.max(1, Math.floor(maxLines));
+    const excess = this.lines.length - this.limits.maxLines;
+    if (excess > 0) this.dropOldest(excess);
+  }
 
   /** Lines to display, oldest first. */
   get view(): readonly Line[] {
@@ -370,10 +384,12 @@ export class Terminal {
     const slack = Math.floor(this.limits.maxLines / 10);
     if (this.lines.length <= this.limits.maxLines + slack) return;
     const excess = this.lines.length - this.limits.maxLines;
-    if (excess > 0) {
-      const removed = this.lines.splice(0, excess);
-      if (this.openRx && removed.includes(this.openRx)) this.openRx = null;
-      if (this.openHex && removed.includes(this.openHex)) this.openHex = null;
-    }
+    if (excess > 0) this.dropOldest(excess);
+  }
+
+  private dropOldest(count: number): void {
+    const removed = this.lines.splice(0, count);
+    if (this.openRx && removed.includes(this.openRx)) this.openRx = null;
+    if (this.openHex && removed.includes(this.openHex)) this.openHex = null;
   }
 }

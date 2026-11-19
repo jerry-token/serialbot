@@ -42,7 +42,9 @@ import { SessionTabs, Toggle } from "./components/SessionTabs";
 import { type Page, Sidebar } from "./components/Sidebar";
 import { ClearIcon, ListIcon, SearchIcon } from "./components/icons";
 import { type Lang, strings } from "./i18n";
-import { type Line, Terminal } from "./terminal";
+import { DEFAULT_LIMITS, type Line, Terminal } from "./terminal";
+import { applyAppearance, loadPrefs, savePrefs } from "./prefs";
+import { SettingsPanel } from "./components/SettingsPanel";
 
 /** Storage key of the DTR/RTS sequence. */
 const SEQUENCE_KEY = "serialbot.signalSequence";
@@ -173,7 +175,7 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
   const viewOf = (id: number): SessionView => {
     let view = views.current.get(id);
     if (!view) {
-      const terminal = new Terminal();
+      const terminal = new Terminal({ ...DEFAULT_LIMITS, maxLines: prefs.maxLines });
       terminal.setHex(display.current.hex);
       terminal.setEncoding(display.current.encoding);
       terminal.setFrameGap(display.current.frameGapMs);
@@ -298,6 +300,23 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
     saveGroups(storage, groups);
   }, [storage, groups]);
   // The DTR/RTS sequence last typed, kept across restarts.
+  // App preferences; theme and font are applied to the document.
+  const [prefs, setPrefs] = useState(() => loadPrefs(storage));
+  useEffect(() => savePrefs(storage, prefs), [storage, prefs]);
+  useEffect(() => {
+    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
+    const apply = () => applyAppearance(document.documentElement, prefs, media?.matches ?? false);
+    apply();
+    media?.addEventListener("change", apply);
+    return () => media?.removeEventListener("change", apply);
+  }, [prefs]);
+  useEffect(() => {
+    backend.setAlwaysOnTop(prefs.alwaysOnTop).catch((e: unknown) => setError(errorMessage(e)));
+  }, [backend, prefs.alwaysOnTop]);
+  useEffect(() => {
+    for (const view of views.current.values()) view.terminal.setMaxLines(prefs.maxLines);
+    redraw();
+  }, [prefs.maxLines]);
   const [sequence, setSequence] = useState(() => readItem(storage, SEQUENCE_KEY) ?? "");
   useEffect(() => writeItem(storage, SEQUENCE_KEY, sequence), [storage, sequence]);
   // Keywords marked in the log, one per line, kept across restarts.
@@ -888,6 +907,10 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
               }
             />
           </>
+        ) : page === "settings" ? (
+          <div className="page">
+            <SettingsPanel t={t} prefs={prefs} onChange={setPrefs} />
+          </div>
         ) : (
           <div className="page">
             {mcp && (

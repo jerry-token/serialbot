@@ -36,6 +36,13 @@ export const AiIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const GearIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1" />
+  </Svg>
+);
+
 export const RefreshIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" />

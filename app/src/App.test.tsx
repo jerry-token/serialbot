@@ -310,6 +310,12 @@ class FakeBackend implements Backend {
   sequences: Array<[number, SignalStep[]]> = [];
   breaks: Array<[number, number]> = [];
 
+  onTop: boolean[] = [];
+
+  async setAlwaysOnTop(on: boolean) {
+    this.onTop.push(on);
+  }
+
   async runSignals(id: number, steps: SignalStep[]) {
     let lines = this.linesOf(id);
     for (const step of steps) {
@@ -1532,6 +1538,77 @@ describe("App", () => {
     expect(backend.logListeners.size).toBe(0);
     expect(backend.sessionListeners.size).toBe(0);
     expect(backend.signalListeners.size).toBe(0);
+  });
+});
+
+describe("Settings page", () => {
+  it("applies and remembers the theme, font size, line limit and window placement", async () => {
+    const { backend, user, storage } = setup();
+    await openPort(user);
+    act(() => backend.receive(1, "1\n2\n3\n4\n5\n"));
+    await waitFor(() => expect(log()).toHaveTextContent("5"));
+    await waitFor(() => expect(backend.onTop).toEqual([false]));
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    const panel = within(screen.getByRole("region", { name: "Settings" }));
+    await user.selectOptions(panel.getByLabelText("Theme"), "dark");
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    await user.selectOptions(panel.getByLabelText("Theme"), "light");
+    expect(document.documentElement.dataset.theme).toBe("light");
+
+    const font = panel.getByLabelText("Log font size (px)");
+    await user.clear(font);
+    await user.type(font, "40{Enter}");
+    expect(font).toHaveValue("24");
+    expect(document.documentElement.style.getPropertyValue("--log-font-size")).toBe("24px");
+
+    const lines = panel.getByLabelText("Log lines kept per session");
+    await user.clear(lines);
+    await user.type(lines, "2");
+    await user.tab();
+    expect(lines).toHaveValue("1000");
+
+    await user.click(panel.getByLabelText("Keep the window on top"));
+    await waitFor(() => expect(backend.onTop).toEqual([false, true]));
+    expect(JSON.parse(storage.getItem("serialbot.preferences") ?? "{}")).toEqual({
+      theme: "light",
+      fontSize: 24,
+      maxLines: 1000,
+      alwaysOnTop: true,
+    });
+    await user.selectOptions(panel.getByLabelText("Theme"), "system");
+    expect(document.documentElement.dataset.theme).toBe("light");
+  });
+
+  it("starts with the stored preferences and reports window errors", async () => {
+    const storage = memoryStorage();
+    const stored = { theme: "dark", maxLines: 1000, alwaysOnTop: true };
+    storage.setItem("serialbot.preferences", JSON.stringify(stored));
+    const backend = new FakeBackend();
+    backend.setAlwaysOnTop = async () => {
+      throw "window not found";
+    };
+    const { user } = setup(backend, undefined, storage);
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    await waitFor(() => expect(status()).toHaveTextContent("window not found"));
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.getByLabelText("Log lines kept per session")).toHaveValue("1000");
+    expect(screen.getByLabelText("Keep the window on top")).toBeChecked();
+  });
+
+  it("trims open logs to a lower line limit", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    const many = Array.from({ length: 1500 }, (_, i) => `row${i}`).join("\n");
+    act(() => backend.receive(1, `${many}\n`));
+    await waitFor(() => expect(log()).toHaveTextContent("row1499"));
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    const lines = screen.getByLabelText("Log lines kept per session");
+    await user.clear(lines);
+    await user.type(lines, "1000{Enter}");
+    await user.click(screen.getByRole("button", { name: "Terminal" }));
+    await waitFor(() => expect(log()).not.toHaveTextContent("row499\n"));
+    expect(log().querySelector(".line")?.textContent).toContain("row500");
   });
 });
 

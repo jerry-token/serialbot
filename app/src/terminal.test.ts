@@ -112,6 +112,20 @@ describe("Terminal limits", () => {
     expect(texts(t)).toEqual(["rx:3", "rx:45"]);
   });
 
+  it("applies a new line limit at once", () => {
+    const t = new Terminal({ maxLines: 100, maxRawBytes: 1000 });
+    t.push([entry("rx", "1\n2\n3\n4")]);
+    t.setMaxLines(2);
+    expect(texts(t)).toEqual(["rx:3", "rx:4"]);
+    t.push([entry("rx", "5\n")]);
+    expect(texts(t)).toEqual(["rx:3", "rx:45"]);
+    t.setMaxLines(1);
+    t.push([entry("rx", "6\n")]);
+    expect(texts(t)).toEqual(["rx:6"]);
+    t.setMaxLines(0.5);
+    expect(texts(t)).toHaveLength(1);
+  });
+
   it("forgets an open line that was trimmed away", () => {
     const t = new Terminal({ maxLines: 1, maxRawBytes: 1000 });
     t.push([entry("rx", "a")]);
