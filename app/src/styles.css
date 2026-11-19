@@ -1031,3 +1031,85 @@ mark.kw {
 .settings-panel input:not([type="checkbox"]) {
   min-width: 120px;
 }
+
+/* Bookmarks: a ☆ at the start of each row, shown on hover or when set */
+.line .bm {
+  margin-right: 0.5ch;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+  opacity: 0;
+  user-select: none;
+}
+
+.line:hover .bm,
+.line .bm:focus-visible,
+.line.bookmarked .bm {
+  opacity: 1;
+}
+
+.line.bookmarked .bm {
+  color: #e8a400;
+}
+
+.line.jumped {
+  background: var(--accent-soft);
+}
+
+.has-bookmarks {
+  color: #e8a400;
+}
+
+.bookmark-list ul {
+  margin: 0 0 8px;
+  padding: 0;
+  max-height: 320px;
+  overflow: auto;
+  list-style: none;
+}
+
+.bookmark-list li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bookmark-jump {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  min-width: 0;
+  padding: 3px 6px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bookmark-jump:hover {
+  background: var(--hover);
+}
+
+.bookmark-jump .ln-ref {
+  min-width: 5ch;
+  color: var(--muted);
+  text-align: right;
+}
+
+.bookmark-jump .excerpt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+.bookmark-list {
+  width: 420px;
+}

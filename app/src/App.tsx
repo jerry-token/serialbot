@@ -34,6 +34,7 @@ import { ConnectionBar, type PortSettings } from "./components/ConnectionBar";
 import { LogView } from "./components/LogView";
 import { McpPanel } from "./components/McpPanel";
 import { ApprovalDialog } from "./components/ApprovalDialog";
+import { Bookmarks } from "./components/Bookmarks";
 import { SaveMenu } from "./components/SaveMenu";
 import { SendBar, type SendSettings } from "./components/SendBar";
 import { BREAK_MS, SignalBar } from "./components/SignalBar";
@@ -101,6 +102,8 @@ interface SessionView {
   again: boolean;
   /** The end of the session was reported. */
   ended: boolean;
+  /** Ids of bookmarked lines (lost when the view is re-rendered). */
+  bookmarks: Set<number>;
 }
 
 const nowUs = () => Date.now() * 1000;
@@ -155,6 +158,7 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
   const [showSent, setShowSent] = useState(true);
   const [showDelta, setShowDelta] = useState(false);
   const [showLineNumbers, setShowLineNumbers] = useState(false);
+  const [jumpTo, setJumpTo] = useState<{ id: number; seq: number } | null>(null);
   const [filterMatches, setFilterMatches] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
   const [mcp, setMcp] = useState<McpStatus | null>(null);
@@ -187,7 +191,16 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
       terminal.setEncoding(display.current.encoding);
       terminal.setFrameGap(display.current.frameGapMs);
       terminal.setAnsi(display.current.ansi);
-      view = { terminal, cursor: 0, rx: 0, tx: 0, reading: false, again: false, ended: false };
+      view = {
+        terminal,
+        cursor: 0,
+        rx: 0,
+        tx: 0,
+        reading: false,
+        again: false,
+        ended: false,
+        bookmarks: new Set(),
+      };
       views.current.set(id, view);
     }
     return view;
@@ -674,6 +687,15 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
   }, [page]);
 
   const live = activeView?.terminal.view ?? [];
+  // Bookmarks of lines still kept; trimmed or re-rendered lines drop out.
+  const bookmarked = activeView ? live.filter((l) => activeView.bookmarks.has(l.id)) : [];
+  const toggleBookmark = (id: number) => {
+    const marks = activeView?.bookmarks;
+    if (!marks) return;
+    if (marks.has(id)) marks.delete(id);
+    else marks.add(id);
+    redraw();
+  };
   const paused = frozen !== null && frozen.id === activeId;
   const shown = paused ? frozen.lines : live;
   const unfiltered = showSent ? shown : shown.filter((l) => l.kind !== "tx");
@@ -794,6 +816,20 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
                 pressed={paused}
                 onChange={togglePause}
               />
+              <Bookmarks
+                t={t}
+                lines={bookmarked}
+                onJump={(id) => {
+                  // Stay at the bookmark instead of following new data.
+                  setAutoScroll(false);
+                  setJumpTo((j) => ({ id, seq: (j?.seq ?? 0) + 1 }));
+                }}
+                onRemove={toggleBookmark}
+                onClear={() => {
+                  activeView?.bookmarks.clear();
+                  redraw();
+                }}
+              />
               <button
                 type="button"
                 className="icon-button"
@@ -881,6 +917,10 @@ export function App({ backend, lang, copy = defaultCopy, storage = browserStorag
                     matches={new Set(matchIds)}
                     currentMatch={currentMatch}
                     highlight={highlight}
+                    bookmarks={activeView?.bookmarks}
+                    onToggleBookmark={toggleBookmark}
+                    jumpTo={jumpTo}
+                    bookmarkLabel={t.bookmarkLine}
                   />
                 </div>
               ) : (
