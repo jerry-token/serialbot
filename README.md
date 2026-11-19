@@ -4,7 +4,7 @@
 
 # SerialBot
 
-**A lightweight, cross-platform serial port assistant with a built-in MCP server, so AI agents can drive your serial ports too** 🔌🤖
+**The verification loop for embedded hardware: a lightweight serial assistant whose built-in MCP server lets AI agents flash, read and verify real boards themselves** 🔌🤖
 
 [![CI](https://github.com/jerry-token/serialbot/actions/workflows/ci.yml/badge.svg)](https://github.com/jerry-token/serialbot/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/jerry-token/serialbot?include_prereleases&label=release&color=orange)](https://github.com/jerry-token/serialbot/releases)
@@ -24,13 +24,17 @@ English · [简体中文](README.zh-CN.md) · 🌐 [serialbot.aiany.cc](https://
 
 ## 💡 Why SerialBot
 
-Debugging firmware with an AI agent usually still needs a person in the middle. You flash the board, watch the serial log, copy the interesting lines into the chat and explain what happened. The agent can write the code, but it cannot see what the code does.
+**SerialBot is the verification loop for embedded hardware.**
 
-SerialBot closes that loop. The agent works on the device directly:
+Coding agents earn trust by checking their own work. The teams getting the most out of them treat verification as the core of the job: [Lauren Tan (@poteto)](https://x.com/poteto), who builds Grok Bot, describes letting agents run the app, take traces and test it the way a user would, and keep going until it really works. Closing that loop is what makes their output trustworthy.
+
+Firmware has had no such loop. Whether embedded code works is decided on the board, and the board speaks through its serial port. So a person sits in the middle: flash, watch the log, copy the interesting lines into the chat, explain what happened. The agent can write the code, but it cannot see what the code does.
+
+SerialBot is the missing piece. The agent works on the device directly:
 
 - 🔥 **Flashes the board**: it hands the port to your flashing tool, then takes it back. The log continues.
 - 👀 **Reads the log itself**: it waits for the line it expects, or gives up after a timeout.
-- 🐛 **Debugs on its own**: it adds debug prints, rebuilds, flashes and reads again, until it understands what is going on.
+- 🐛 **Verifies its own work**: it adds debug prints, rebuilds, flashes and reads again, until the log shows the firmware does what it should.
 
 You stay in charge. Every change to a port needs your approval, and every line the agent sent is marked in the window.
 

@@ -98,6 +98,7 @@ def build(out: Path) -> None:
         (target / "index.html").write_text(render(template, strings, lang), encoding="utf-8")
     for name in ("style.css", "download.js", "CNAME"):
         shutil.copy(SITE / name, out / name)
+    shutil.copytree(SITE / "fonts", out / "fonts")
     for image in (REPO / "docs" / "images").iterdir():
         shutil.copy(image, out / "images" / image.name)
     shutil.copy(REPO / "app" / "src-tauri" / "icons" / "128x128.png", out / "images" / "icon.png")

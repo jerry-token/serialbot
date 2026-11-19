@@ -1,7 +1,7 @@
 {
  "html_lang": "zh-CN",
- "title": "SerialBot：让 AI 自己用串口",
- "description": "轻量的串口、TCP、UDP 调试助手，内置 MCP 服务。AI 自己烧录、看日志、调试，每个操作都由你确认。",
+ "title": "SerialBot：嵌入式硬件的验证闭环",
+ "description": "编码 Agent 靠自己验证结果赢得信任。SerialBot 把串口交给 Agent，让它自己烧录、看日志、确认结果，每个改动都由你确认。",
  "home": "zh/",
  "nav_label": "目录",
  "nav_why": "初衷",
@@ -10,14 +10,14 @@
  "other_lang_href": "../",
  "other_lang": "en",
  "other_lang_name": "English",
- "hero_title": "让 AI 自己看串口。",
- "hero_lede": "SerialBot 是一个小巧的串口、TCP、UDP 调试助手，支持 Windows、macOS 和 Linux，内置 MCP 服务。AI 可以自己烧录、看日志、调试，每一步都由你确认。",
+ "hero_title": "嵌入式硬件的验证闭环。",
+ "hero_lede": "编码 Agent 靠自己验证结果赢得信任。在板子上，验证就是看固件实际做了什么，而这些都从串口里出来。SerialBot 把串口交给 Agent：它自己烧录、看日志、确认结果，每个改动都由你确认。",
  "cta_download": "下载",
  "cta_source": "GitHub 源码",
  "uart_title": "命令 AT+GMR 加回车换行的 UART 波形，8N1",
  "uart_caption": "<code>AT+GMR\\r\\n</code> 在线上的样子：起始位、从最低位开始的 8 个数据位、停止位。SerialBot 交给 AI 的就是这些原始数据，不多也不少。",
- "loop_title": "调试闭环，不再需要你在中间传话",
- "loop_intro": "现在往往还要人来传话：烧录、盯着终端、把关键几行复制给 AI，再解释发生了什么。SerialBot 让 AI 自己走完这个循环。",
+ "loop_title": "在工作台上闭环",
+ "loop_intro": "串口在手，Agent 就能自己走完这个循环，而不是等你把日志贴回来。",
  "loop_steps": [
   "<strong>烧录。</strong>AI 把串口交给你的烧录工具，烧完再接回来，日志不断。",
   "<strong>看日志。</strong>等待期望的那一行，或者发现超时。",
@@ -70,5 +70,7 @@
  "dl_appimage_arm": "其他 Linux arm64",
  "download_note": "SerialBot 目前是 Alpha 版，安装包还没有签名，macOS 和 Windows 首次打开会有提示，发布说明里写了打开方法。",
  "footer_license": "SerialBot 以 GPL-3.0 开源。",
- "footer_issues": "反馈问题"
+ "footer_issues": "反馈问题",
+ "verify_title": "值得信任的 Agent，会自己验证",
+ "verify_body": "<p>把编码 Agent 用得最好的团队，都把验证当作工作的核心，而不是事后补充。打造 Grok Bot 的 <a href=\"https://x.com/poteto\">Lauren Tan（@poteto）</a> 分享过她的做法：让 Agent 自己运行应用、抓性能数据、像用户一样去测试，直到真的没问题为止。正是这个闭环，让 Agent 提交的代码值得信任。</p><p>固件开发一直缺这样的闭环。嵌入式代码跑得对不对，答案在板子上，而板子只通过串口说话，所以一直得有人盯着终端，再把看到的转述给 AI。SerialBot 补上的就是这一环：让 Agent 自己操作板子、自己读懂回答。</p>"
 }

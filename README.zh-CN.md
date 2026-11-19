@@ -4,7 +4,7 @@
 
 # SerialBot
 
-**轻量、跨平台的串口调试助手，内置 MCP 服务，让 AI 也能直接操作串口** 🔌🤖
+**嵌入式硬件的验证闭环：轻量、跨平台的串口调试助手，内置 MCP 服务，让 AI 在真实的板子上自己烧录、看日志、验证结果** 🔌🤖
 
 [![CI](https://github.com/jerry-token/serialbot/actions/workflows/ci.yml/badge.svg)](https://github.com/jerry-token/serialbot/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/jerry-token/serialbot?include_prereleases&label=release&color=orange)](https://github.com/jerry-token/serialbot/releases)
@@ -24,13 +24,17 @@
 
 ## 💡 为什么做 SerialBot
 
-用 AI 调固件时，中间往往还需要一个人：你来烧录、盯着串口日志、把关键几行复制给 AI，再解释发生了什么。AI 能写代码，却看不到代码在板子上跑成了什么样。
+**SerialBot 是嵌入式硬件验证闭环中的关键一环。**
 
-SerialBot 想把这个闭环交给 AI 自己完成，让它直接面对设备：
+编码 Agent 靠自己验证结果赢得信任。把 Agent 用得最好的团队，都把验证当作工作的核心：打造 Grok Bot 的 [Lauren Tan（@poteto）](https://x.com/poteto) 分享过她的做法：让 Agent 自己运行应用、抓性能数据、像用户一样去测试，直到真的没问题为止。正是这个闭环，让 Agent 的产出值得信任。
+
+固件开发一直缺这样的闭环。嵌入式代码跑得对不对，答案在板子上，而板子只通过串口说话。所以中间总得有个人：烧录、盯着日志、把关键几行复制给 AI，再解释发生了什么。AI 能写代码，却看不到代码在板子上跑成了什么样。
+
+SerialBot 补上的就是这一环，让 Agent 直接面对设备：
 
 - 🔥 **自己烧录**：把串口交给你的烧录工具，烧完再接回来，日志不断。
 - 👀 **自己看日志**：等待期望的输出，超时就知道出了问题。
-- 🐛 **自己调试**：需要时自己加打印、重新编译、烧录，再看日志，直到弄清问题。
+- 🐛 **自己验证**：需要时自己加打印、重新编译、烧录，再看日志，直到日志证明固件确实按预期工作。
 
 主动权仍在你手里：AI 对串口的每个改动都要你确认，它发出的每一行在窗口里都有标记。
 
