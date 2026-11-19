@@ -16,16 +16,15 @@ import type {
 import { errorMessage, formatBytes, saveFileName } from "./api";
 import { encodeInput, withEndings } from "./bytes";
 import { withChecksum } from "./checksum";
+import { useCommandRunner } from "./useCommandRunner";
+import { useSharedGroups } from "./useSharedGroups";
 import { makeHighlighter, parseHighlights } from "./highlight";
 import {
   type Command,
   type CommandGroup,
   browserStorage,
-  loadGroups,
-  runSequence,
-  saveGroups,
 } from "./commands";
-import { CommandPanel, type RunProgress } from "./components/CommandPanel";
+import { CommandPanel } from "./components/CommandPanel";
 import { DisplaySettings } from "./components/DisplaySettings";
 import { FileSend, type FileSendOptions } from "./components/FileSend";
 import { endpointPath, isNetworkPath } from "./endpoint";
@@ -136,12 +135,9 @@ export function App({
   useEffect(() => {
     document.documentElement.lang = uiLang === "zh" ? "zh-CN" : "en";
   }, [uiLang]);
-  const [groups, setGroups] = useState<CommandGroup[]>(() =>
-    loadGroups(storage, t.defaultGroup),
-  );
+  // The command window edits the same groups; each window follows the other.
+  const [groups, setGroups] = useSharedGroups(storage, t.defaultGroup);
   const [showCommands, setShowCommands] = useState(false);
-  const [run, setRun] = useState<RunProgress | null>(null);
-  const runStop = useRef<AbortController | null>(null);
   const [ports, setPorts] = useState<PortInfo[]>([]);
   const [settings, setSettings] = useState<PortSettings>({
     kind: "serial",
@@ -341,9 +337,6 @@ export function App({
     };
   }, [backend, applySessions, applyPorts, pull, refreshPorts, storeSignals]);
 
-  useEffect(() => {
-    saveGroups(storage, groups);
-  }, [storage, groups]);
   // Theme and font are applied to the document.
   useEffect(() => savePrefs(storage, prefs), [storage, prefs]);
   useEffect(() => {
@@ -374,7 +367,6 @@ export function App({
   const highlight = useMemo(() => makeHighlighter(parseHighlights(keywords)), [keywords]);
 
   // A run does not outlive the window.
-  useEffect(() => () => runStop.current?.abort(), []);
 
   const active = sessions.find((s) => s.id === activeId) ?? null;
   const activeOpen = active?.state === "open";
@@ -549,54 +541,17 @@ export function App({
   };
 
   // Saved commands are sent like the send box, with their own settings.
-  const commandBytes = async (c: Command): Promise<Uint8Array> => {
-    if (c.hex) {
-      try {
-        return encodeInput(c.text, true, "none");
-      } catch {
-        throw t.invalidHex;
-      }
-    }
-    if (encoding !== "utf-8") {
-      return Uint8Array.from(await backend.encodeText(withEndings(c.text, c.ending), encoding));
-    }
-    return encodeInput(c.text, false, c.ending);
-  };
-
-  const sendCommand = async (c: Command) => {
-    if (!active) return;
-    try {
-      await backend.writeData(active.id, await commandBytes(c));
-      setError(null);
-    } catch (e) {
-      setError(errorMessage(e));
-    }
-  };
-
+  const commandRunner = useCommandRunner({
+    backend,
+    encoding,
+    invalidHex: t.invalidHex,
+    onResult: setError,
+    errorMessage,
+  });
+  const sendCommand = (c: Command) => (active ? commandRunner.send(active.id, c) : undefined);
   // Runs a group on the session selected when it starts.
-  const runGroup = async (group: CommandGroup) => {
-    if (!active || runStop.current) return;
-    const id = active.id;
-    const stop = new AbortController();
-    runStop.current = stop;
-    const total = group.commands.length;
-    try {
-      await runSequence(
-        group.commands,
-        async (c) => {
-          await backend.writeData(id, await commandBytes(c));
-        },
-        stop.signal,
-        (i) => setRun({ groupId: group.id, index: i + 1, total }),
-      );
-      setError(null);
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      runStop.current = null;
-      setRun(null);
-    }
-  };
+  const runGroup = (group: CommandGroup) =>
+    active ? commandRunner.runGroup(active.id, group) : undefined;
 
   const stopRepeat = async () => {
     if (!active) return;
@@ -1051,9 +1006,14 @@ export function App({
                   onChange={setGroups}
                   enabled={activeOpen}
                   onSend={(c) => void sendCommand(c)}
-                  run={run}
+                  run={commandRunner.run}
                   onRun={(g) => void runGroup(g)}
-                  onStop={() => runStop.current?.abort()}
+                  onStop={commandRunner.stop}
+                  onPopOut={() =>
+                    backend
+                      .openCommandWindow(t.commandWindowTitle)
+                      .catch((e: unknown) => setError(errorMessage(e)))
+                  }
                   defaultEnding={send.ending}
                 />
               )}

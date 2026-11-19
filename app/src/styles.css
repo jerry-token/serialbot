@@ -1156,3 +1156,34 @@ mark.kw {
   font-size: 12px;
   color: var(--text);
 }
+
+/* The command list in its own window */
+.command-window {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--panel);
+}
+
+.command-window .send-to {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 0;
+}
+
+.command-window .send-to select {
+  flex: 1;
+  min-width: 0;
+}
+
+.command-window > .muted,
+.command-window > .error {
+  margin: 8px 12px 0;
+}
+
+.command-window .command-panel {
+  flex: 1;
+  width: auto;
+  border-left: none;
+}
