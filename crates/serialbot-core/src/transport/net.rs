@@ -5,9 +5,11 @@
 //! MCP) treats it like any other port:
 //!
 //! - `tcp://host:port`: connect to a TCP server. Reconnecting dials again.
-//! - `tcp-server://addr:port`: listen and serve one client at a time; the
-//!   next client is accepted when the current one leaves. `tcp-server://:9000`
-//!   listens on all interfaces. Writes fail while no client is connected.
+//! - `tcp-server://addr:port`: listen and serve up to [`MAX_SERVER_CLIENTS`]
+//!   clients at once. Received data from all of them goes into one stream
+//!   (a `data from <peer>` event marks a change of sender); writes go to
+//!   every client and fail only while none is connected.
+//!   `tcp-server://:9000` listens on all interfaces.
 //! - `udp://host:port?local=addr:port`: send datagrams to `host:port` and
 //!   receive on `local` (default: any free port on all interfaces). Without
 //!   a remote (`udp://?local=0.0.0.0:9000`) replies go to the last sender.
@@ -236,7 +238,7 @@ impl TransportReader for StreamReader {
     }
 }
 
-/// Write half of a TCP link; `None` while a server has no client.
+/// Write half of a TCP client link.
 struct StreamControl {
     stream: Arc<Mutex<Option<TcpStream>>>,
 }
@@ -286,6 +288,12 @@ impl TransportControl for StreamControl {
 
 // ---- TCP server --------------------------------------------------------
 
+/// Most clients a TCP server session serves at once; later ones are refused.
+pub const MAX_SERVER_CLIENTS: usize = 16;
+
+/// How long a server read waits when no client sent anything.
+const SERVER_POLL: Duration = Duration::from_millis(5);
+
 fn open_tcp_server(
     path: &str,
     local: &str,
@@ -294,85 +302,211 @@ fn open_tcp_server(
     let addr = resolve(local)?[0];
     let listener = TcpListener::bind(addr).map_err(|e| bind_error(local, &e))?;
     listener.set_nonblocking(true)?;
-    let client = Arc::new(Mutex::new(None));
+    let writers = Arc::new(Mutex::new(Vec::new()));
     Ok(Connection {
         info: info(TransportKind::TcpServer, path),
         reader: Box::new(ServerReader {
             listener,
-            stream: None,
-            client: Arc::clone(&client),
+            clients: Vec::new(),
+            writers: Arc::clone(&writers),
             read_timeout,
+            last_sender: None,
             events: Vec::new(),
         }),
-        control: Box::new(StreamControl { stream: client }),
+        control: Box::new(ServerControl { writers }),
     })
 }
 
-/// Waits for a client, then reads from it until it leaves.
+/// A connected client: its address and the read half.
+struct Client {
+    peer: SocketAddr,
+    stream: TcpStream,
+}
+
+/// Accepts clients and reads from all of them.
+///
+/// Connects, leaves and refusals are reported as events; when data comes
+/// from a different client than the data before it, a `data from <peer>`
+/// event says who is talking.
 struct ServerReader {
     listener: TcpListener,
-    /// Read half and address of the connected client.
-    stream: Option<(TcpStream, SocketAddr)>,
-    /// Write half shared with the control.
-    client: Arc<Mutex<Option<TcpStream>>>,
+    clients: Vec<Client>,
+    /// Write halves, shared with the control (which broadcasts).
+    writers: Arc<Mutex<Vec<(SocketAddr, TcpStream)>>>,
     read_timeout: Duration,
+    last_sender: Option<SocketAddr>,
     events: Vec<String>,
 }
 
 impl ServerReader {
-    fn accept(&mut self) -> Result<(), TransportError> {
-        match self.listener.accept() {
-            Ok((stream, peer)) => {
-                stream.set_nonblocking(false)?;
-                stream.set_read_timeout(Some(self.read_timeout))?;
-                stream.set_nodelay(true)?;
-                *lock(&self.client) = Some(stream.try_clone()?);
-                self.stream = Some((stream, peer));
-                self.events.push(format!("client {peer} connected"));
-                Ok(())
+    /// Takes every pending connection.
+    fn accept_all(&mut self) -> Result<(), TransportError> {
+        loop {
+            match self.listener.accept() {
+                Ok((stream, peer)) => {
+                    if self.clients.len() >= MAX_SERVER_CLIENTS {
+                        let _ = stream.shutdown(Shutdown::Both);
+                        self.events.push(format!(
+                            "client {peer} refused (limit of {MAX_SERVER_CLIENTS} clients)"
+                        ));
+                        continue;
+                    }
+                    // Non-blocking for both halves: the flag is shared by
+                    // clones of a socket.
+                    stream.set_nonblocking(true)?;
+                    stream.set_nodelay(true)?;
+                    lock(&self.writers).push((peer, stream.try_clone()?));
+                    self.clients.push(Client { peer, stream });
+                    self.events.push(format!("client {peer} connected"));
+                }
+                Err(e) if is_idle(e.kind()) => return Ok(()),
+                Err(e) => return Err(e.into()),
             }
-            Err(e) if is_idle(e.kind()) => {
-                // Nothing pending: wait like a read timeout would.
-                std::thread::sleep(self.read_timeout.min(Duration::from_millis(50)));
-                Ok(())
-            }
-            Err(e) => Err(e.into()),
         }
     }
 
-    fn drop_client(&mut self) {
-        if let Some((stream, peer)) = self.stream.take() {
-            // The other half may still be held by a writer.
-            let _ = stream.shutdown(Shutdown::Both);
-            *lock(&self.client) = None;
-            self.events.push(format!("client {peer} disconnected"));
+    /// Forgets a client that left, and its write half.
+    fn drop_client(&mut self, index: usize) {
+        let client = self.clients.remove(index);
+        let _ = client.stream.shutdown(Shutdown::Both);
+        lock(&self.writers).retain(|(peer, _)| *peer != client.peer);
+        if self.last_sender == Some(client.peer) {
+            self.last_sender = None;
+        }
+        self.events
+            .push(format!("client {} disconnected", client.peer));
+    }
+
+    /// Reads what one client has; `None` when it has nothing now.
+    fn read_from(&mut self, index: usize, buf: &mut [u8]) -> Result<Option<usize>, TransportError> {
+        let Some(client) = self.clients.get_mut(index) else {
+            return Ok(None);
+        };
+        match client.stream.read(buf) {
+            Ok(0) => {
+                self.drop_client(index);
+                Ok(None)
+            }
+            Ok(n) => {
+                let peer = client.peer;
+                if self.last_sender != Some(peer) && self.clients.len() > 1 {
+                    self.events.push(format!("data from {peer}"));
+                }
+                self.last_sender = Some(peer);
+                Ok(Some(n))
+            }
+            Err(e) if is_idle(e.kind()) => Ok(None),
+            Err(e) if is_gone(e.kind()) => {
+                self.drop_client(index);
+                Ok(None)
+            }
+            Err(e) => Err(e.into()),
         }
     }
 }
 
 impl TransportReader for ServerReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, TransportError> {
-        let Some((stream, _)) = self.stream.as_mut() else {
-            self.accept()?;
-            return Ok(0);
-        };
-        match stream.read(buf) {
-            Ok(0) => {
-                self.drop_client();
-                Ok(0)
+        self.accept_all()?;
+        // Clients are polled in turn; the last sender first, so a burst
+        // from one client is not interleaved with others more than needed.
+        let start = self
+            .last_sender
+            .and_then(|p| self.clients.iter().position(|c| c.peer == p))
+            .unwrap_or(0);
+        let count = self.clients.len();
+        for k in 0..count {
+            let index = (start + k) % count;
+            if index >= self.clients.len() {
+                break; // A client left during this pass.
             }
-            Ok(n) => Ok(n),
-            Err(e) if is_idle(e.kind()) => Ok(0),
-            Err(e) if is_gone(e.kind()) => {
-                self.drop_client();
-                Ok(0)
+            if let Some(n) = self.read_from(index, buf)? {
+                return Ok(n);
             }
-            Err(e) => Err(e.into()),
         }
+        // Nothing from anyone: wait a little, like a read timeout would.
+        std::thread::sleep(self.read_timeout.min(SERVER_POLL));
+        Ok(0)
     }
 
     fn take_event(&mut self) -> Option<String> {
         (!self.events.is_empty()).then(|| self.events.remove(0))
+    }
+}
+
+/// Longest wait for a client that does not take data (full send buffer).
+const SERVER_WRITE_PATIENCE: Duration = Duration::from_secs(2);
+
+/// Writes all of `data` to a non-blocking stream, waiting briefly while its
+/// send buffer is full; false if it fails or stays full for
+/// [`SERVER_WRITE_PATIENCE`].
+fn write_patiently(stream: &mut TcpStream, mut data: &[u8]) -> bool {
+    let deadline = std::time::Instant::now() + SERVER_WRITE_PATIENCE;
+    while !data.is_empty() {
+        match stream.write(data) {
+            Ok(0) => return false,
+            Ok(n) => data = &data[n..],
+            Err(e) if is_idle(e.kind()) && std::time::Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            Err(e) if e.kind() == ErrorKind::Interrupted => {}
+            Err(_) => return false,
+        }
+    }
+    true
+}
+
+/// Sends to every connected client.
+struct ServerControl {
+    writers: Arc<Mutex<Vec<(SocketAddr, TcpStream)>>>,
+}
+
+impl TransportControl for ServerControl {
+    /// Writes `data` to every client. Fails only when no client is
+    /// connected; a client whose write fails is skipped (its reader notices
+    /// it is gone and reports the disconnect).
+    fn write_all(&mut self, data: &[u8]) -> Result<(), TransportError> {
+        let mut writers = lock(&self.writers);
+        if writers.is_empty() {
+            return Err(TransportError::Io(std::io::Error::new(
+                ErrorKind::NotConnected,
+                "no client is connected",
+            )));
+        }
+        let mut delivered = 0;
+        writers.retain_mut(|(_, stream)| {
+            let ok = write_patiently(stream, data);
+            delivered += usize::from(ok);
+            ok
+        });
+        if delivered == 0 {
+            return Err(TransportError::Disconnected);
+        }
+        Ok(())
+    }
+
+    fn set_dtr(&mut self, _: bool) -> Result<(), TransportError> {
+        Err(TransportError::Unsupported("DTR on a network connection"))
+    }
+
+    fn set_rts(&mut self, _: bool) -> Result<(), TransportError> {
+        Err(TransportError::Unsupported("RTS on a network connection"))
+    }
+
+    fn line_states(&mut self) -> Result<LineStates, TransportError> {
+        Err(TransportError::Unsupported(
+            "modem lines on a network connection",
+        ))
+    }
+
+    fn send_break(&mut self, _: Duration) -> Result<(), TransportError> {
+        Err(TransportError::Unsupported("BREAK on a network connection"))
+    }
+
+    fn set_baud_rate(&mut self, _: u32) -> Result<(), TransportError> {
+        Err(TransportError::Unsupported(
+            "baud rate on a network connection",
+        ))
     }
 }
 
@@ -636,7 +770,7 @@ mod tests {
     }
 
     #[test]
-    fn tcp_server_serves_one_client_after_another() {
+    fn tcp_server_serves_many_clients_at_once() {
         let port = free_port();
         let mut s = open(&format!("tcp-server://127.0.0.1:{port}"), T).unwrap();
         assert_eq!(s.info.kind, TransportKind::TcpServer);
@@ -650,34 +784,84 @@ mod tests {
                 .contains("no client")
         );
 
-        let mut first = TcpStream::connect(("127.0.0.1", port)).unwrap();
-        first.write_all(b"hello").unwrap();
+        // One client alone: no "data from" markers.
+        let mut a = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        a.write_all(b"hello").unwrap();
         assert_eq!(read_n(s.reader.as_mut(), 5), b"hello");
         let ev = events(s.reader.as_mut());
         assert_eq!(ev.len(), 1);
         assert!(ev[0].starts_with("client 127.0.0.1:") && ev[0].ends_with(" connected"));
+
+        // A second client joins while the first stays.
+        let mut b = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        b.write_all(b"from-b").unwrap();
+        assert_eq!(read_n(s.reader.as_mut(), 6), b"from-b");
+        let b_addr = b.local_addr().unwrap();
+        let ev = events(s.reader.as_mut());
+        assert!(ev[0].ends_with(" connected"), "{ev:?}");
+        assert_eq!(ev[1], format!("data from {b_addr}"));
+        a.write_all(b"from-a").unwrap();
+        assert_eq!(read_n(s.reader.as_mut(), 6), b"from-a");
+        assert_eq!(
+            events(s.reader.as_mut()),
+            [format!("data from {}", a.local_addr().unwrap())]
+        );
+
+        // Sending goes to both.
         s.control.write_all(b"hi").unwrap();
         let mut got = [0u8; 2];
-        first.read_exact(&mut got).unwrap();
+        a.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        b.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        a.read_exact(&mut got).unwrap();
+        assert_eq!(&got, b"hi");
+        b.read_exact(&mut got).unwrap();
         assert_eq!(&got, b"hi");
 
-        drop(first);
+        // One leaves; the other is still served.
+        drop(a);
         let deadline = Instant::now() + Duration::from_secs(5);
-        while s.control.write_all(b"?").is_ok() {
-            assert!(Instant::now() < deadline);
+        let mut left = Vec::new();
+        while left.is_empty() {
+            assert!(Instant::now() < deadline, "the leave was not noticed");
             s.reader.read(&mut buf).unwrap();
+            left = events(s.reader.as_mut());
         }
-        assert!(events(s.reader.as_mut())[0].ends_with(" disconnected"));
-
-        let mut second = TcpStream::connect(("127.0.0.1", port)).unwrap();
-        second.write_all(b"again").unwrap();
-        assert_eq!(read_n(s.reader.as_mut(), 5), b"again");
+        assert!(left[0].ends_with(" disconnected"), "{left:?}");
+        s.control.write_all(b"ok").unwrap();
+        b.read_exact(&mut got).unwrap();
+        assert_eq!(&got, b"ok");
 
         // The port is taken while the session listens.
         assert!(matches!(
             open(&format!("tcp-server://127.0.0.1:{port}"), T),
             Err(TransportError::Busy(_))
         ));
+    }
+
+    #[test]
+    fn tcp_server_refuses_clients_beyond_the_limit() {
+        let port = free_port();
+        let mut s = open(&format!("tcp-server://127.0.0.1:{port}"), T).unwrap();
+        let clients: Vec<TcpStream> = (0..=MAX_SERVER_CLIENTS)
+            .map(|_| TcpStream::connect(("127.0.0.1", port)).unwrap())
+            .collect();
+        let mut buf = [0u8; 4];
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut seen = Vec::new();
+        while seen.len() <= MAX_SERVER_CLIENTS {
+            assert!(Instant::now() < deadline, "only {} events", seen.len());
+            s.reader.read(&mut buf).unwrap();
+            seen.extend(events(s.reader.as_mut()));
+        }
+        assert_eq!(
+            seen.iter().filter(|e| e.ends_with(" connected")).count(),
+            MAX_SERVER_CLIENTS
+        );
+        assert!(seen.iter().any(|e| e.contains("refused")), "{seen:?}");
+        // The refused client is closed: it reads end of stream.
+        let mut last = clients.last().unwrap();
+        last.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        assert_eq!(last.read(&mut buf).unwrap_or(0), 0);
     }
 
     #[test]

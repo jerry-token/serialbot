@@ -115,7 +115,7 @@ pub(crate) enum FlowControlArg {
 pub(crate) struct OpenArgs {
     /// OS name of the port as listed by port.list, e.g. "COM3" or
     /// "/dev/ttyUSB0"; or a network endpoint: "tcp://host:port",
-    /// "tcp-server://addr:port" (one client at a time) or
+    /// "tcp-server://addr:port" (up to 16 clients; writes go to all) or
     /// "udp://host:port?local=addr:port". Line settings are ignored for
     /// network endpoints.
     pub port: String,
