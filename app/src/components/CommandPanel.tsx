@@ -23,6 +23,8 @@ interface Props {
   onStop: () => void;
   /** Line ending given to new commands. */
   defaultEnding: LineEnding;
+  /** Opens the list in its own window; no button without it. */
+  onPopOut?: () => void;
 }
 
 /**
@@ -40,6 +42,7 @@ export function CommandPanel({
   onRun,
   onStop,
   defaultEnding,
+  onPopOut,
 }: Props) {
   const [groupId, setGroupId] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -139,6 +142,17 @@ export function CommandPanel({
         ) : (
           <button type="button" className="chip" title={t.newGroup} onClick={addGroup}>
             +
+          </button>
+        )}
+        {onPopOut && (
+          <button
+            type="button"
+            className="chip"
+            aria-label={t.popOutCommands}
+            title={t.popOutCommands}
+            onClick={onPopOut}
+          >
+            ⧉
           </button>
         )}
       </div>

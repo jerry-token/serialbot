@@ -3,7 +3,11 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+
+/** Label of the separate command-list window (see capabilities/default.json). */
+export const COMMAND_WINDOW = "commands";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import type { SignalStep } from "./signals";
 
@@ -184,6 +188,8 @@ export interface Backend {
   signals(id: number): Promise<SignalsInfo>;
   /** Drives DTR and/or RTS; an omitted line is left unchanged. */
   setSignals(id: number, levels: { dtr?: boolean; rts?: boolean }): Promise<SignalsInfo>;
+  /** Opens the command list in its own window, or brings it to the front. */
+  openCommandWindow(title: string): Promise<void>;
   /** Keeps the window above other windows, or stops doing so. */
   setAlwaysOnTop(on: boolean): Promise<void>;
   /** Runs a DTR/RTS sequence with pauses timed by the backend. */
@@ -249,6 +255,23 @@ export const tauriBackend: Backend = {
   onSignalsChanged: (handler) =>
     listen<SignalsInfo>("signals-changed", (event) => handler(event.payload)),
   setAlwaysOnTop: (on) => getCurrentWindow().setAlwaysOnTop(on),
+  openCommandWindow: async (title) => {
+    const open = await WebviewWindow.getByLabel(COMMAND_WINDOW);
+    if (open) return open.setFocus();
+    const window = new WebviewWindow(COMMAND_WINDOW, {
+      url: "index.html#commands",
+      title,
+      width: 380,
+      height: 600,
+      minWidth: 300,
+      minHeight: 300,
+    });
+    // Creation errors arrive as an event, not as a rejection.
+    await new Promise<void>((resolve, reject) => {
+      void window.once("tauri://created", () => resolve());
+      void window.once("tauri://error", (e) => reject(String(e.payload)));
+    });
+  },
   runSignals: (id, steps) => invoke("run_signals", { id, steps }),
   sendBreak: (id, ms) => invoke("send_break", { id, ms }),
   mcpStatus: () => invoke("mcp_status"),

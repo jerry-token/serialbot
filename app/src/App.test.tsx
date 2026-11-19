@@ -5,6 +5,8 @@ import type { SignalStep } from "./signals";
 import { type Screen, type ScreenOptions, themeFromCss } from "./screen";
 import type { Chart, ChartFactory } from "./chart";
 import { App } from "./App";
+import { CommandWindow } from "./CommandWindow";
+import { loadGroups, newCommand, newGroup, saveGroups } from "./commands";
 import type {
   ApprovalRequest,
   Decision,
@@ -313,6 +315,14 @@ class FakeBackend implements Backend {
   breaks: Array<[number, number]> = [];
 
   onTop: boolean[] = [];
+  commandWindows: string[] = [];
+  failCommandWindow = false;
+
+  async openCommandWindow(title: string) {
+    if (this.failCommandWindow) throw "window could not be created";
+    this.commandWindows.push(title);
+  }
+
 
   async setAlwaysOnTop(on: boolean) {
     this.onTop.push(on);
@@ -768,6 +778,40 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Commands" }));
     expect(panel().getByRole("button", { name: "Send version" })).toBeDisabled();
     expect(panel().getByRole("button", { name: "Send raw" })).toHaveTextContent("rawhex 01 02");
+  });
+
+  it("opens the command list in its own window", async () => {
+    const { backend, user } = setup();
+    await user.click(screen.getByRole("button", { name: "Commands" }));
+    const popOut = () =>
+      panel().getByRole("button", { name: "Open the command list in its own window" });
+    await user.click(popOut());
+    expect(backend.commandWindows).toEqual(["SerialBot · Commands"]);
+    backend.failCommandWindow = true;
+    await user.click(popOut());
+    await waitFor(() => expect(status()).toHaveTextContent("window could not be created"));
+  });
+
+  it("follows command edits made in the command window", async () => {
+    const { user, storage } = setup();
+    await user.click(screen.getByRole("button", { name: "Commands" }));
+    expect(panel().getByText("No commands yet")).toBeInTheDocument();
+    const group = { ...newGroup("Board"), commands: [newCommand("reset", "crlf")] };
+    saveGroups(storage, [group]);
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", { key: "serialbot.commands.v1" }));
+    });
+    expect(await panel().findByRole("button", { name: /^Send reset/ })).toBeInTheDocument();
+    // What came from storage is not written back: that would race with the
+    // other window's next edit and undo it.
+    const written = vi.spyOn(storage, "setItem");
+    saveGroups(storage, [{ ...group, name: "Board 2" }]);
+    written.mockClear();
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", { key: "serialbot.commands.v1" }));
+    });
+    await waitFor(() => expect(panel().getByRole("combobox", { name: "Group" })).toHaveTextContent("Board 2"));
+    expect(written.mock.calls.filter(([key]) => key === "serialbot.commands.v1")).toEqual([]);
   });
 
   it("stops a run and reports a failed send", async () => {
@@ -1673,6 +1717,68 @@ class FakeChart implements Chart {
     this.disposed = true;
   }
 }
+
+describe("Command window", () => {
+  function setupWindow(backend = new FakeBackend(), storage: Storage = memoryStorage()) {
+    const user = userEvent.setup();
+    render(<CommandWindow backend={backend} lang="en" storage={storage} />);
+    return { backend, user, storage };
+  }
+  const list = () => within(screen.getByRole("complementary", { name: "Commands" }));
+
+  it("sends saved commands to the open session it picks", async () => {
+    const backend = new FakeBackend();
+    const storage = memoryStorage();
+    const ping = { ...newCommand("ping", "crlf"), text: "AT" };
+    saveGroups(storage, [{ ...newGroup("Board"), commands: [ping] }]);
+    backend.addSession("COM3", "esp32");
+    backend.addSession("COM4", null);
+    const { user } = setupWindow(backend, storage);
+    const picker = await screen.findByRole("combobox", { name: "Send to" });
+    await waitFor(() => expect(picker).toHaveTextContent("esp32 (COM3)"));
+    expect(picker).toHaveValue("1");
+
+    await user.selectOptions(picker, "2");
+    await user.click(list().getByRole("button", { name: /^Send ping/ }));
+    await waitFor(() => expect(backend.written).toEqual([[2, [65, 84, 13, 10]]]));
+    await user.click(list().getByRole("button", { name: "▶ Run all" }));
+    await waitFor(() => expect(backend.written).toHaveLength(2));
+
+    // Its edits are saved for the main window.
+    await user.click(list().getByRole("button", { name: "+ Add" }));
+    expect(loadGroups(storage, "x")[0]?.commands).toHaveLength(2);
+
+    // A session that closes leaves the list; the pick moves on.
+    act(() => backend.setState(2, "disconnected"));
+    await waitFor(() => expect(picker).toHaveValue("1"));
+  });
+
+  it("waits for an open session and reports send failures", async () => {
+    const backend = new FakeBackend();
+    const storage = memoryStorage();
+    saveGroups(storage, [{ ...newGroup("Board"), commands: [newCommand("go", "crlf")] }]);
+    const { user } = setupWindow(backend, storage);
+    expect(await screen.findByText("Open a port in SerialBot first.")).toBeInTheDocument();
+    expect(list().getByRole("button", { name: /^Send go/ })).toBeDisabled();
+
+    act(() => {
+      backend.addSession("COM5", null);
+    });
+    await waitFor(() => expect(list().getByRole("button", { name: /^Send go/ })).toBeEnabled());
+    backend.failWrite = true;
+    await user.click(list().getByRole("button", { name: /^Send go/ }));
+    expect(await screen.findByRole("status")).toHaveTextContent("session is Disconnected");
+
+    // Edits and language changes from the main window arrive through storage.
+    saveGroups(storage, [{ ...newGroup("Other"), commands: [newCommand("other", "lf")] }]);
+    storage.setItem("serialbot.preferences", JSON.stringify({ language: "zh" }));
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", { key: "serialbot.commands.v1" }));
+      window.dispatchEvent(new StorageEvent("storage", { key: "serialbot.preferences" }));
+    });
+    expect(await screen.findByRole("combobox", { name: "发送到" })).toBeInTheDocument();
+  });
+});
 
 describe("Plot view", () => {
   function setupPlot(createChart: ChartFactory = () => new FakeChart()) {

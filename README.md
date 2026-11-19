@@ -65,7 +65,7 @@ You stay in charge. Every change to a port needs your approval, and every line t
 **Send**
 - ✍️ Multi-line text or HEX with a choice of line ending. `Enter` sends, `Shift+Enter` adds a line, `↑` recalls history. Data goes out as raw bytes, exactly as typed: only the line ending you pick is added.
 - 🧮 Checksums appended to HEX data: CRC-8, CRC-16 (Modbus, CCITT), CRC-32, XOR, SUM8, LRC.
-- ⏲️ Timed send, 📋 saved command lists (click to send, or run a group in order), and 📄 file send in chunks.
+- ⏲️ Timed send, 📋 saved command lists (click to send, or run a group in order; ⧉ opens them in their own window with its own target port), and 📄 file send in chunks.
 
 **AI agents, under your control**
 - 🤖 A built-in MCP server lets Claude Code, Claude Desktop and other agents list and open ports, send data, wait for replies and drive DTR / RTS, on the same sessions you see in the window.
@@ -185,7 +185,7 @@ On Windows the command is the path of `serialbot.exe` (installed or portable); o
 - [x] Built-in MCP server (HTTP and stdio), approvals, per-session AI access
 - [x] Installers for Windows, macOS and Linux (x64 / arm64), published automatically
 - [x] TCP server with several clients
-- [ ] Command list in its own window
+- [x] Command list in its own window
 - [x] Terminal mode (VT100, interactive shells)
 - [x] Waveform plots of received numbers
 - [ ] Built-in AI assistant "Bo"

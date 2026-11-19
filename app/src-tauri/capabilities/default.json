@@ -1,13 +1,16 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissions of the main window.",
+  "description": "Permissions of the main window and the command-list window.",
   "windows": [
-    "main"
+    "main",
+    "commands"
   ],
   "permissions": [
     "core:default",
     "core:window:allow-set-always-on-top",
+    "core:webview:allow-create-webview-window",
+    "core:window:allow-set-focus",
     "dialog:allow-open",
     "dialog:allow-save"
   ]
