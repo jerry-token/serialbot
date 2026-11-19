@@ -11,7 +11,7 @@
 ![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%28x64%2C%20arm64%29-blue)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green)](LICENSE)
 
-English · [简体中文](README.zh-CN.md)
+English · [简体中文](README.zh-CN.md) · 🌐 [serialbot.aiany.cc](https://serialbot.aiany.cc)
 
 <img src="docs/images/demo.gif" width="800" alt="An AI agent asks to open a port and send commands; the user approves and the commands appear in the log tagged AI">
 
@@ -210,6 +210,8 @@ Found a bug or have an idea? Open an [issue](https://github.com/jerry-token/seri
 - 📷 a screenshot
 - 💻 your OS
 - 🔌 your USB-serial chip (CH340 / CP2102 / FT232 / CH9344 …)
+
+For anything else, write to [support@aiany.cc](mailto:support@aiany.cc).
 
 ## 📄 License
 

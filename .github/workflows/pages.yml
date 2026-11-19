@@ -1,0 +1,52 @@
+name: Pages
+
+# The website at https://serialbot.aiany.cc, built from site/ (see
+# site/build.py). Pull requests that touch it are built and tested; main
+# deploys.
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", "docs/images/**", ".github/workflows/pages.yml"]
+  pull_request:
+    paths: ["site/**", "docs/images/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Test
+        run: |
+          python3 -m unittest discover -s site -v
+          node --test site/download.test.mjs
+      - name: Build
+        run: python3 site/build.py _site
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

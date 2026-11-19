@@ -11,7 +11,7 @@
 ![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%28x64%2C%20arm64%29-blue)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green)](LICENSE)
 
-[English](README.md) · 简体中文
+[English](README.md) · 简体中文 · 🌐 [serialbot.aiany.cc](https://serialbot.aiany.cc/zh/)
 
 <img src="docs/images/demo.gif" width="800" alt="AI 请求打开串口并发送命令，用户确认后命令出现在日志里并带 AI 标记">
 
@@ -210,6 +210,8 @@ cargo run -p serialbot-mcp                  # 不带界面，单独运行 MCP �
 - 📷 截图
 - 💻 操作系统
 - 🔌 串口芯片型号（CH340 / CP2102 / FT232 / CH9344 …）
+
+其他事情可以发邮件到 [support@aiany.cc](mailto:support@aiany.cc)。
 
 ## 📄 许可证
 

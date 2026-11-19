@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="{{html_lang}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{title}}</title>
+<meta name="description" content="{{description}}">
+<link rel="icon" href="{{root}}images/icon.png">
+<link rel="alternate" hreflang="en" href="https://serialbot.aiany.cc/">
+<link rel="alternate" hreflang="zh" href="https://serialbot.aiany.cc/zh/">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,400..800&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="{{root}}style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="{{root}}{{home}}"><img src="{{root}}images/icon.png" alt="" width="28" height="28">SerialBot</a>
+  <nav aria-label="{{nav_label}}">
+    <a href="#loop">{{nav_why}}</a>
+    <a href="#features">{{nav_features}}</a>
+    <a href="#download">{{nav_download}}</a>
+    <a href="{{other_lang_href}}" hreflang="{{other_lang}}" lang="{{other_lang}}">{{other_lang_name}}</a>
+    <a href="https://github.com/jerry-token/serialbot">GitHub</a>
+  </nav>
+</header>
+
+<main>
+<section class="hero">
+  <h1>{{hero_title}}</h1>
+  <p class="lede">{{hero_lede}}</p>
+  <p class="actions">
+    <a class="button primary" href="#download">{{cta_download}}</a>
+    <a class="button" href="https://github.com/jerry-token/serialbot">{{cta_source}}</a>
+  </p>
+  <figure class="scope">
+    {{uart}}
+    <figcaption>{{uart_caption}}</figcaption>
+  </figure>
+</section>
+
+<section id="loop" class="loop">
+  <h2>{{loop_title}}</h2>
+  <p class="intro">{{loop_intro}}</p>
+  <ol class="cycle">{{loop_steps}}</ol>
+  <p class="note">{{loop_note}}</p>
+</section>
+
+<section class="boundary">
+  <h2>{{boundary_title}}</h2>
+  <div class="split">
+    <div>
+      <h3>{{boundary_tool}}</h3>
+      <ul>{{boundary_tool_items}}</ul>
+    </div>
+    <div class="yours">
+      <h3>{{boundary_skills}}</h3>
+      <ul>{{boundary_skills_items}}</ul>
+    </div>
+  </div>
+</section>
+
+<section class="demo">
+  <figure>
+    <img src="{{root}}images/demo.gif" width="800" height="560" alt="{{demo_alt}}" loading="lazy">
+    <figcaption>{{demo_caption}}</figcaption>
+  </figure>
+</section>
+
+<section id="features" class="features">
+  <h2>{{features_title}}</h2>
+  <dl>{{features}}</dl>
+</section>
+
+<section class="mcp">
+  <h2>{{mcp_title}}</h2>
+  <p>{{mcp_intro}}</p>
+  <pre><code>claude mcp add --transport http serialbot http://127.0.0.1:9633/mcp \
+  --header "Authorization: Bearer &lt;token&gt;"</code></pre>
+  <p>{{mcp_then}}</p>
+</section>
+
+<section id="download" class="download">
+  <h2>{{download_title}}</h2>
+  <p class="release" data-release-label="{{download_release}}">{{download_loading}}</p>
+  <table>
+    <thead><tr><th>{{download_system}}</th><th>{{download_file}}</th><th>{{download_size}}</th></tr></thead>
+    <tbody>
+      <tr data-asset="_x64-setup.exe"><td>{{dl_win_installer}}</td><td><a href="https://github.com/jerry-token/serialbot/releases">SerialBot_x64-setup.exe</a></td><td class="size"></td></tr>
+      <tr data-asset="_windows_x64.exe"><td>{{dl_win_portable}}</td><td><a href="https://github.com/jerry-token/serialbot/releases">serialbot_windows_x64.exe</a></td><td class="size"></td></tr>
+      <tr data-asset="_universal.dmg"><td>{{dl_mac}}</td><td><a href="https://github.com/jerry-token/serialbot/releases">SerialBot_universal.dmg</a></td><td class="size"></td></tr>
+      <tr data-asset="_amd64.deb"><td>{{dl_deb}}</td><td><a href="https://github.com/jerry-token/serialbot/releases">SerialBot_amd64.deb</a></td><td class="size"></td></tr>
+      <tr data-asset="_amd64.AppImage"><td>{{dl_appimage}}</td><td><a href="https://github.com/jerry-token/serialbot/releases">SerialBot_amd64.AppImage</a></td><td class="size"></td></tr>
+      <tr data-asset="_arm64.deb"><td>{{dl_deb_arm}}</td><td><a href="https://github.com/jerry-token/serialbot/releases">SerialBot_arm64.deb</a></td><td class="size"></td></tr>
+      <tr data-asset="_aarch64.AppImage"><td>{{dl_appimage_arm}}</td><td><a href="https://github.com/jerry-token/serialbot/releases">SerialBot_aarch64.AppImage</a></td><td class="size"></td></tr>
+    </tbody>
+  </table>
+  <p class="small">{{download_note}}</p>
+</section>
+</main>
+
+<footer>
+  <p>{{footer_license}}</p>
+  <p><a href="mailto:support@aiany.cc">support@aiany.cc</a> <a href="https://github.com/jerry-token/serialbot/issues">{{footer_issues}}</a></p>
+</footer>
+<script src="{{root}}download.js" type="module"></script>
+</body>
+</html>
