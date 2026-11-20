@@ -160,6 +160,7 @@ const en = {
   navTerminal: "Terminal",
   navAi: "AI",
   navSettings: "Settings",
+  allSessions: (n: number) => `All ${n} open ports`,
   navHelp: "Help",
   help: {
     title: "About SerialBot",
@@ -427,6 +428,7 @@ const zh: Strings = {
   navTerminal: "终端",
   navAi: "AI",
   navSettings: "设置",
+  allSessions: (n: number) => `全部 ${n} 个已打开的端口`,
   navHelp: "帮助",
   help: {
     title: "关于 SerialBot",

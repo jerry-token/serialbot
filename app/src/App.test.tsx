@@ -675,12 +675,27 @@ describe("App", () => {
       const s = backend.addSession("COM4", "esp32");
       backend.receive(s.id, "from agent\n");
     });
-    await waitFor(() => expect(tabs()).toEqual(["COM3", "COM4 (esp32)"]));
+    // Tabs show the alias; the full name is the tooltip.
+    await waitFor(() => expect(tabs()).toEqual(["COM3", "esp32"]));
+    expect(screen.getByRole("tab", { name: "esp32" })).toHaveAttribute("title", "COM4 (esp32)");
     // The UI stays on its tab; the other session is read in the background.
     expect(log()).not.toHaveTextContent("from agent");
-    await user.click(screen.getByRole("tab", { name: /COM4/ }));
+    await user.click(screen.getByRole("tab", { name: "esp32" }));
     await waitFor(() => expect(log()).toHaveTextContent("from agent"));
     expect(log()).not.toHaveTextContent("from ui");
+
+    // ▾ lists every session by its full name and switches to the one picked.
+    await user.click(screen.getByRole("button", { name: "All 2 open ports" }));
+    const list = within(screen.getByRole("dialog", { name: "All 2 open ports" }));
+    expect(list.getByRole("button", { name: "COM4 (esp32)" })).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
+    await user.click(list.getByRole("button", { name: "COM3" }));
+    await waitFor(() => expect(log()).toHaveTextContent("from ui"));
+    expect(screen.queryByRole("dialog", { name: "All 2 open ports" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "esp32" }));
+    await waitFor(() => expect(log()).toHaveTextContent("from agent"));
     expect(status()).toHaveTextContent("COM4 · Open");
 
     // Selecting the port of a session turns Open into Close.
