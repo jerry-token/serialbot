@@ -30,26 +30,24 @@ Windows 可能提示「未知发布者」，点「更多信息」→「仍要运
 
 ### New in this release / 本版新增
 
-- **Terminal mode / 终端模式** (TTY): a full terminal (VT100, colors, full-screen programs) for shells on Linux boards and MCU consoles; keys go straight to the device.
-  完整终端（VT100、颜色、全屏程序），适合开发板 shell 和 MCU 控制台，按键直接发给设备。
-- **Plot / 波形图**: numbers in received lines (`temp=23.6 hum=41` or `1.2, 3.4`) are drawn live, each series on its own scale.
-  把接收行中的数字实时画成曲线，每条曲线独立缩放。
-- **Line numbers and bookmarks / 行号与收藏**: `#` shows line numbers; ☆ keeps a line in a list you can jump back to.
-  `#` 显示行号；点 ☆ 收藏一行，随时跳回。
-- **TCP server with several clients / TCP 服务端多客户端**: up to 16 at once; sending goes to all, and the log shows who sent what.
-  最多同时 16 个客户端；发送会发给所有客户端，日志标明数据来自谁。
-- **Command list in its own window / 命令列表独立窗口**: ⧉ opens it beside the main window, with its own target port.
-  ⧉ 把命令列表放到独立窗口，可单独选择发往哪个端口。
-- **Help page / 帮助页**: what SerialBot is for, first steps, every control, connecting an AI agent, keys.
-  软件内的使用说明：用途、快速上手、各个按钮、如何接入 AI 智能体、快捷键。
+For working with many ports at once / 同时调试多个串口：
 
-The version number moves to 0.2.0 with this beta. 自本版起版本号为 0.2.0。
+- **A port in its own window / 串口独立窗口**: double-click a tab (or ⧉) to watch that port in a window of its own, with its full toolbar, log and send box. Close the window and the tab comes back; the port stays open. AI agents still see every port.
+  双击标签（或点 ⧉）把该串口放到独立窗口，带完整的工具栏、日志和发送框。关闭窗口后标签回到主窗口，端口保持打开；AI 仍能看到所有端口。
+- **Tabs for many ports / 多标签更好用**: tabs have their own row and short names (`CH9344USB8` instead of `/dev/ttyCH9344USB8`), scroll with the mouse wheel, and ▾ lists every open port.
+  标签单独一行、显示短名字，鼠标滚轮横向滚动，▾ 列出所有已打开的端口。
+- **News on other tabs / 后台标签提醒**: a tab you are not looking at gets a blue ring when data arrives, an agent writes, or the device is lost.
+  没在看的标签收到数据、AI 发送或设备掉线时，圆点变成蓝色光圈。
+- **Close closes the port you are looking at / 关闭跟着标签走**: selecting a tab selects its port in the connection bar.
+  选中标签时，顶部连接栏自动切到该端口，Close 关闭的就是正在看的端口。
+- Closing the main window now quits the app. 关闭主窗口即退出程序。
 
 ### What works / 已有功能
 
 - Serial ports, TCP client / server and UDP; several sessions at once; auto-reconnect after replugging
 - Text / HEX receive with timestamps, Δt, line numbers, ANSI colors, encodings (UTF-8, GBK, GB18030, Big5, …), auto frame split, pause, search and filter, keyword highlight, bookmarks; large logs stay smooth
 - Terminal mode and live plots
+- Many ports at once: tabs, ports in their own windows, news on other tabs
 - Multi-line send (text or HEX), history, timed send, saved command lists (also in their own window), checksums, file send, save or capture the log
 - DTR / RTS control and timed sequences, CTS / DSR / RI / CD status, BREAK
 - MCP server for AI agents (AI page → enable → copy the `claude mcp add …` command, or the Claude Desktop config); every change an agent makes waits for your approval, and its lines are marked AI
