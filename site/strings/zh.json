@@ -45,7 +45,7 @@
  "demo_caption": "AI 打开开发板串口并发送命令，每一步确认后显示在日志里。",
  "features_title": "本身也是好用的串口工具",
  "features": {
-  "连接": "多个串口同时打开（每个都可以放到独立窗口），TCP 客户端，支持多客户端的 TCP 服务端，UDP，拔插后自动重连。",
+  "连接": "多个串口同时打开（每个都可以放到独立窗口，关闭后日志保留），TCP 客户端，支持多客户端的 TCP 服务端，UDP，拔插后自动重连。",
   "接收": "文本或 HEX，毫秒时间戳，ANSI 颜色，GBK 等编码，帧间隔，搜索与过滤，关键字高亮，行号与收藏。",
   "终端模式": "在任意会话上切换成完整终端：登录 Linux 开发板，运行 <code>top</code> 或 <code>vi</code>。",
   "波形图": "接收到的数值，比如 <code>temp=23.6 hum=41</code> 或 <code>1.2, 3.4</code>，实时画成曲线。",
@@ -60,7 +60,7 @@
  "shot_tty": "终端模式：在开发板的 shell 里运行 vim，按键直接发给设备。",
  "mcp_title": "连接你的 AI",
  "mcp_intro": "在 AI 页打开 MCP 服务，复制页面上的命令，运行一次：",
- "mcp_then": "然后直接说：<em>「列出串口，打开 ESP32 那个口，发送 <code>version</code>」</em>。Claude Desktop 等 stdio 客户端通过 <code>serialbot mcp</code> 桥接，AI 页上有现成的配置。",
+ "mcp_then": "然后直接说：<em>「列出串口，打开 ESP32 那个口，发送 <code>version</code>」</em>。Claude Desktop 等 stdio 客户端通过 <code>serialbot mcp</code> 桥接，AI 页上有现成的配置。服务默认只允许本机访问，也可以在 AI 页面开放给局域网。",
  "download_title": "下载",
  "download_release": "最新版本：{tag}",
  "download_loading": "以下文件来自 GitHub 上的最新版本。",
