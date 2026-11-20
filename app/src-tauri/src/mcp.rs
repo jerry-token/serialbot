@@ -64,7 +64,13 @@ pub struct McpController {
     /// Where settings are saved; `None` keeps them in memory (tests).
     settings_path: Option<PathBuf>,
     inner: Mutex<Inner>,
+    /// Told the new status whenever the server starts, stops or changes.
+    on_change: Option<StatusListener>,
 }
+
+/// Receives the MCP status after every change (the app forwards it to all
+/// windows).
+pub type StatusListener = Box<dyn Fn(McpStatus) + Send + Sync>;
 
 impl std::fmt::Debug for McpController {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -97,6 +103,21 @@ impl McpController {
                 running: None,
                 error: note,
             }),
+            on_change: None,
+        }
+    }
+
+    /// Calls `listener` with the new status after every start, stop or
+    /// settings change, so every window shows the same state.
+    #[must_use]
+    pub fn with_listener(mut self, listener: StatusListener) -> Self {
+        self.on_change = Some(listener);
+        self
+    }
+
+    fn changed(&self, status: &McpStatus) {
+        if let Some(listener) = &self.on_change {
+            listener(status.clone());
         }
     }
 
@@ -124,7 +145,9 @@ impl McpController {
         if inner.settings.enabled && inner.running.is_none() {
             self.start(&mut inner).await;
         }
-        Self::status_of(&inner)
+        let status = Self::status_of(&inner);
+        self.changed(&status);
+        status
     }
 
     /// Validates, saves and applies new settings, restarting the server if
@@ -142,7 +165,9 @@ impl McpController {
         if inner.settings.enabled {
             self.start(&mut inner).await;
         }
-        Ok(Self::status_of(&inner))
+        let status = Self::status_of(&inner);
+        self.changed(&status);
+        Ok(status)
     }
 
     /// Replaces the token with a new random one (connected clients must be
@@ -338,6 +363,30 @@ mod tests {
         // Starting again after a stop works.
         assert!(c.start_if_enabled().await.running);
         c.stop().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn tells_the_listener_about_every_change() {
+        let seen = Arc::new(std::sync::Mutex::new(Vec::<McpStatus>::new()));
+        let sink = Arc::clone(&seen);
+        let c = controller(None).with_listener(Box::new(move |status| {
+            sink.lock().unwrap().push(status);
+        }));
+        let started = c.start_if_enabled().await;
+        let port = free_port().await;
+        let on = c.apply(enabled(port, TOKEN)).await.unwrap();
+        let fresh = c.regenerate_token().await.unwrap();
+        assert!(c.apply(enabled(port, "short")).await.is_err());
+        let off = c
+            .apply(McpSettings {
+                enabled: false,
+                ..enabled(port, TOKEN)
+            })
+            .await
+            .unwrap();
+        // Each change reported once, with what the caller got; a refused
+        // change reports nothing.
+        assert_eq!(*seen.lock().unwrap(), vec![started, on, fresh, off]);
     }
 
     #[tokio::test(flavor = "multi_thread")]

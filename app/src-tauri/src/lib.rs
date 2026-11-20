@@ -394,14 +394,20 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         }),
     ));
     app.manage(Arc::clone(&approvals));
-    app.manage(McpController::new(
-        Arc::clone(&manager),
-        Arc::clone(&lister),
-        approvals,
-        settings,
-        Some(path),
-        note,
-    ));
+    let handle = app.handle().clone();
+    app.manage(
+        McpController::new(
+            Arc::clone(&manager),
+            Arc::clone(&lister),
+            approvals,
+            settings,
+            Some(path),
+            note,
+        )
+        .with_listener(Box::new(move |status| {
+            let _ = handle.emit("mcp-changed", status);
+        })),
+    );
     let handle = app.handle().clone();
     tauri::async_runtime::spawn(async move {
         handle.state::<McpController>().start_if_enabled().await;

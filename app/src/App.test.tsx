@@ -417,6 +417,23 @@ class FakeBackend implements Backend {
     return this.mcp;
   }
 
+  mcpListeners = new Set<(status: McpStatus) => void>();
+
+  async onMcpChanged(handler: (status: McpStatus) => void) {
+    this.mcpListeners.add(handler);
+    return () => this.mcpListeners.delete(handler);
+  }
+
+  /** The MCP server changes, e.g. from another window. */
+  mcpChanges(running: boolean) {
+    this.mcp = {
+      ...this.mcp,
+      running,
+      url: running ? `http://127.0.0.1:${this.mcp.settings.port}/mcp` : null,
+    };
+    for (const l of this.mcpListeners) l(this.mcp);
+  }
+
   async mcpApply(settings: McpSettings) {
     if (this.failMcp) throw this.failMcp;
     this.mcp = {
@@ -2293,6 +2310,59 @@ describe("Language setting", () => {
 });
 
 describe("AI approvals", () => {
+  it("asks in the window that shows the session", async () => {
+    const backend = new FakeBackend();
+    const user = userEvent.setup();
+    render(<App backend={backend} lang="en" storage={memoryStorage()} />);
+    await openPort(user, "COM3");
+    let esp32 = 0;
+    act(() => {
+      esp32 = backend.addSession("COM4", "esp32").id;
+    });
+    await user.dblClick(await screen.findByRole("tab", { name: "esp32" }));
+    await waitFor(() => expect(tabs()).toEqual(["COM3"]));
+    const title = "An AI agent wants to make a change";
+
+    // A request for the popped-out session is not asked here...
+    act(() => backend.agentAsks({ tool: "io.write", session: esp32, port: "COM4", detail: "" }));
+    expect(screen.queryByRole("alertdialog", { name: title })).not.toBeInTheDocument();
+    // ...but new ports and sessions without a window are.
+    act(() => backend.agentAsks({ tool: "session.open", session: null, port: "COM9", detail: "" }));
+    expect(await screen.findByRole("alertdialog", { name: title })).toHaveTextContent(
+      "session.open Open COM9",
+    );
+    expect(screen.getByRole("alertdialog", { name: title })).not.toHaveTextContent("waiting");
+  });
+
+  it("asks a session window only about its own session", async () => {
+    const backend = new FakeBackend();
+    const mine = backend.addSession("COM4", "esp32");
+    const other = backend.addSession("COM3", null);
+    render(<App backend={backend} lang="en" storage={memoryStorage()} pinned={mine.id} />);
+    await waitFor(() => expect(backend.approvalListeners.size).toBe(1));
+    const title = "An AI agent wants to make a change";
+    act(() => {
+      backend.agentAsks({ tool: "io.write", session: other.id, port: "COM3", detail: "" });
+      backend.agentAsks({ tool: "session.open", session: null, port: "COM9", detail: "" });
+    });
+    expect(screen.queryByRole("alertdialog", { name: title })).not.toBeInTheDocument();
+    act(() => backend.agentAsks({ tool: "io.write", session: mine.id, port: "COM4", detail: "" }));
+    expect(await screen.findByRole("alertdialog", { name: title })).toHaveTextContent(
+      "io.write On COM4",
+    );
+  });
+
+  it("shows the MCP state set in any window", async () => {
+    const backend = new FakeBackend();
+    const mine = backend.addSession("COM4", null);
+    render(<App backend={backend} lang="en" storage={memoryStorage()} pinned={mine.id} />);
+    await waitFor(() => expect(status()).toHaveTextContent("MCP off"));
+    act(() => backend.mcpChanges(true));
+    await waitFor(() => expect(status()).toHaveTextContent("MCP :9633"));
+    act(() => backend.mcpChanges(false));
+    await waitFor(() => expect(status()).toHaveTextContent("MCP off"));
+  });
+
   it("asks about each agent action in turn", async () => {
     const { backend, user } = setup();
     await waitFor(() => expect(backend.approvalListeners.size).toBe(1));

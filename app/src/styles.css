@@ -16,6 +16,9 @@
   --ok: #188038;
   --accent: #1a73e8;
   --accent-soft: rgba(26, 115, 232, 0.12);
+  /* News on a tab not being looked at: orange, apart from the state colours. */
+  --news: #e8710a;
+  --news-ring: rgba(232, 113, 10, 0.3);
   --radius: 6px;
   /* ANSI 16-color palette for the light theme. */
   --ansi-0: #000000;
@@ -55,6 +58,8 @@
   --ok: #4cc27a;
   --accent: #5b9dff;
   --accent-soft: rgba(91, 157, 255, 0.16);
+  --news: #ffa62b;
+  --news-ring: rgba(255, 166, 43, 0.32);
   /* ANSI 16-color palette for the dark theme. */
   --ansi-0: #5a5a5a;
   --ansi-1: #f14c4c;
@@ -444,20 +449,25 @@ label.check {
   flex: none;
 }
 
-/* News on a tab you are not looking at: a ring in the accent colour (a lost
-   device keeps its own colour inside the ring). */
+/* News on a tab you are not looking at: an orange dot with a ring that
+   pulses a few times, and the name in bold (a lost device keeps its own
+   colour inside the ring). */
 .dot.news {
-  box-shadow: 0 0 0 3px var(--accent-soft);
-  animation: news-pulse 1.6s ease-out 2;
+  box-shadow: 0 0 0 3px var(--news-ring);
+  animation: news-pulse 1.2s ease-out 3;
 }
 
 .dot.open.news {
-  background: var(--accent);
+  background: var(--news);
+}
+
+.tab:has(.dot.news) .tab-name {
+  font-weight: 600;
 }
 
 @keyframes news-pulse {
   50% {
-    box-shadow: 0 0 0 5px var(--accent-soft);
+    box-shadow: 0 0 0 6px var(--news-ring);
   }
 }
 
