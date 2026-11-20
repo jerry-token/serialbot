@@ -17,7 +17,7 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::approval::Approvals;
-use crate::settings::{self, McpSettings};
+use crate::settings::{self, Listen, McpSettings};
 
 /// How many ports after the preferred one are tried when it is taken.
 pub const PORT_ATTEMPTS: u16 = 10;
@@ -33,8 +33,11 @@ pub struct McpStatus {
     pub settings: McpSettings,
     /// Whether the server is listening.
     pub running: bool,
-    /// Endpoint URL while running.
+    /// Endpoint URL on this computer while running.
     pub url: Option<String>,
+    /// Endpoint URL for other computers while running on the local network
+    /// (this computer's address on its main network), if it can be found.
+    pub lan_url: Option<String>,
     /// Why the server is not running although enabled, or why the settings
     /// file was ignored.
     pub error: Option<String>,
@@ -134,6 +137,11 @@ impl McpController {
                 .running
                 .as_ref()
                 .map(|r| format!("http://127.0.0.1:{}{MCP_PATH}", r.port)),
+            lan_url: inner
+                .running
+                .as_ref()
+                .filter(|_| inner.settings.listen == Listen::Lan)
+                .and_then(|r| lan_address().map(|ip| format!("http://{ip}:{}{MCP_PATH}", r.port))),
             error: inner.error.clone(),
             stdio_command: crate::cli::launcher(),
         }
@@ -189,13 +197,15 @@ impl McpController {
 
     async fn start(&self, inner: &mut Inner) {
         let options = match McpOptions::new(inner.settings.token.clone()) {
+            // Other computers reach it by this computer's address or name.
+            Ok(options) if inner.settings.listen == Listen::Lan => options.with_any_host(),
             Ok(options) => options,
             Err(e) => {
                 inner.error = Some(e.to_string());
                 return;
             }
         };
-        let Some(listener) = bind_from(inner.settings.port).await else {
+        let Some(listener) = bind_from(inner.settings.listen, inner.settings.port).await else {
             inner.error = Some(format!(
                 "ports {}-{} are all in use",
                 inner.settings.port,
@@ -239,12 +249,25 @@ impl McpController {
 }
 
 /// Binds 127.0.0.1 on `first` or one of the following ports.
-async fn bind_from(first: u16) -> Option<TcpListener> {
+/// This computer's IPv4 address on the network its default route uses, or
+/// `None` without one. Asks the OS which local address a UDP "connection"
+/// would use; no packet is sent.
+pub fn lan_address() -> Option<std::net::Ipv4Addr> {
+    let socket = std::net::UdpSocket::bind(("0.0.0.0", 0)).ok()?;
+    // A documentation address (TEST-NET-1): only the route is looked up.
+    socket.connect(("192.0.2.1", 9)).ok()?;
+    match socket.local_addr().ok()?.ip() {
+        std::net::IpAddr::V4(ip) if !ip.is_loopback() && !ip.is_unspecified() => Some(ip),
+        _ => None,
+    }
+}
+
+async fn bind_from(listen: Listen, first: u16) -> Option<TcpListener> {
     for offset in 0..PORT_ATTEMPTS {
         let Some(port) = first.checked_add(offset) else {
             break;
         };
-        if let Ok(listener) = TcpListener::bind(("127.0.0.1", port)).await {
+        if let Ok(listener) = TcpListener::bind((listen.address(), port)).await {
             return Some(listener);
         }
     }
@@ -281,6 +304,7 @@ mod tests {
                 port: 0,
                 token: TOKEN.into(),
                 confirm: true,
+                listen: Listen::Local,
             },
             path,
             None,
@@ -310,9 +334,14 @@ mod tests {
 
     /// Status code of an authenticated MCP `initialize` POST.
     async fn initialize_status(port: u16, token: &str) -> u16 {
+        initialize_status_via(port, token, "127.0.0.1").await
+    }
+
+    /// Like [`initialize_status`], with this `Host` header.
+    async fn initialize_status_via(port: u16, token: &str, host: &str) -> u16 {
         let body = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}"#;
         let request = format!(
-            "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {token}\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            "POST /mcp HTTP/1.1\r\nHost: {host}:{port}\r\nAuthorization: Bearer {token}\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
             body.len()
         );
         let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
@@ -335,6 +364,7 @@ mod tests {
             port,
             token: token.into(),
             confirm: true,
+            listen: Listen::Local,
         }
     }
 
@@ -387,6 +417,55 @@ mod tests {
         // Each change reported once, with what the caller got; a refused
         // change reports nothing.
         assert_eq!(*seen.lock().unwrap(), vec![started, on, fresh, off]);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn listens_on_this_computer_or_the_network() {
+        let c = controller(None);
+        let port = free_port().await;
+        // This computer only: other host names are refused (DNS rebinding).
+        let local = c.apply(enabled(port, TOKEN)).await.unwrap();
+        assert_eq!(local.lan_url, None);
+        assert_eq!(initialize_status(port, TOKEN).await, 200);
+        assert_ne!(
+            initialize_status_via(port, TOKEN, "192.168.1.50").await,
+            200
+        );
+        // Not reachable through the network address.
+        if let Some(ip) = lan_address() {
+            assert!(tokio::net::TcpStream::connect((ip, port)).await.is_err());
+        }
+
+        // The local network: bound to every address, any host name works,
+        // and the token is still required.
+        let lan = c
+            .apply(McpSettings {
+                listen: Listen::Lan,
+                ..enabled(port, TOKEN)
+            })
+            .await
+            .unwrap();
+        assert!(lan.running);
+        assert_eq!(lan.url, Some(format!("http://127.0.0.1:{port}/mcp")));
+        assert_eq!(
+            initialize_status_via(port, TOKEN, "192.168.1.50").await,
+            200
+        );
+        assert_eq!(initialize_status_via(port, TOKEN, "my-pc.local").await, 200);
+        assert_eq!(
+            initialize_status_via(port, "wrong-token-00000000", "my-pc.local").await,
+            401
+        );
+        // The LAN URL names this computer's address when there is a network.
+        match lan_address() {
+            Some(ip) => {
+                assert_eq!(lan.lan_url, Some(format!("http://{ip}:{port}/mcp")));
+                // Reachable through the network address now.
+                assert!(tokio::net::TcpStream::connect((ip, port)).await.is_ok());
+            }
+            None => assert_eq!(lan.lan_url, None),
+        }
+        c.stop().await;
     }
 
     #[tokio::test(flavor = "multi_thread")]

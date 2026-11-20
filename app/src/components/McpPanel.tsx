@@ -34,6 +34,8 @@ export function McpPanel({ t, status, onApply, onRegenerate, copy }: Props) {
   };
 
   const command = status.url ? claudeCommand(status.url, status.settings.token) : null;
+  const lanCommand = status.lanUrl ? claudeCommand(status.lanUrl, status.settings.token) : null;
+  const lan = status.settings.listen === "lan";
   const desktop =
     status.url && status.stdioCommand ? claudeDesktopConfig(status.stdioCommand) : null;
   const copyNote = (text: string) =>
@@ -61,6 +63,22 @@ export function McpPanel({ t, status, onApply, onRegenerate, copy }: Props) {
         />
         {t.mcpConfirm}
       </label>
+      <div className="row">
+        <label>
+          {t.mcpListen}
+          <select
+            aria-label={t.mcpListen}
+            value={status.settings.listen}
+            onChange={(e) =>
+              onApply({ ...status.settings, listen: e.target.value === "lan" ? "lan" : "local" })
+            }
+          >
+            <option value="local">{t.mcpListenLocal}</option>
+            <option value="lan">{t.mcpListenLan}</option>
+          </select>
+        </label>
+      </div>
+      {lan && <p className="warning">{t.mcpLanWarning}</p>}
       <div className="row">
         <label>
           {t.mcpPort}
@@ -96,6 +114,20 @@ export function McpPanel({ t, status, onApply, onRegenerate, copy }: Props) {
           <span className="muted">{t.mcpClaude}</span>
           <code className="grow">{command}</code>
           <button type="button" aria-label={t.copyCommand} onClick={() => copyNote(command)}>
+            {t.copy}
+          </button>
+        </div>
+      )}
+      {lan && status.running && (
+        <p className={status.lanUrl ? "ok" : "muted"}>
+          {status.lanUrl ? t.mcpLanRunning(status.lanUrl) : t.mcpLanUnknown}
+        </p>
+      )}
+      {lanCommand && (
+        <div className="row">
+          <span className="muted">{t.mcpClaudeLan}</span>
+          <code className="grow">{lanCommand}</code>
+          <button type="button" aria-label={t.copyLanCommand} onClick={() => copyNote(lanCommand)}>
             {t.copy}
           </button>
         </div>

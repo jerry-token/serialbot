@@ -55,7 +55,7 @@ describe("tauriBackend", () => {
     await tauriBackend.writeData(1, new Uint8Array([1, 2]));
     await tauriBackend.readLog(1, 5, 100);
     await tauriBackend.listSessions();
-    const settings = { enabled: true, port: 9633, token: "t", confirm: true };
+    const settings = { enabled: true, port: 9633, token: "t", confirm: true, listen: "local" as const };
     await tauriBackend.mcpStatus();
     await tauriBackend.mcpApply(settings);
     await tauriBackend.mcpRegenerateToken();

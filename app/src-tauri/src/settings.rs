@@ -21,6 +21,33 @@ pub struct McpSettings {
     /// this setting existed read as on.
     #[serde(default = "confirm_by_default")]
     pub confirm: bool,
+    /// Who can reach the server: this computer only (the default, also for
+    /// files written before this setting existed) or the local network.
+    #[serde(default)]
+    pub listen: Listen,
+}
+
+/// The address the MCP server listens on.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Listen {
+    /// `127.0.0.1`: only programs on this computer.
+    #[default]
+    Local,
+    /// `0.0.0.0`: also other computers on the network. Anyone who can reach
+    /// the port and has the token can drive the ports; HTTP is not
+    /// encrypted.
+    Lan,
+}
+
+impl Listen {
+    /// The address to bind.
+    pub fn address(self) -> std::net::Ipv4Addr {
+        match self {
+            Self::Local => std::net::Ipv4Addr::LOCALHOST,
+            Self::Lan => std::net::Ipv4Addr::UNSPECIFIED,
+        }
+    }
 }
 
 const fn confirm_by_default() -> bool {
@@ -35,6 +62,7 @@ impl McpSettings {
             port: DEFAULT_PORT,
             token: generate_token().map_err(|e| format!("cannot generate a token: {e}"))?,
             confirm: true,
+            listen: Listen::Local,
         })
     }
 
@@ -160,11 +188,13 @@ pub(crate) mod tests {
             port: 9700,
             token: "my-own-token-123456".into(),
             confirm: false,
+            listen: Listen::Lan,
         };
         save(&path, &settings).unwrap();
         assert_eq!(load(&path).unwrap(), (settings, None));
         let json = std::fs::read_to_string(&path).unwrap();
         assert!(json.contains("\"enabled\": true"), "{json}");
+        assert!(json.contains("\"listen\": \"lan\""), "{json}");
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -183,6 +213,17 @@ pub(crate) mod tests {
         assert_eq!(problem, None);
         assert!(settings.confirm);
         assert!(McpSettings::new_default().unwrap().confirm);
+        // ...and listen on this computer only.
+        assert_eq!(settings.listen, Listen::Local);
+        assert_eq!(McpSettings::new_default().unwrap().listen, Listen::Local);
+    }
+
+    #[test]
+    fn listen_addresses() {
+        assert_eq!(Listen::Local.address().to_string(), "127.0.0.1");
+        assert_eq!(Listen::Lan.address().to_string(), "0.0.0.0");
+        assert_eq!(serde_json::to_string(&Listen::Lan).unwrap(), "\"lan\"");
+        assert!(serde_json::from_str::<Listen>("\"wan\"").is_err());
     }
 
     #[test]

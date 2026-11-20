@@ -70,9 +70,16 @@ class FakeBackend implements Backend {
   failClose = false;
   failMcp: string | null = null;
   mcp: McpStatus = {
-    settings: { enabled: false, port: 9633, token: "token-0123456789abcdef", confirm: true },
+    settings: {
+      enabled: false,
+      port: 9633,
+      token: "token-0123456789abcdef",
+      confirm: true,
+      listen: "local",
+    },
     running: false,
     url: null,
+    lanUrl: null,
     error: null,
     stdioCommand: "/Applications/SerialBot.app/Contents/MacOS/serialbot",
   };
@@ -453,12 +460,20 @@ class FakeBackend implements Backend {
     for (const l of this.mcpListeners) l(this.mcp);
   }
 
+  /** This computer's LAN URL with PORT for the port, or null when unknown. */
+  lanAddress: string | null = "http://192.168.1.20:PORT/mcp";
+
   async mcpApply(settings: McpSettings) {
     if (this.failMcp) throw this.failMcp;
     this.mcp = {
       settings,
       running: settings.enabled,
       url: settings.enabled ? `http://127.0.0.1:${settings.port}/mcp` : null,
+      // Like the app: a LAN address only while serving the network.
+      lanUrl:
+        settings.enabled && settings.listen === "lan"
+          ? (this.lanAddress?.replace("PORT", String(settings.port)) ?? null)
+          : null,
       error: null,
       stdioCommand: this.mcp.stdioCommand,
     };
@@ -2516,6 +2531,7 @@ describe("MCP panel", () => {
         port: 9700,
         token: "my-own-token-123456",
         confirm: true,
+        listen: "local",
       }),
     );
     // Confirming agents' changes can be turned off.
@@ -2530,6 +2546,60 @@ describe("MCP panel", () => {
     await user.click(within(panel).getByRole("button", { name: "Save" }));
     expect(within(panel).getByText("Port must be between 1 and 65535")).toBeInTheDocument();
     expect(backend.mcp.settings.port).toBe(9700);
+  });
+
+  it("can serve the local network, with a warning and the address to use", async () => {
+    const { backend, user, copy } = setup();
+    const panel = await openPanel(user);
+    const reach = within(panel).getByLabelText("Reachable from");
+    // This computer only by default.
+    expect(reach).toHaveValue("local");
+    expect(within(panel).queryByText(/Other computers on your network/)).not.toBeInTheDocument();
+    await user.click(within(panel).getByLabelText("Enable MCP server"));
+    await waitFor(() => expect(backend.mcp.running).toBe(true));
+    expect(within(panel).queryByText(/From other computers/)).not.toBeInTheDocument();
+
+    await user.selectOptions(reach, "lan");
+    await waitFor(() => expect(backend.mcp.settings.listen).toBe("lan"));
+    expect(
+      within(panel).getByText(/Other computers on your network can reach the server/),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).getByText("From other computers: http://192.168.1.20:9633/mcp"),
+    ).toBeInTheDocument();
+    // This computer keeps using 127.0.0.1; another computer gets its own command.
+    expect(within(panel).getByText("Running at http://127.0.0.1:9633/mcp")).toBeInTheDocument();
+    const lanCommand =
+      'claude mcp add --transport http serialbot http://192.168.1.20:9633/mcp --header "Authorization: Bearer token-0123456789abcdef"';
+    await user.click(
+      within(panel).getByRole("button", { name: "Copy the command for another computer" }),
+    );
+    expect(copy).toHaveBeenCalledWith(lanCommand);
+
+    // Without a known address, it says what to use instead.
+    backend.lanAddress = null;
+    await user.click(within(panel).getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(within(panel).getByText(/use this computer's address/)).toBeInTheDocument(),
+    );
+    expect(
+      within(panel).queryByRole("button", { name: "Copy the command for another computer" }),
+    ).not.toBeInTheDocument();
+
+    // Back to this computer only.
+    await user.selectOptions(reach, "local");
+    await waitFor(() => expect(backend.mcp.settings.listen).toBe("local"));
+    expect(within(panel).queryByText(/Other computers on your network/)).not.toBeInTheDocument();
+  });
+
+  it("explains the network option in Chinese", async () => {
+    const backend = new FakeBackend();
+    backend.mcp = { ...backend.mcp, settings: { ...backend.mcp.settings, listen: "lan" } };
+    const user = userEvent.setup();
+    render(<App backend={backend} lang="zh" storage={memoryStorage()} />);
+    await user.click(screen.getByRole("button", { name: "AI" }));
+    expect(await screen.findByLabelText("允许访问")).toHaveValue("lan");
+    expect(screen.getByText(/局域网里的其他电脑都能连到这个服务/)).toBeInTheDocument();
   });
 
   it("shows errors from the backend and the clipboard", async () => {
