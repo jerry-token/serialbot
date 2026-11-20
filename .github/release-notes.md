@@ -30,17 +30,14 @@ Windows 可能提示「未知发布者」，点「更多信息」→「仍要运
 
 ### New in this release / 本版新增
 
-For working with many ports at once / 同时调试多个串口：
-
-- **A port in its own window / 串口独立窗口**: double-click a tab (or ⧉) to watch that port in a window of its own, with its full toolbar, log and send box. Close the window and the tab comes back; the port stays open. AI agents still see every port.
-  双击标签（或点 ⧉）把该串口放到独立窗口，带完整的工具栏、日志和发送框。关闭窗口后标签回到主窗口，端口保持打开；AI 仍能看到所有端口。
-- **Tabs for many ports / 多标签更好用**: tabs have their own row and short names (`CH9344USB8` instead of `/dev/ttyCH9344USB8`), scroll with the mouse wheel, and ▾ lists every open port.
-  标签单独一行、显示短名字，鼠标滚轮横向滚动，▾ 列出所有已打开的端口。
-- **News on other tabs / 后台标签提醒**: a tab you are not looking at gets a blue ring when data arrives, an agent writes, or the device is lost.
-  没在看的标签收到数据、AI 发送或设备掉线时，圆点变成蓝色光圈。
-- **Close closes the port you are looking at / 关闭跟着标签走**: selecting a tab selects its port in the connection bar.
-  选中标签时，顶部连接栏自动切到该端口，Close 关闭的就是正在看的端口。
-- Closing the main window now quits the app. 关闭主窗口即退出程序。
+- **Closing a port keeps its tab / 关闭串口保留标签页**: Close (yours or an agent's `session.close`) stops the port but keeps the tab and log, so you can look back at what happened. Open continues in the same tab; × on the tab closes it.
+  关闭串口（你点 Close 或 AI 调用 `session.close`）只停止收发，标签页和日志都保留，方便回看 AI 做了什么；再次打开会在原标签里接着记录，点标签上的 × 才关闭标签页。
+- **MCP on the local network / MCP 支持局域网**: on the AI page, *Reachable from* can switch from this computer only (127.0.0.1, the default) to the local network (0.0.0.0). The page shows the address and command for other computers. The token is always required.
+  AI 页面的"允许访问"可从仅本机（127.0.0.1，默认）改为本机和局域网（0.0.0.0），并给出其他电脑使用的地址和命令；始终需要 token。
+- **Windows stay in step / 多窗口状态同步**: the MCP state is the same in every window, and an agent's request is asked only in the window that shows its port.
+  所有窗口的 MCP 状态一致；AI 的确认弹窗只出现在显示对应串口的窗口里。
+- **Easier to spot news on other tabs / 后台标签提醒更醒目**: an orange dot and a bold name.
+  圆点改为橙色，标签名加粗。
 
 ### What works / 已有功能
 
@@ -50,6 +47,6 @@ For working with many ports at once / 同时调试多个串口：
 - Many ports at once: tabs, ports in their own windows, news on other tabs
 - Multi-line send (text or HEX), history, timed send, saved command lists (also in their own window), checksums, file send, save or capture the log
 - DTR / RTS control and timed sequences, CTS / DSR / RI / CD status, BREAK
-- MCP server for AI agents (AI page → enable → copy the `claude mcp add …` command, or the Claude Desktop config); every change an agent makes waits for your approval, and its lines are marked AI
+- MCP server for AI agents (AI page → enable → copy the `claude mcp add …` command, or the Claude Desktop config), on this computer or optionally the local network; every change an agent makes waits for your approval, and its lines are marked AI
 - English and Chinese; light and dark themes
 - Tested at 2 Mbit/s for an hour on x64 and arm64 without loss
