@@ -82,7 +82,11 @@ SerialBot 补上的就是这一环，让 Agent 直接面对设备：
 
 | 深色主题 | 浅色主题 |
 |:---:|:---:|
-| <img src="docs/images/terminal-dark.png" alt="深色主题的终端页：AI 发送的命令带 AI 标记，旁边是从命令列表发送的命令；行号、Δt、收藏的行和命令列表"> | <img src="docs/images/terminal-light.png" alt="浅色主题的终端页"> |
+| <img src="docs/images/terminal-dark.png" alt="深色主题的终端页：AI 发送的命令带 AI 标记，旁边是从命令列表发送的命令；行号、Δt、收藏的行和命令列表；gps 标签的蓝点表示有新数据"> | <img src="docs/images/terminal-light.png" alt="浅色主题的终端页"> |
+
+**🪟 多个串口并排查看**：双击标签，把该串口放到独立窗口里。
+
+<img src="docs/images/windows.png" alt="主窗口显示 GPS 端口，esp32 在独立窗口中，带日志、工具栏和发送框">
 
 | 📈 波形图 | 🖥️ 终端模式 |
 |:---:|:---:|

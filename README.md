@@ -82,7 +82,11 @@ You stay in charge. Every change to a port needs your approval, and every line t
 
 | Dark | Light |
 |:---:|:---:|
-| <img src="docs/images/terminal-dark.png" alt="Terminal in the dark theme: an agent's commands tagged AI next to a command sent from the list, line numbers, Δt, a bookmarked line and the command list"> | <img src="docs/images/terminal-light.png" alt="The same terminal in the light theme"> |
+| <img src="docs/images/terminal-dark.png" alt="Terminal in the dark theme: an agent's commands tagged AI next to a command sent from the list, line numbers, Δt, a bookmarked line and the command list; the gps tab's blue dot marks new data"> | <img src="docs/images/terminal-light.png" alt="The same terminal in the light theme"> |
+
+**🪟 Several ports side by side**: double-click a tab to move that port into a window of its own.
+
+<img src="docs/images/windows.png" alt="The main window showing a GPS port, and esp32 in a window of its own with its log, toolbar and send box">
 
 | 📈 Plot | 🖥️ Terminal mode |
 |:---:|:---:|
