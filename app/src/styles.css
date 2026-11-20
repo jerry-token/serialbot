@@ -171,6 +171,11 @@ label.check {
   height: 100%;
 }
 
+/* A session's own window has no sidebar. */
+.shell.pinned {
+  grid-template-columns: 1fr;
+}
+
 .sidebar {
   display: flex;
   flex-direction: column;
@@ -318,6 +323,27 @@ label.check {
   max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* A session's own window: its name where the tabs would be. */
+.pinned-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 5px;
+}
+
+.pinned-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.own-window {
+  color: var(--muted);
 }
 
 .tabs-all {

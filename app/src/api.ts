@@ -9,6 +9,20 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 /** Label of the separate command-list window (see capabilities/default.json). */
 export const COMMAND_WINDOW = "commands";
+
+/** Label of a session's own window (capabilities allow "session-*"). */
+export function sessionWindowLabel(id: number): string {
+  return `session-${id}`;
+}
+
+/**
+ * The session a page shows on its own, from its URL hash ("#session=3"),
+ * or null for the main window.
+ */
+export function pinnedSession(hash: string): number | null {
+  const match = /^#session=(\d+)$/.exec(hash);
+  return match ? Number(match[1]) : null;
+}
 import { open, save } from "@tauri-apps/plugin-dialog";
 import type { SignalStep } from "./signals";
 
@@ -191,6 +205,14 @@ export interface Backend {
   setSignals(id: number, levels: { dtr?: boolean; rts?: boolean }): Promise<SignalsInfo>;
   /** Opens the command list in its own window, or brings it to the front. */
   openCommandWindow(title: string): Promise<void>;
+  /**
+   * Shows a session in its own window, or brings that window to the front.
+   * `onClosed` runs once when a newly opened window closes (not for a window
+   * that was already open).
+   */
+  openSessionWindow(id: number, title: string, onClosed: () => void): Promise<void>;
+  /** Closes the window this page runs in. */
+  closeWindow(): Promise<void>;
   /** The app version, e.g. "0.2.0". */
   appVersion(): Promise<string>;
   /** Opens a SerialBot web link or mail address outside the app (only the help page's links). */
@@ -279,6 +301,25 @@ export const tauriBackend: Backend = {
       void window.once("tauri://error", (e) => reject(String(e.payload)));
     });
   },
+  openSessionWindow: async (id, title, onClosed) => {
+    const label = sessionWindowLabel(id);
+    const open = await WebviewWindow.getByLabel(label);
+    if (open) return open.setFocus();
+    const window = new WebviewWindow(label, {
+      url: `index.html#session=${id}`,
+      title,
+      width: 900,
+      height: 640,
+      minWidth: 480,
+      minHeight: 320,
+    });
+    await new Promise<void>((resolve, reject) => {
+      void window.once("tauri://created", () => resolve());
+      void window.once("tauri://error", (e) => reject(String(e.payload)));
+    });
+    void window.once("tauri://destroyed", () => onClosed());
+  },
+  closeWindow: () => getCurrentWindow().close(),
   runSignals: (id, steps) => invoke("run_signals", { id, steps }),
   sendBreak: (id, ms) => invoke("send_break", { id, ms }),
   mcpStatus: () => invoke("mcp_status"),

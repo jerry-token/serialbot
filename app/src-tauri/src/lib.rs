@@ -410,11 +410,27 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Starts the app and blocks until its last window closes; the MCP server
-/// and all ports are closed on exit.
+/// Label of the main window. The other windows (command list, one window per
+/// session) only show what it manages.
+pub const MAIN_WINDOW: &str = "main";
+
+/// Whether closing the window with this label ends the app. Only the main
+/// window does: once it is gone, the other windows would keep the ports open
+/// with no way to open new ones.
+pub fn ends_app(label: &str) -> bool {
+    label == MAIN_WINDOW
+}
+
+/// Starts the app and blocks until the main window (or the last window)
+/// closes; the MCP server and all ports are closed on exit.
 pub fn run() -> Result<(), tauri::Error> {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Destroyed) && ends_app(window.label()) {
+                window.app_handle().exit(0);
+            }
+        })
         .manage(AppState::with_serial_ports())
         .setup(setup)
         .invoke_handler(tauri::generate_handler![
@@ -458,4 +474,17 @@ pub fn run() -> Result<(), tauri::Error> {
         }
     });
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_the_main_window_ends_the_app() {
+        assert!(ends_app(MAIN_WINDOW));
+        for label in ["commands", "session-1", "session-12", ""] {
+            assert!(!ends_app(label), "{label}");
+        }
+    }
 }

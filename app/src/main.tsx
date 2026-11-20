@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { CommandWindow } from "./CommandWindow";
-import { tauriBackend } from "./api";
+import { pinnedSession, tauriBackend } from "./api";
 import { browserStorage } from "./commands";
 import { detectLang } from "./i18n";
 import { applyAppearance, loadPrefs } from "./prefs";
@@ -22,7 +22,12 @@ if (root) {
       {window.location.hash === "#commands" ? (
         <CommandWindow backend={tauriBackend} lang={detectLang(navigator.languages)} />
       ) : (
-        <App backend={tauriBackend} lang={detectLang(navigator.languages)} />
+        <App
+          backend={tauriBackend}
+          lang={detectLang(navigator.languages)}
+          pinned={pinnedSession(window.location.hash)}
+          onPinnedClosed={() => void tauriBackend.closeWindow()}
+        />
       )}
     </StrictMode>,
   );
