@@ -104,7 +104,7 @@ You stay in charge. Every change to a port needs your approval, and every line t
 <details>
 <summary>🤖 AI page: MCP server settings</summary>
 
-<img src="docs/images/ai-dark.png" width="800" alt="AI page with the MCP server enabled, the confirmation setting and the Claude Code and Claude Desktop snippets">
+<img src="docs/images/ai-dark.png" width="800" alt="AI page with the MCP server enabled, the confirmation setting, Reachable from set to this computer only, and the Claude Code and Claude Desktop snippets">
 
 </details>
 

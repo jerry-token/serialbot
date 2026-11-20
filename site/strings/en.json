@@ -45,7 +45,7 @@
  "demo_caption": "An agent opens a dev board's port and sends commands. Each step is approved, then shown in the log.",
  "features_title": "Also a good serial terminal",
  "features": {
-  "Connect": "Many ports at once (each can have a window of its own), TCP client, TCP server with several clients, UDP, auto-reconnect after replugging.",
+  "Connect": "Many ports at once (each can have a window of its own; closing one keeps its log), TCP client, TCP server with several clients, UDP, auto-reconnect after replugging.",
   "Receive": "Text or HEX with millisecond timestamps, ANSI colors, GBK and other encodings, frame gaps, search and filter, keyword highlight, line numbers and bookmarks.",
   "Terminal mode": "A full terminal emulator on any session: log in to a Linux board, run <code>top</code> or <code>vi</code>.",
   "Plot": "Numbers in received lines, such as <code>temp=23.6 hum=41</code> or <code>1.2, 3.4</code>, drawn as live curves.",
@@ -60,7 +60,7 @@
  "shot_tty": "Terminal mode: vim running on a board's shell, keys sent straight to the device.",
  "mcp_title": "Connect your agent",
  "mcp_intro": "Turn on the MCP server on the AI page, copy the command shown there and run it once:",
- "mcp_then": "Then ask: <em>“List the serial ports, open the ESP32 one and send <code>version</code>.”</em> Claude Desktop and other stdio clients use the <code>serialbot mcp</code> bridge; the AI page shows the configuration.",
+ "mcp_then": "Then ask: <em>“List the serial ports, open the ESP32 one and send <code>version</code>.”</em> Claude Desktop and other stdio clients use the <code>serialbot mcp</code> bridge; the AI page shows the configuration. By default only this computer can reach the server; the AI page can open it to your local network.",
  "download_title": "Download",
  "download_release": "Latest release: {tag}",
  "download_loading": "Files from the latest release on GitHub.",

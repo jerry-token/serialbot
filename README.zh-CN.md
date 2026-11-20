@@ -104,7 +104,7 @@ SerialBot 补上的就是这一环，让 Agent 直接面对设备：
 <details>
 <summary>🤖 AI 页：MCP 服务设置</summary>
 
-<img src="docs/images/ai-dark.png" width="800" alt="AI 页：启用 MCP 服务、确认设置，以及 Claude Code 和 Claude Desktop 的配置">
+<img src="docs/images/ai-dark.png" width="800" alt="AI 页：启用 MCP 服务、确认设置、允许访问为仅本机，以及 Claude Code 和 Claude Desktop 的配置">
 
 </details>
 
