@@ -10,8 +10,17 @@ vi.mock("@tauri-apps/api/event", () => ({
 const save = vi.fn(async (_options: unknown) => "/picked.log");
 vi.mock("@tauri-apps/plugin-dialog", () => ({ save: (o: unknown) => save(o) }));
 
-const { claudeCommand, errorMessage, formatBytes, portLabel, saveFileName, tauriBackend, utcOffsetMin } =
-  await import("./api");
+const {
+  claudeCommand,
+  errorMessage,
+  formatBytes,
+  pinnedSession,
+  portLabel,
+  saveFileName,
+  sessionWindowLabel,
+  tauriBackend,
+  utcOffsetMin,
+} = await import("./api");
 const { detectLang, strings } = await import("./i18n");
 const { formatTime } = await import("./timefmt");
 
@@ -181,5 +190,22 @@ describe("helpers", () => {
   it("formats timestamps as local time with milliseconds", () => {
     const local = new Date(2026, 10, 17, 9, 5, 7, 42).getTime();
     expect(formatTime(local * 1000 + 999)).toBe("09:05:07.042");
+  });
+});
+
+describe("pinnedSession", () => {
+  it("reads the session id of a session window", () => {
+    expect(pinnedSession("#session=3")).toBe(3);
+    expect(pinnedSession("#session=42")).toBe(42);
+  });
+
+  it("is null for the main window and anything else", () => {
+    for (const hash of ["", "#commands", "#session=", "#session=x", "#session=3&x", "#session=-1"]) {
+      expect(pinnedSession(hash)).toBeNull();
+    }
+  });
+
+  it("names the window after the session", () => {
+    expect(sessionWindowLabel(3)).toBe("session-3");
   });
 });

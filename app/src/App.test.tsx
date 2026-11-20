@@ -318,6 +318,31 @@ class FakeBackend implements Backend {
   commandWindows: string[] = [];
   failCommandWindow = false;
 
+  sessionWindows = new Map<number, { title: string; onClosed: () => void }>();
+  focusedWindows: number[] = [];
+  failSessionWindow = false;
+  windowClosed = 0;
+
+  async openSessionWindow(id: number, title: string, onClosed: () => void) {
+    if (this.failSessionWindow) throw "window refused";
+    if (this.sessionWindows.has(id)) {
+      this.focusedWindows.push(id);
+      return;
+    }
+    this.sessionWindows.set(id, { title, onClosed });
+  }
+
+  /** The user closes a session's own window. */
+  closeSessionWindow(id: number) {
+    const w = this.sessionWindows.get(id);
+    this.sessionWindows.delete(id);
+    w?.onClosed();
+  }
+
+  async closeWindow() {
+    this.windowClosed++;
+  }
+
   openedLinks: string[] = [];
   failLink = false;
   versionAsked = 0;
@@ -677,7 +702,10 @@ describe("App", () => {
     });
     // Tabs show the alias; the full name is the tooltip.
     await waitFor(() => expect(tabs()).toEqual(["COM3", "esp32"]));
-    expect(screen.getByRole("tab", { name: "esp32" })).toHaveAttribute("title", "COM4 (esp32)");
+    expect(screen.getByRole("tab", { name: "esp32" })).toHaveAttribute(
+      "title",
+      "COM4 (esp32)\nDouble-click to open it in its own window",
+    );
     // The UI stays on its tab; the other session is read in the background.
     expect(log()).not.toHaveTextContent("from agent");
     await user.click(screen.getByRole("tab", { name: "esp32" }));
@@ -807,6 +835,109 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Commands" }));
     expect(panel().getByRole("button", { name: "Send version" })).toBeDisabled();
     expect(panel().getByRole("button", { name: "Send raw" })).toHaveTextContent("rawhex 01 02");
+  });
+
+  it("moves a session into its own window and back", async () => {
+    const { backend, user } = setup();
+    await openPort(user, "COM3");
+    act(() => backend.receive(1, "from ui\n"));
+    let agent = 0;
+    act(() => {
+      agent = backend.addSession("COM4", null).id;
+      backend.receive(agent, "from agent\n");
+    });
+    await user.click(await screen.findByRole("tab", { name: "COM4" }));
+    await waitFor(() => expect(log()).toHaveTextContent("from agent"));
+
+    await user.click(screen.getByRole("button", { name: "Open in its own window" }));
+    await waitFor(() => expect(tabs()).toEqual(["COM3"]));
+    expect(backend.sessionWindows.get(agent)?.title).toBe("COM4 — SerialBot");
+    // The main window moves on to a tab it still has.
+    await waitFor(() => expect(log()).toHaveTextContent("from ui"));
+
+    // The list still has it, marked; picking it brings its window forward.
+    await user.click(screen.getByRole("button", { name: "All 2 open ports" }));
+    const list = within(screen.getByRole("dialog", { name: "All 2 open ports" }));
+    const marked = list.getByRole("button", { name: /^COM4/ });
+    expect(marked).toHaveTextContent("COM4 ⧉");
+    expect(marked).toHaveAttribute("title", "In its own window: click to bring it to the front");
+    await user.click(marked);
+    expect(backend.focusedWindows).toEqual([agent]);
+
+    // A double-click moves a tab out too; with none left the list remains.
+    await user.dblClick(screen.getByRole("tab", { name: "COM3" }));
+    await waitFor(() => expect(tabs()).toEqual([]));
+    expect(screen.getByRole("button", { name: "All 2 open ports" })).toBeInTheDocument();
+
+    // Closing the window brings the tab back, selected.
+    act(() => backend.closeSessionWindow(agent));
+    await waitFor(() => expect(tabs()).toEqual(["COM4"]));
+    await waitFor(() => expect(log()).toHaveTextContent("from agent"));
+    expect(screen.getByRole("tab", { name: "COM4" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("reports a session window that cannot open", async () => {
+    const { backend, user } = setup();
+    backend.failSessionWindow = true;
+    await openPort(user, "COM3");
+    await user.click(screen.getByRole("button", { name: "Open in its own window" }));
+    await waitFor(() => expect(status()).toHaveTextContent("window refused"));
+    expect(tabs()).toEqual(["COM3"]);
+  });
+
+  it("shows one session in its own window", async () => {
+    const backend = new FakeBackend();
+    const other = backend.addSession("COM3", null);
+    const mine = backend.addSession("COM4", "esp32");
+    backend.receive(other.id, "not mine\n");
+    backend.receive(mine.id, "mine\n");
+    backend.capture = { active: true, path: "/home/me/esp32.log", bytes: 2048, error: null };
+    const onPinnedClosed = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <App
+        backend={backend}
+        lang="en"
+        storage={memoryStorage()}
+        pinned={mine.id}
+        onPinnedClosed={onPinnedClosed}
+      />,
+    );
+    await waitFor(() => expect(log()).toHaveTextContent("mine"));
+    expect(log()).not.toHaveTextContent("not mine");
+    // No sidebar, connection bar or tabs; the name instead, and the view options.
+    expect(screen.queryByRole("button", { name: "Terminal" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Port")).not.toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.getByText("COM4 (esp32)")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open in its own window" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show line numbers" })).toBeInTheDocument();
+    // A capture started in the main window shows here too.
+    await waitFor(() => expect(status()).toHaveTextContent("Saving to esp32.log"));
+    // MCP is shown, not a link to a page this window does not have.
+    expect(status()).not.toContainElement(screen.queryByRole("button", { name: /MCP/ }));
+
+    await user.click(screen.getByRole("button", { name: "Back to main window" }));
+    expect(backend.windowClosed).toBe(1);
+    expect(onPinnedClosed).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Close port" }));
+    expect(backend.closed).toEqual([mine.id]);
+    await waitFor(() => expect(onPinnedClosed).toHaveBeenCalled());
+  });
+
+  it("closes a session window whose session is already gone", async () => {
+    const onPinnedClosed = vi.fn();
+    render(
+      <App
+        backend={new FakeBackend()}
+        lang="en"
+        storage={memoryStorage()}
+        pinned={7}
+        onPinnedClosed={onPinnedClosed}
+      />,
+    );
+    await waitFor(() => expect(onPinnedClosed).toHaveBeenCalled());
   });
 
   it("has a help page with the version and links", async () => {

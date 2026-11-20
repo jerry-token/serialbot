@@ -19,11 +19,7 @@ import { withChecksum } from "./checksum";
 import { useCommandRunner } from "./useCommandRunner";
 import { useSharedGroups } from "./useSharedGroups";
 import { makeHighlighter, parseHighlights } from "./highlight";
-import {
-  type Command,
-  type CommandGroup,
-  browserStorage,
-} from "./commands";
+import { type Command, type CommandGroup, browserStorage } from "./commands";
 import { CommandPanel } from "./components/CommandPanel";
 import { DisplaySettings } from "./components/DisplaySettings";
 import { FileSend, type FileSendOptions } from "./components/FileSend";
@@ -44,7 +40,7 @@ import { SaveMenu } from "./components/SaveMenu";
 import { SendBar, type SendSettings } from "./components/SendBar";
 import { BREAK_MS, SignalBar } from "./components/SignalBar";
 import type { SignalStep } from "./signals";
-import { SessionTabs, Toggle } from "./components/SessionTabs";
+import { SessionTabs, Toggle, tabLabel } from "./components/SessionTabs";
 import { type Page, Sidebar } from "./components/Sidebar";
 import { ClearIcon, ListIcon, SearchIcon } from "./components/icons";
 import { type Lang, strings } from "./i18n";
@@ -98,6 +94,13 @@ interface Props {
   createScreen?: ScreenFactory;
   /** Chart for the Plot view (replaceable in tests). */
   createChart?: ChartFactory;
+  /**
+   * Set in a session's own window: shows only this session, without the
+   * sidebar, connection bar and tabs.
+   */
+  pinned?: number | null;
+  /** Called in a session's own window once its session is gone (closes the window). */
+  onPinnedClosed?: () => void;
 }
 
 /** What the window keeps per session: its rendered log and read position. */
@@ -128,6 +131,8 @@ export function App({
   storage = browserStorage(),
   createScreen = loadXtermScreen,
   createChart = loadUplotChart,
+  pinned = null,
+  onPinnedClosed,
 }: Props) {
   // App preferences, read first: the language decides every string.
   const [prefs, setPrefs] = useState(() => loadPrefs(storage));
@@ -153,7 +158,20 @@ export function App({
     flowControl: "none",
   });
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
-  const [activeId, setActiveId] = useState<number | null>(null);
+  const [activeId, setActiveId] = useState<number | null>(pinned);
+  // Main window: sessions shown in their own windows (their tabs are hidden).
+  const [popped, setPopped] = useState<ReadonlySet<number>>(new Set());
+  const poppedRef = useRef(popped);
+  poppedRef.current = popped;
+  // Whether this window shows a session: only its own in a session window,
+  // all but the popped-out ones in the main window.
+  const shows = useCallback(
+    (id: number) => (pinned !== null ? id === pinned : !poppedRef.current.has(id)),
+    [pinned],
+  );
+  // Whether the session list has been read once (a session window closes
+  // when its session is not in it).
+  const [listed, setListed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [send, setSend] = useState<SendSettings>({
@@ -204,9 +222,17 @@ export function App({
   const [encoding, setEncoding] = useState("utf-8");
   const [frameGapMs, setFrameGapMs] = useState(0);
   // Display settings also apply to sessions that appear later.
-  const display = useRef({ hex: false, encoding: "utf-8", frameGapMs: 0, ansi: true });
+  const display = useRef({
+    hex: false,
+    encoding: "utf-8",
+    frameGapMs: 0,
+    ansi: true,
+  });
   const [ansi, setAnsi] = useState(true);
-  const [frozen, setFrozen] = useState<{ id: number; lines: readonly Line[] } | null>(null);
+  const [frozen, setFrozen] = useState<{
+    id: number;
+    lines: readonly Line[];
+  } | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   /** Index into the matches; null follows the newest match. */
@@ -217,7 +243,10 @@ export function App({
   const viewOf = (id: number): SessionView => {
     let view = views.current.get(id);
     if (!view) {
-      const terminal = new Terminal({ ...DEFAULT_LIMITS, maxLines: prefs.maxLines });
+      const terminal = new Terminal({
+        ...DEFAULT_LIMITS,
+        maxLines: prefs.maxLines,
+      });
       terminal.setHex(display.current.hex);
       terminal.setEncoding(display.current.encoding);
       terminal.setFrameGap(display.current.frameGapMs);
@@ -291,11 +320,20 @@ export function App({
         if (!views.current.has(s.id)) void pull(s.id);
       }
       setActiveId((active) =>
-        active !== null && ids.has(active) ? active : (list.at(-1)?.id ?? null),
+        active !== null && ids.has(active) && shows(active)
+          ? active
+          : (list.filter((s) => shows(s.id)).at(-1)?.id ?? null),
       );
+      setListed(true);
     },
-    [pull],
+    [pull, shows],
   );
+
+  // A session window closes once its session is gone.
+  const pinnedGone = pinned !== null && listed && !sessions.some((s) => s.id === pinned);
+  useEffect(() => {
+    if (pinnedGone) onPinnedClosed?.();
+  }, [pinnedGone, onPinnedClosed]);
 
   // Keeps the selected port while it is still present.
   const applyPorts = useCallback((list: PortInfo[]) => {
@@ -414,8 +452,7 @@ export function App({
           port: settings.netPort,
           localPort: settings.localPort,
         });
-  const portSession =
-    ("path" in target && sessions.find((s) => s.port === target.path)) || null;
+  const portSession = ("path" in target && sessions.find((s) => s.port === target.path)) || null;
 
   const open = async () => {
     if ("error" in target) {
@@ -462,6 +499,47 @@ export function App({
       setBusy(false);
     }
   };
+
+  // Main window: shows a session in its own window and hides its tab until
+  // that window closes; then the tab comes back, selected.
+  const popOut = (id: number) => {
+    const session = sessions.find((s) => s.id === id);
+    if (!session || pinned !== null) return;
+    const title = `${tabLabel(session.port, session.alias)} — SerialBot`;
+    backend
+      .openSessionWindow(id, title, () => {
+        setPopped((all) => {
+          const next = new Set(all);
+          next.delete(id);
+          return next;
+        });
+        setActiveId(id);
+      })
+      .then(
+        () => {
+          const next = new Set(poppedRef.current).add(id);
+          poppedRef.current = next;
+          setPopped(next);
+          setActiveId((current) =>
+            current === id || current === null
+              ? (sessions.filter((s) => s.id !== id && !next.has(s.id)).at(-1)?.id ?? null)
+              : current,
+          );
+        },
+        (e: unknown) => setError(errorMessage(e)),
+      );
+  };
+
+  // Jobs may have been started in another window: read their state when a
+  // session is shown.
+  useEffect(() => {
+    if (activeId === null) return;
+    const id = activeId;
+    const report = (e: unknown) => setError(errorMessage(e));
+    backend.repeatStatus(id).then((r) => setRepeats((all) => ({ ...all, [id]: r })), report);
+    backend.captureStatus(id).then((c) => setCaptures((all) => ({ ...all, [id]: c })), report);
+    backend.fileSendStatus(id).then((f) => setFileSends((all) => ({ ...all, [id]: f })), report);
+  }, [backend, activeId]);
 
   // Terminal mode: keys go to the device as typed; the device echoes.
   const typeIntoDevice = async (data: string) => {
@@ -714,9 +792,11 @@ export function App({
   };
 
   const togglePause = (pause: boolean) => {
-    setFrozen(pause && activeView && activeId !== null
-      ? { id: activeId, lines: activeView.terminal.view.slice() }
-      : null);
+    setFrozen(
+      pause && activeView && activeId !== null
+        ? { id: activeId, lines: activeView.terminal.view.slice() }
+        : null,
+    );
   };
 
   // Ctrl/Cmd+F opens the search on the terminal page.
@@ -797,28 +877,62 @@ export function App({
   const mcpPort = mcp?.running && mcp.url ? Number(new URL(mcp.url).port) : null;
 
   return (
-    <div className="shell">
-      <Sidebar t={t} page={page} onSelect={setPage} mcpRunning={mcpPort !== null} />
+    <div className={`shell${pinned !== null ? " pinned" : ""}`}>
+      {pinned === null && (
+        <Sidebar t={t} page={page} onSelect={setPage} mcpRunning={mcpPort !== null} />
+      )}
       <main className="main">
         {page === "terminal" ? (
           <>
-            <ConnectionBar
-              t={t}
-              ports={ports}
-              settings={settings}
-              onChange={setSettings}
-              onRefresh={() => void refreshPorts()}
-              connected={portSession !== null}
-              busy={busy}
-              onOpen={() => void open()}
-              onClose={() => portSession && void close(portSession.id)}
-            />
+            {pinned === null && (
+              <ConnectionBar
+                t={t}
+                ports={ports}
+                settings={settings}
+                onChange={setSettings}
+                onRefresh={() => void refreshPorts()}
+                connected={portSession !== null}
+                busy={busy}
+                onOpen={() => void open()}
+                onClose={() => portSession && void close(portSession.id)}
+              />
+            )}
             <SessionTabs
               t={t}
               sessions={sessions}
               activeId={activeId}
               onSelect={setActiveId}
               onClose={(id) => void close(id)}
+              popped={popped}
+              onPopOut={popOut}
+              header={
+                pinned !== null &&
+                active && (
+                  <div className="pinned-head">
+                    <span className={`dot ${active.state}`} aria-hidden="true" />
+                    <span className="pinned-name">
+                      {active.alias ? `${active.port} (${active.alias})` : active.port}
+                    </span>
+                    <span className="spacer" />
+                    <button
+                      type="button"
+                      className="chip"
+                      title={t.backToMainHint}
+                      onClick={() => void backend.closeWindow()}
+                    >
+                      {t.backToMain}
+                    </button>
+                    <button
+                      type="button"
+                      className="chip danger"
+                      disabled={busy}
+                      onClick={() => void close(active.id)}
+                    >
+                      {t.closePort}
+                    </button>
+                  </div>
+                )
+              }
             >
               <Toggle
                 label={t.plot}
@@ -937,6 +1051,17 @@ export function App({
               >
                 <ClearIcon size={16} />
               </button>
+              {pinned === null && active && (
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label={t.popOut}
+                  title={t.popOutHint}
+                  onClick={() => popOut(active.id)}
+                >
+                  ⧉
+                </button>
+              )}
             </SessionTabs>
             <div className="work">
               {active ? (
@@ -1101,9 +1226,7 @@ export function App({
               className="chip"
               aria-pressed={active.aiAccess}
               title={t.aiAccessHint}
-              onClick={() =>
-                void sessionCall((id) => backend.setAiAccess(id, !active.aiAccess))
-              }
+              onClick={() => void sessionCall((id) => backend.setAiAccess(id, !active.aiAccess))}
             >
               {t.aiAccess}
             </button>
@@ -1147,10 +1270,17 @@ export function App({
           )}
           {error && <span className="error">{error}</span>}
           <span className="spacer" />
-          <button type="button" className="link" onClick={() => setPage("ai")}>
-            <span className={`dot ${mcpPort !== null ? "open" : "closed"}`} aria-hidden="true" />
-            {t.mcpShort(mcpPort)}
-          </button>
+          {pinned === null ? (
+            <button type="button" className="link" onClick={() => setPage("ai")}>
+              <span className={`dot ${mcpPort !== null ? "open" : "closed"}`} aria-hidden="true" />
+              {t.mcpShort(mcpPort)}
+            </button>
+          ) : (
+            <span>
+              <span className={`dot ${mcpPort !== null ? "open" : "closed"}`} aria-hidden="true" />
+              {t.mcpShort(mcpPort)}
+            </span>
+          )}
         </div>
       </main>
       <ApprovalDialog

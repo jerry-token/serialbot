@@ -36,15 +36,25 @@ interface Props {
   activeId: number | null;
   onSelect: (id: number) => void;
   onClose: (id: number) => void;
+  /** Sessions shown in their own windows: no tab here, marked ⧉ in the list. */
+  popped?: ReadonlySet<number>;
+  /** Shows a session in its own window (double-click on a tab, or a list entry marked ⧉). */
+  onPopOut?: (id: number) => void;
+  /** Replaces the tab row (a session's own window shows its name instead). */
+  header?: ReactNode;
   /** View options, shown in their own row under the tabs. */
   children?: ReactNode;
 }
 
+const NONE: ReadonlySet<number> = new Set();
+
 /**
  * One tab per session, including sessions opened by MCP clients. Tabs show
  * short names and scroll sideways with the mouse wheel (no scroll bar over
- * them); with two or more sessions, ▾ lists them all by full name. The
- * view options get a row of their own, so the tabs have the full width.
+ * them); ▾ lists every session by full name. A double-click moves a tab into
+ * a window of its own; such sessions have no tab here and are marked ⧉ in
+ * the list, where picking one brings its window to the front. The view
+ * options get a row of their own, so the tabs have the full width.
  */
 export function SessionTabs({
   t,
@@ -52,16 +62,20 @@ export function SessionTabs({
   activeId,
   onSelect,
   onClose,
+  popped = NONE,
+  onPopOut,
+  header,
   children,
 }: Props) {
   const strip = useRef<HTMLDivElement>(null);
+  const tabs = sessions.filter((s) => !popped.has(s.id));
 
   // Keep the active tab in view when it changes or a tab is added.
   useEffect(() => {
     strip.current
       ?.querySelector(".tab.active")
       ?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
-  }, [activeId, sessions.length]);
+  }, [activeId, tabs.length]);
 
   // A vertical wheel scrolls the tabs sideways.
   const onWheel = (e: WheelEvent<HTMLDivElement>) => {
@@ -69,66 +83,76 @@ export function SessionTabs({
     if (e.deltaX === 0 && e.deltaY !== 0) el.scrollLeft += e.deltaY;
   };
 
-  return (
-    <>
-      <div className="tabs-row">
-        <div className="tabs" role="tablist" ref={strip} onWheel={onWheel}>
-          {sessions.map((s) => (
-            <div
-              key={s.id}
-              className={`tab ${s.id === activeId ? "active" : ""}`}
+  const row = header ? (
+    <div className="tabs-row">{header}</div>
+  ) : (
+    <div className="tabs-row">
+      <div className="tabs" role="tablist" ref={strip} onWheel={onWheel}>
+        {tabs.map((s) => (
+          <div key={s.id} className={`tab ${s.id === activeId ? "active" : ""}`}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={s.id === activeId}
+              title={onPopOut ? `${fullName(s)}\n${t.popOutByDoubleClick}` : fullName(s)}
+              onClick={() => onSelect(s.id)}
+              onDoubleClick={() => onPopOut?.(s.id)}
             >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={s.id === activeId}
-                title={fullName(s)}
-                onClick={() => onSelect(s.id)}
-              >
-                <span className={`dot ${s.state}`} aria-hidden="true" />
-                <span className="tab-name">{tabLabel(s.port, s.alias)}</span>
-              </button>
-              <button
-                type="button"
-                className="tab-close"
-                aria-label={`${t.closeSession} ${s.port}`}
-                title={t.closeSession}
-                onClick={() => onClose(s.id)}
-              >
-                ×
-              </button>
-            </div>
-          ))}
-        </div>
-        {sessions.length > 1 && (
-          <Popover
-            label={t.allSessions(sessions.length)}
-            className="icon-button tabs-all"
-            alignRight
-            button="▾"
-          >
-            {(close) => (
-              <ul className="popover-wide session-list">
-                {sessions.map((s) => (
+              <span className={`dot ${s.state}`} aria-hidden="true" />
+              <span className="tab-name">{tabLabel(s.port, s.alias)}</span>
+            </button>
+            <button
+              type="button"
+              className="tab-close"
+              aria-label={`${t.closeSession} ${s.port}`}
+              title={t.closeSession}
+              onClick={() => onClose(s.id)}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+      {(sessions.length > 1 || popped.size > 0) && (
+        <Popover
+          label={t.allSessions(sessions.length)}
+          className="icon-button tabs-all"
+          alignRight
+          button="▾"
+        >
+          {(close) => (
+            <ul className="popover-wide session-list">
+              {sessions.map((s) => {
+                const own = popped.has(s.id);
+                return (
                   <li key={s.id}>
                     <button
                       type="button"
                       aria-current={s.id === activeId}
+                      title={own ? t.inOwnWindow : undefined}
                       onClick={() => {
-                        onSelect(s.id);
+                        if (own) onPopOut?.(s.id);
+                        else onSelect(s.id);
                         close();
                       }}
                     >
                       <span className={`dot ${s.state}`} aria-hidden="true" />
                       {fullName(s)}
+                      {own && <span className="own-window"> ⧉</span>}
                     </button>
                   </li>
-                ))}
-              </ul>
-            )}
-          </Popover>
-        )}
-      </div>
+                );
+              })}
+            </ul>
+          )}
+        </Popover>
+      )}
+    </div>
+  );
+
+  return (
+    <>
+      {row}
       {children && <div className="view-options">{children}</div>}
     </>
   );
