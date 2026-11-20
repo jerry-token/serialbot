@@ -320,7 +320,9 @@ pub(crate) struct SessionOut {
     pub port: String,
     /// "serial" or "mock".
     pub transport: String,
-    /// "open", "disconnected", "closed" or "failed".
+    /// "open", "disconnected" (device lost), "closed" (port closed; the
+    /// session and log stay, session.open or session.reopen continues it)
+    /// or "failed".
     pub state: String,
     /// Reason, when the state is "failed".
     pub error: Option<String>,
@@ -332,6 +334,7 @@ pub(crate) struct SessionOut {
 impl From<SessionSummary> for SessionOut {
     fn from(s: SessionSummary) -> Self {
         let (state, error) = match s.state {
+            _ if s.released => ("closed", None),
             SessionState::Open => ("open", None),
             SessionState::Disconnected => ("disconnected", None),
             SessionState::Closed => ("closed", None),
@@ -775,7 +778,7 @@ impl SerialTools {
 
     #[tool(
         name = "session.open",
-        description = "Open a serial port, or a network endpoint (tcp://host:port, tcp-server://addr:port, udp://host:port?local=addr:port), in a new session. Fails if it is already open; reuse that session instead.",
+        description = "Open a serial port, or a network endpoint (tcp://host:port, tcp-server://addr:port, udp://host:port?local=addr:port). A closed or lost session on the same port continues (same id, log and tab) with these settings; otherwise a new session starts. Fails if it is already open; reuse that session instead.",
         annotations(
             read_only_hint = false,
             destructive_hint = false,
@@ -808,10 +811,25 @@ impl SerialTools {
         self.ask("session.open", None, &config.path, detail).await?;
         let manager = Arc::clone(&self.manager);
         let id = blocking(move || {
-            manager
-                .open(&config, args.alias)
-                .map(|s| s.id())
-                .map_err(|e| e.to_string())
+            // The newest closed or lost session on the port continues.
+            let resumable = manager
+                .list()
+                .into_iter()
+                .filter(|s| s.state != SessionState::Open && s.state != SessionState::Closed)
+                .filter(|s| s.info.name == config.path)
+                .map(|s| s.id)
+                .max();
+            let result = match resumable {
+                Some(id) => (|| {
+                    if args.alias.is_some() {
+                        manager.set_alias(id, args.alias)?;
+                    }
+                    manager.reopen(id, &config)?;
+                    Ok(id)
+                })(),
+                None => manager.open(&config, args.alias).map(|s| s.id()),
+            };
+            result.map_err(|e: serialbot_core::ManagerError| e.to_string())
         })
         .await?;
         self.manager
@@ -997,7 +1015,7 @@ impl SerialTools {
 impl SerialTools {
     #[tool(
         name = "session.close",
-        description = "Close a session's port. The session stays listed and its log readable; it cannot be reopened (open the port again for a new session).",
+        description = "Close a session's port. The session stays listed with its log, so the user can still look back at what happened; session.open on the same port or session.reopen continues it.",
         annotations(
             read_only_hint = false,
             destructive_hint = true,
@@ -1013,7 +1031,9 @@ impl SerialTools {
             .await?;
         let id = session.id();
         let manager = Arc::clone(&self.manager);
-        blocking(move || manager.close(id).map_err(|e| e.to_string())).await?;
+        // Released rather than closed: the session can continue later, as
+        // when the user closes a port in the app.
+        blocking(move || manager.release(id).map_err(|e| e.to_string())).await?;
         self.summary(id)
     }
 

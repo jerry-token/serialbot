@@ -205,7 +205,7 @@ async fn lists_the_curated_tools_with_annotations() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn sessions_are_released_reopened_configured_and_closed() {
+async fn sessions_are_released_reopened_and_configured() {
     let h = Harness::start().await;
     let client = h.client().await;
     ok(
@@ -216,7 +216,7 @@ async fn sessions_are_released_reopened_configured_and_closed() {
     .await;
 
     let released = ok(&client, "session.release", json!({"session": "board"})).await;
-    assert_eq!(released["state"], "disconnected");
+    assert_eq!(released["state"], "closed");
     assert!(
         err(
             &client,
@@ -271,19 +271,25 @@ async fn sessions_are_released_reopened_configured_and_closed() {
         .contains("positive")
     );
 
+    client.cancel().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn closing_keeps_the_session_and_open_continues_it() {
+    let h = Harness::start().await;
+    let client = h.client().await;
+    ok(
+        &client,
+        "session.open",
+        json!({"port": "mock0", "alias": "board"}),
+    )
+    .await;
+    // Closing keeps the session and its log, so the user can look back at
+    // what the agent did.
     let closed = ok(&client, "session.close", json!({"session": "board"})).await;
     assert_eq!(closed["state"], "closed");
-    assert!(
-        err(&client, "session.reopen", json!({"session": "board"}))
-            .await
-            .contains("Closed")
-    );
-    assert!(
-        err(&client, "session.release", json!({"session": "board"}))
-            .await
-            .contains("Closed")
-    );
-    // Still listed with its log.
+    let listed = ok(&client, "session.list", json!({})).await;
+    assert_eq!(listed["sessions"][0]["state"], "closed");
     let read = ok(&client, "io.read", json!({"session": "board"})).await;
     assert!(
         read["entries"]
@@ -292,6 +298,62 @@ async fn sessions_are_released_reopened_configured_and_closed() {
             .iter()
             .any(|e| e["data"] == "released")
     );
+    assert!(
+        err(
+            &client,
+            "io.write",
+            json!({"session": "board", "text": "x"})
+        )
+        .await
+        .contains("Disconnected")
+    );
+    // Closing twice is fine; session.reopen continues it.
+    ok(&client, "session.close", json!({"session": "board"})).await;
+    let reopened = ok(&client, "session.reopen", json!({"session": "board"})).await;
+    assert_eq!(reopened["state"], "open");
+
+    // session.open on the same port continues the closed session too, with
+    // the new settings and a new alias if one is given.
+    ok(&client, "session.close", json!({"session": "board"})).await;
+    let again = ok(
+        &client,
+        "session.open",
+        json!({"port": "mock0", "baud_rate": 9600, "alias": "dut"}),
+    )
+    .await;
+    assert_eq!(again["id"], "s1");
+    assert_eq!(again["alias"], "dut");
+    assert_eq!(again["state"], "open");
+    let listed = ok(&client, "session.list", json!({})).await;
+    assert_eq!(listed["sessions"].as_array().unwrap().len(), 1);
+    ok(&client, "io.write", json!({"session": "dut", "text": "ok"})).await;
+    assert_eq!(h.device("mock0").take_written(), b"ok");
+    // Without an alias the old one stays.
+    ok(&client, "session.close", json!({"session": "dut"})).await;
+    let kept = ok(&client, "session.open", json!({"port": "mock0"})).await;
+    assert_eq!(
+        (kept["id"].clone(), kept["alias"].clone()),
+        (json!("s1"), json!("dut"))
+    );
+    // An alias taken by another session is refused and the session stays closed.
+    ok(
+        &client,
+        "session.open",
+        json!({"port": "mock1", "alias": "other"}),
+    )
+    .await;
+    ok(&client, "session.close", json!({"session": "dut"})).await;
+    assert!(
+        err(
+            &client,
+            "session.open",
+            json!({"port": "mock0", "alias": "other"})
+        )
+        .await
+        .contains("other")
+    );
+    let listed = ok(&client, "session.list", json!({})).await;
+    assert_eq!(listed["sessions"][0]["state"], "closed");
     client.cancel().await.unwrap();
 }
 

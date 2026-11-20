@@ -181,7 +181,7 @@ On Windows the command is the path of `serialbot.exe` (installed or portable); o
 | `io.wait_for` | Wait until received data matches a regex |
 | `io.send_and_expect` | Send a command and wait for the expected reply |
 | `io.signals` | Set DTR / RTS, read CTS / DSR / RI / CD |
-| `session.close` | Close a session's port; its log stays readable |
+| `session.close` | Close a session's port; the session and log stay so you can look back, and `session.open` on that port continues it |
 | `session.release` / `session.reopen` | Hand the port to another tool (a flasher) and take it back; the log continues |
 | `session.configure` | Change the baud rate without closing the port |
 | `log.mark` / `log.query` | Set a named marker; summarize or search what happened after it |
