@@ -71,7 +71,7 @@ You stay in charge. Every change to a port needs your approval, and every line t
 - 🤖 A built-in MCP server lets Claude Code, Claude Desktop and other agents list and open ports, send data, wait for replies and drive DTR / RTS, on the same sessions you see in the window.
 - ✅ Before an agent sends data, toggles a line or opens, closes or reconfigures a port, SerialBot asks you: **allow once**, **allow for the session**, or **deny** (unanswered requests are refused after 60 s).
 - 🟣 Everything an agent did is tagged **AI** in the log; **AI access** in the status bar keeps a session away from agents.
-- 🔒 The server is off until you turn it on, listens on `127.0.0.1` only and needs a token.
+- 🔒 The server is off until you turn it on, listens on `127.0.0.1` by default and always needs a token. It can also serve the local network (`0.0.0.0`) when you choose to.
 
 **Comfortable**
 - 🌗 Light, dark or system theme; log font size; lines kept per session; keep the window on top.
@@ -156,7 +156,7 @@ Get the file for your system from [Releases](https://github.com/jerry-token/seri
 
 ## 🤖 Let AI agents use your ports (MCP)
 
-1. Open **AI** on the left and tick **Enable MCP server**. It listens on `127.0.0.1` only and requires a token.
+1. Open **AI** on the left and tick **Enable MCP server**. It listens on `127.0.0.1` only and requires a token. To let agents on other computers in your network use it, set **Reachable from** to *The local network too*; the AI page then shows the address and command for those computers. Use that only on networks you trust: HTTP is not encrypted, and the token is the only protection.
 2. Press **Copy** and run the command in a terminal, for example:
    ```sh
    claude mcp add --transport http serialbot http://127.0.0.1:9633/mcp \

@@ -111,12 +111,22 @@ impl McpOptions {
         self
     }
 
+    /// Accepts any `Host` name, for a server reachable from the local
+    /// network (clients use the machine's address or name). The token is
+    /// then the only protection; browsers are still kept out by the
+    /// `Origin` check.
+    #[must_use]
+    pub fn with_any_host(mut self) -> Self {
+        self.allowed_hosts.clear();
+        self
+    }
+
     /// The bearer token clients must send.
     pub fn token(&self) -> &str {
         &self.token
     }
 
-    /// The accepted `Host` names.
+    /// The accepted `Host` names; empty means any.
     pub fn allowed_hosts(&self) -> &[String] {
         &self.allowed_hosts
     }
@@ -183,5 +193,6 @@ mod tests {
         assert!(!format!("{options:?}").contains("0123456789abcdef"));
         let options = options.with_allowed_hosts(["192.168.1.5"]);
         assert_eq!(options.allowed_hosts(), ["192.168.1.5"]);
+        assert!(options.with_any_host().allowed_hosts().is_empty());
     }
 }

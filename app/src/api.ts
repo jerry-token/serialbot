@@ -131,6 +131,8 @@ export interface McpSettings {
   token: string;
   /** Whether the user confirms each change an agent makes. */
   confirm: boolean;
+  /** "local": this computer only (127.0.0.1); "lan": also the local network (0.0.0.0). */
+  listen: "local" | "lan";
 }
 
 /** An agent action waiting for the user's answer. */
@@ -152,6 +154,8 @@ export interface McpStatus {
   settings: McpSettings;
   running: boolean;
   url: string | null;
+  /** URL for other computers while running on the local network, if known. */
+  lanUrl: string | null;
   error: string | null;
   /** Program stdio-only MCP clients start with the argument `mcp`. */
   stdioCommand: string | null;

@@ -752,6 +752,12 @@ label.check {
   color: var(--muted);
 }
 
+/* A risk the user chose, such as serving MCP to the network. */
+.warning {
+  color: var(--news);
+  max-width: 70ch;
+}
+
 .page > .muted {
   max-width: 760px;
 }
