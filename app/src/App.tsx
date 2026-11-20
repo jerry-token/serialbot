@@ -394,6 +394,7 @@ export function App({
         keep(await backend.onSignalsChanged(storeSignals));
         keep(await backend.onPortsChanged(applyPorts));
         keep(await backend.onApprovalsChanged(setApprovals));
+        keep(await backend.onMcpChanged(setMcp));
         setApprovals(await backend.pendingApprovals());
         const list = await backend.listSessions();
         if (!disposed) applySessions(list);
@@ -568,6 +569,13 @@ export function App({
         (e: unknown) => setError(errorMessage(e)),
       );
   };
+
+  // An agent's request is asked in one window only: the one showing its
+  // session (the main window for new ports and sessions without a window).
+  const asksHere = (request: ApprovalRequest) =>
+    pinned !== null
+      ? request.session === pinned
+      : request.session === null || !popped.has(request.session);
 
   // Jobs may have been started in another window: read their state when a
   // session is shown.
@@ -1325,7 +1333,7 @@ export function App({
       </main>
       <ApprovalDialog
         t={t}
-        queue={approvals}
+        queue={approvals.filter(asksHere)}
         onAnswer={(id, decision) => {
           setApprovals((queue) => queue.filter((r) => r.id !== id));
           backend.answerApproval(id, decision).catch((e: unknown) => setError(errorMessage(e)));

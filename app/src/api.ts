@@ -226,6 +226,8 @@ export interface Backend {
   /** Called when the line levels of an open session change. */
   onSignalsChanged(handler: (signals: SignalsInfo) => void): Promise<Unlisten>;
   mcpStatus(): Promise<McpStatus>;
+  /** Called with the new status whenever the MCP server starts, stops or changes (from any window). */
+  onMcpChanged(handler: (status: McpStatus) => void): Promise<Unlisten>;
   mcpApply(settings: McpSettings): Promise<McpStatus>;
   mcpRegenerateToken(): Promise<McpStatus>;
   pendingApprovals(): Promise<ApprovalRequest[]>;
@@ -281,6 +283,7 @@ export const tauriBackend: Backend = {
     invoke("set_signals", { id, dtr: levels.dtr ?? null, rts: levels.rts ?? null }),
   onSignalsChanged: (handler) =>
     listen<SignalsInfo>("signals-changed", (event) => handler(event.payload)),
+  onMcpChanged: (handler) => listen<McpStatus>("mcp-changed", (event) => handler(event.payload)),
   setAlwaysOnTop: (on) => getCurrentWindow().setAlwaysOnTop(on),
   appVersion: () => getVersion(),
   openLink: (url) => invoke("open_link", { url }),
