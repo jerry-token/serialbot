@@ -59,3 +59,23 @@ export function endpointPath(
 export function isNetworkPath(path: string): boolean {
   return /^(tcp|tcp-server|udp):\/\//.test(path);
 }
+
+/**
+ * The connection-bar fields for a session's port path: the inverse of
+ * `endpointPath` for network endpoints (brackets around IPv6 hosts are
+ * dropped, a TCP server's listen address is not a field), and the path
+ * itself for a serial port.
+ */
+export function endpointFields(path: string): { kind: ConnectionKind } & NetFields {
+  const empty = { host: "", port: "", localPort: "" };
+  const match = /^(tcp|tcp-server|udp):\/\/([^?]*)(?:\?local=[^:]*:(\d+))?$/.exec(path);
+  if (!match) return { kind: "serial", ...empty };
+  const kind = match[1] as Exclude<ConnectionKind, "serial">;
+  const address = match[2] ?? "";
+  const localPort = match[3] ?? "";
+  const at = address.lastIndexOf(":");
+  const rawHost = at >= 0 ? address.slice(0, at) : address;
+  const port = at >= 0 ? address.slice(at + 1) : "";
+  const host = rawHost.replace(/^\[(.*)\]$/, "$1");
+  return { kind, host: kind === "tcp-server" ? "" : host, port, localPort };
+}

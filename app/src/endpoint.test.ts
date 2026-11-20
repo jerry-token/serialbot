@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { endpointPath, isNetworkPath } from "./endpoint";
+import { endpointFields, endpointPath, isNetworkPath } from "./endpoint";
 
 const f = (host: string, port: string, localPort = "") => ({ host, port, localPort });
 
@@ -43,5 +43,50 @@ describe("isNetworkPath", () => {
       expect(isNetworkPath(p)).toBe(true);
     }
     for (const p of ["COM3", "/dev/ttyUSB0", "tcpdump"]) expect(isNetworkPath(p)).toBe(false);
+  });
+});
+
+describe("endpointFields", () => {
+  it("reads the fields back from each kind of endpoint", () => {
+    expect(endpointFields("tcp://192.168.4.1:333")).toEqual({
+      kind: "tcp",
+      host: "192.168.4.1",
+      port: "333",
+      localPort: "",
+    });
+    expect(endpointFields("tcp://[fe80::1]:23").host).toBe("fe80::1");
+    expect(endpointFields("tcp-server://:9000")).toEqual({
+      kind: "tcp-server",
+      host: "",
+      port: "9000",
+      localPort: "",
+    });
+    expect(endpointFields("tcp-server://0.0.0.0:9000").host).toBe("");
+    expect(endpointFields("udp://10.0.0.2:5000?local=:6000")).toEqual({
+      kind: "udp",
+      host: "10.0.0.2",
+      port: "5000",
+      localPort: "6000",
+    });
+    expect(endpointFields("udp://?local=:6000")).toEqual({
+      kind: "udp",
+      host: "",
+      port: "",
+      localPort: "6000",
+    });
+  });
+
+  it("round-trips with endpointPath", () => {
+    for (const path of ["tcp://h:1", "tcp-server://:2", "udp://[::1]:3?local=:4", "udp://?local=:5"]) {
+      const { kind, ...fields } = endpointFields(path);
+      if (kind === "serial") throw new Error(path);
+      expect(endpointPath(kind, fields)).toEqual({ path });
+    }
+  });
+
+  it("treats anything else as a serial port", () => {
+    for (const path of ["COM3", "/dev/ttyUSB0", "tcp:/x", ""]) {
+      expect(endpointFields(path).kind).toBe("serial");
+    }
   });
 });

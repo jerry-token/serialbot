@@ -702,15 +702,27 @@ describe("App", () => {
     });
     // Tabs show the alias; the full name is the tooltip.
     await waitFor(() => expect(tabs()).toEqual(["COM3", "esp32"]));
-    expect(screen.getByRole("tab", { name: "esp32" })).toHaveAttribute(
-      "title",
-      "COM4 (esp32)\nDouble-click to open it in its own window",
+    // Its data arrived while COM3 was shown: the dot and tooltip say so.
+    const esp32 = screen.getByRole("tab", { name: "esp32" });
+    await waitFor(() =>
+      expect(esp32).toHaveAttribute(
+        "title",
+        "COM4 (esp32)\nNew activity since you last looked\nDouble-click to open it in its own window",
+      ),
     );
+    expect(esp32.querySelector(".dot")).toHaveClass("news");
+    expect(screen.getByRole("tab", { name: "COM3" }).querySelector(".dot")).not.toHaveClass("news");
     // The UI stays on its tab; the other session is read in the background.
     expect(log()).not.toHaveTextContent("from agent");
     await user.click(screen.getByRole("tab", { name: "esp32" }));
     await waitFor(() => expect(log()).toHaveTextContent("from agent"));
     expect(log()).not.toHaveTextContent("from ui");
+    // Looking at it clears the news; data for the tab left behind marks that one.
+    expect(esp32.querySelector(".dot")).not.toHaveClass("news");
+    act(() => backend.receive(1, "more from ui\n"));
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "COM3" }).querySelector(".dot")).toHaveClass("news"),
+    );
 
     // ▾ lists every session by its full name and switches to the one picked.
     await user.click(screen.getByRole("button", { name: "All 2 open ports" }));
@@ -835,6 +847,35 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Commands" }));
     expect(panel().getByRole("button", { name: "Send version" })).toBeDisabled();
     expect(panel().getByRole("button", { name: "Send raw" })).toHaveTextContent("rawhex 01 02");
+  });
+
+  it("points the connection bar at the tab being looked at", async () => {
+    const { backend, user } = setup();
+    await openPort(user, "COM3");
+    let tcp = 0;
+    act(() => {
+      backend.addSession("COM4", null);
+      tcp = backend.addSession("tcp://[fe80::1]:333", null).id;
+      backend.addSession("/tmp/ttyV0", null);
+    });
+    // Selecting a tab selects its port: Close now closes that one.
+    await user.click(await screen.findByRole("tab", { name: "COM4" }));
+    await waitFor(() => expect(screen.getByLabelText("Port")).toHaveValue("COM4"));
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
+    // A network session fills in the network fields.
+    await user.click(screen.getByRole("tab", { name: "tcp://[fe80::1]:333" }));
+    await waitFor(() => expect(screen.getByLabelText("Connection type")).toHaveValue("tcp"));
+    expect(screen.getByLabelText("Host")).toHaveValue("fe80::1");
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(backend.closed).toEqual([tcp]));
+    // A port the system does not list is still shown and stays selected.
+    await user.click(screen.getByRole("tab", { name: "/tmp/ttyV0" }));
+    await waitFor(() => expect(screen.getByLabelText("Port")).toHaveValue("/tmp/ttyV0"));
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(screen.getByLabelText("Port")).toHaveValue("/tmp/ttyV0");
+    // Another port can still be picked to open next to it.
+    await user.selectOptions(screen.getByLabelText("Port"), "COM4");
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
   });
 
   it("moves a session into its own window and back", async () => {
