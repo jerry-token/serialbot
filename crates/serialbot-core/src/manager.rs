@@ -74,6 +74,9 @@ pub struct SessionSummary {
     pub auto_reconnect: bool,
     /// Whether AI agents may use it (see [`SessionManager::set_ai_access`]).
     pub ai_access: bool,
+    /// Whether its port was handed back on request (see
+    /// [`SessionManager::release`]); it waits for a manual reopen.
+    pub released: bool,
 }
 
 /// Owns all sessions of the process.
@@ -248,6 +251,34 @@ impl SessionManager {
         result
     }
 
+    /// Like [`SessionManager::reconnect`], but with new port settings (baud
+    /// rate, framing, …) that are kept for later reconnects. The path must
+    /// name the session's port; settings stay unchanged if reopening fails.
+    pub fn reopen(&self, id: SessionId, config: &SerialConfig) -> Result<(), ManagerError> {
+        let previous = {
+            let mut reg = self.lock();
+            let current = reg
+                .configs
+                .get(&id)
+                .cloned()
+                .ok_or(ManagerError::UnknownSession(id))?;
+            if port_key(&current.path) != port_key(&config.path) {
+                return Err(TransportError::InvalidConfig(format!(
+                    "session {id} is on {}, not {}",
+                    current.path, config.path
+                ))
+                .into());
+            }
+            reg.configs.insert(id, config.clone());
+            current
+        };
+        let result = self.reconnect(id);
+        if let (Err(_), Some(slot)) = (&result, self.lock().configs.get_mut(&id)) {
+            *slot = previous;
+        }
+        result
+    }
+
     /// Hands a session's port back to the operating system, keeping the
     /// session and its log (see [`Session::release`]). Automatic
     /// reconnecting leaves it alone until [`SessionManager::reconnect`]
@@ -257,6 +288,13 @@ impl SessionManager {
         session.release()?;
         self.lock().released.insert(id);
         Ok(())
+    }
+
+    /// Whether the session's port was handed back with
+    /// [`SessionManager::release`] and not reopened since (false for
+    /// unknown sessions).
+    pub fn is_released(&self, id: SessionId) -> bool {
+        self.lock().released.contains(&id)
     }
 
     /// Changes a session's baud rate without closing the port, and
@@ -348,6 +386,7 @@ impl SessionManager {
                 state: s.state(),
                 auto_reconnect: reg.auto.contains(&s.id()),
                 ai_access: !reg.ai_blocked.contains(&s.id()),
+                released: reg.released.contains(&s.id()),
             })
             .collect()
     }
@@ -609,6 +648,60 @@ mod tests {
         assert!(m.set_baud_rate(s.id(), 9600).is_err(), "not open");
         m.reconnect(s.id()).unwrap();
         assert_eq!(*bauds.lock().unwrap(), [115_200, 921_600]);
+    }
+
+    #[test]
+    fn reopen_continues_with_new_settings() {
+        let present = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let bauds = Arc::new(Mutex::new(Vec::new()));
+        let devices = Arc::new(Mutex::new(Vec::new()));
+        let (is_present, opened_bauds, opened) = (
+            Arc::clone(&present),
+            Arc::clone(&bauds),
+            Arc::clone(&devices),
+        );
+        let m = SessionManager::new(
+            Box::new(move |c: &SerialConfig| {
+                if !is_present.load(std::sync::atomic::Ordering::SeqCst) {
+                    return Err(TransportError::NotFound(c.path.clone()));
+                }
+                opened_bauds.lock().unwrap().push(c.baud_rate);
+                let (conn, dev) = mock::connection(&c.path, Duration::from_millis(5));
+                opened.lock().unwrap().push(dev);
+                Ok(conn)
+            }),
+            Arc::new(ManualClock::new(0)),
+            SessionOptions::default(),
+        );
+        let s = m.open(&cfg("COM3"), None).unwrap();
+        assert!(!m.is_released(s.id()));
+        m.release(s.id()).unwrap();
+        assert!(m.list()[0].released);
+        assert!(m.is_released(s.id()));
+        assert!(!m.is_released(SessionId(99)));
+
+        // Another port is refused and changes nothing.
+        let err = m.reopen(s.id(), &cfg("COM4")).unwrap_err();
+        assert!(err.to_string().contains("not COM4"), "{err}");
+        assert!(matches!(
+            m.reopen(SessionId(99), &cfg("COM3")),
+            Err(ManagerError::UnknownSession(_))
+        ));
+
+        // A failed reopen keeps the old settings.
+        present.store(false, std::sync::atomic::Ordering::SeqCst);
+        assert!(m.reopen(s.id(), &SerialConfig::new("COM3", 9600)).is_err());
+        assert!(m.list()[0].released, "still waiting");
+        present.store(true, std::sync::atomic::Ordering::SeqCst);
+
+        m.reopen(s.id(), &SerialConfig::new("COM3", 921_600))
+            .unwrap();
+        assert_eq!(s.state(), SessionState::Open);
+        assert!(!m.list()[0].released);
+        // Later reconnects use the new settings too.
+        unplug(&s, &devices, 1);
+        m.reconnect(s.id()).unwrap();
+        assert_eq!(*bauds.lock().unwrap(), [115_200, 921_600, 921_600]);
     }
 
     #[test]

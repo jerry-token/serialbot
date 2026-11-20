@@ -315,8 +315,13 @@ export function App({
           if (chunk.state !== "open" && !view.ended) {
             // Everything received before the port went away has been shown.
             view.ended = true;
-            view.terminal.info(chunk.error ?? t.deviceGone, nowUs());
-            noteActivity(id);
+            if (chunk.state === "closed") {
+              // Closed on request: say so, and how to continue.
+              view.terminal.info(t.portClosed, nowUs());
+            } else {
+              view.terminal.info(chunk.error ?? t.deviceGone, nowUs());
+              noteActivity(id);
+            }
             redraw();
           }
           if (!view.again) break;
@@ -479,7 +484,10 @@ export function App({
           port: settings.netPort,
           localPort: settings.localPort,
         });
-  const portSession = ("path" in target && sessions.find((s) => s.port === target.path)) || null;
+  // The open session on the port in the connection bar, which Close closes.
+  const portSession =
+    ("path" in target && sessions.find((s) => s.port === target.path && s.state === "open")) ||
+    null;
 
   // The connection bar follows the selected tab, so Close closes the port
   // being looked at. It can still be changed to open or close another one.
@@ -514,10 +522,27 @@ export function App({
         parity: settings.parity,
         stopBits: settings.stopBits,
         flowControl: settings.flowControl,
+        // The tab being looked at continues if it is on this port and closed.
+        ...(active && active.port === target.path && active.state !== "open"
+          ? { session: active.id }
+          : {}),
       });
       setSessions((list) => (list.some((s) => s.id === opened.id) ? list : [...list, opened]));
       setActiveId(opened.id);
       void pull(opened.id);
+      setError(null);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Closes the port but keeps the tab and its log; Open continues it.
+  const release = async (id: number) => {
+    setBusy(true);
+    try {
+      await backend.releaseSession(id);
       setError(null);
     } catch (e) {
       setError(errorMessage(e));
@@ -941,7 +966,7 @@ export function App({
                 connected={portSession !== null}
                 busy={busy}
                 onOpen={() => void open()}
-                onClose={() => portSession && void close(portSession.id)}
+                onClose={() => portSession && void release(portSession.id)}
               />
             )}
             <SessionTabs
@@ -970,14 +995,25 @@ export function App({
                     >
                       {t.backToMain}
                     </button>
-                    <button
-                      type="button"
-                      className="chip danger"
-                      disabled={busy}
-                      onClick={() => void close(active.id)}
-                    >
-                      {t.closePort}
-                    </button>
+                    {active.state === "closed" ? (
+                      <button
+                        type="button"
+                        className="chip"
+                        disabled={busy}
+                        onClick={() => void sessionCall((id) => backend.reconnectSession(id))}
+                      >
+                        {t.openPort}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="chip danger"
+                        disabled={busy}
+                        onClick={() => void release(active.id)}
+                      >
+                        {t.closePort}
+                      </button>
+                    )}
                   </div>
                 )
               }

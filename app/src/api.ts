@@ -47,6 +47,8 @@ export interface OpenRequest {
   parity: Parity;
   stopBits: number;
   flowControl: FlowControl;
+  /** A closed or lost session on the same port to continue (same tab and log). */
+  session?: number;
 }
 
 export interface SessionInfo {
@@ -161,7 +163,10 @@ export interface Backend {
   listPorts(): Promise<PortInfo[]>;
   listSessions(): Promise<SessionInfo[]>;
   openSession(request: OpenRequest): Promise<SessionInfo>;
+  /** Closes the session and forgets it with its log (the tab's ×). */
   closeSession(id: number): Promise<void>;
+  /** Closes the port but keeps the session, its tab and log; Open continues it. */
+  releaseSession(id: number): Promise<void>;
   /** Reopens the port of a disconnected or failed session; its log continues. */
   reconnectSession(id: number): Promise<void>;
   setAutoReconnect(id: number, on: boolean): Promise<void>;
@@ -242,6 +247,7 @@ export const tauriBackend: Backend = {
   listSessions: () => invoke("list_sessions"),
   openSession: (request) => invoke("open_session", { request }),
   closeSession: (id) => invoke("close_session", { id }),
+  releaseSession: (id) => invoke("release_session", { id }),
   reconnectSession: (id) => invoke("reconnect", { id }),
   setAutoReconnect: (id, on) => invoke("set_auto_reconnect", { id, on }),
   setAiAccess: (id, allowed) => invoke("set_ai_access", { id, allowed }),

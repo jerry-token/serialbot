@@ -90,6 +90,14 @@ mod ipc {
     }
 
     #[tauri::command(async)]
+    pub(crate) fn release_session(
+        state: tauri::State<'_, AppState>,
+        id: u32,
+    ) -> Result<(), String> {
+        state.release(id)
+    }
+
+    #[tauri::command(async)]
     pub(crate) fn write_data(
         state: tauri::State<'_, AppState>,
         id: u32,
@@ -444,6 +452,7 @@ pub fn run() -> Result<(), tauri::Error> {
             ipc::list_sessions,
             ipc::open_session,
             ipc::close_session,
+            ipc::release_session,
             ipc::write_data,
             ipc::read_log,
             ipc::send_file,

@@ -47,7 +47,7 @@ You stay in charge. Every change to a port needs your approval, and every line t
 - 💻 Windows, macOS (Apple Silicon and Intel) and Linux (x64 and arm64, Raspberry Pi included).
 
 **Connect**
-- 🗂️ Many ports at once: one tab per port, each with its own log and counters; double-click a tab (or ⧉) to watch that port in a window of its own.
+- 🗂️ Many ports at once: one tab per port, each with its own log and counters; double-click a tab (or ⧉) to watch that port in a window of its own. Close stops the port but keeps the tab and log; Open continues there, and × on the tab closes it.
 - 🌐 TCP client, TCP server (several clients at once; sending goes to all of them, and the log shows who sent what) and UDP besides serial ports; pick the type at the left of the connection bar.
 - 🔁 Unplug and replug the adapter and the session carries on; the port list follows hot-plug.
 - 🎛️ DTR / RTS switches, CTS / DSR / RI / CD lamps, **BRK** for a BREAK, and **⏱** for a timed DTR/RTS sequence such as `DTR=0 RTS=1, 100, RTS=0` (a reset pulse). Every change is marked in the log.

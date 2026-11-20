@@ -124,6 +124,10 @@ pub struct OpenRequest {
     /// Reopen the port automatically when the device comes back after an
     /// unplug or a USB re-enumeration (default on).
     pub auto_reconnect: bool,
+    /// A closed or lost session on the same port to continue (same tab and
+    /// log). Without it, the newest such session on the port is continued,
+    /// if there is one.
+    pub session: Option<u32>,
 }
 
 impl Default for OpenRequest {
@@ -136,6 +140,7 @@ impl Default for OpenRequest {
             stop_bits: 1,
             flow_control: FlowControlArg::None,
             auto_reconnect: true,
+            session: None,
         }
     }
 }
@@ -170,7 +175,8 @@ pub struct SessionDto {
     pub alias: Option<String>,
     /// Port name.
     pub port: String,
-    /// `"open"`, `"disconnected"`, `"closed"` or `"failed"`.
+    /// `"open"`, `"disconnected"` (device lost), `"closed"` (port closed on
+    /// request; the session and log stay until removed) or `"failed"`.
     pub state: &'static str,
     /// Reason, when the state is `"failed"`.
     pub error: Option<String>,
@@ -182,7 +188,11 @@ pub struct SessionDto {
 
 /// Converts a manager listing entry.
 pub fn session_dto(summary: &SessionSummary) -> SessionDto {
-    let (state, error) = state_parts(summary.state.clone());
+    let (state, error) = if summary.released {
+        ("closed", None)
+    } else {
+        state_parts(summary.state.clone())
+    };
     SessionDto {
         id: summary.id.0,
         alias: summary.alias.clone(),
@@ -355,22 +365,53 @@ impl AppState {
             .map_err(|e| e.to_string())
     }
 
-    /// Opens a port in a new session.
+    /// Opens a port. A closed or lost session on the same port (the one
+    /// named in the request, or else the newest) continues with the new
+    /// settings, keeping its tab and log; otherwise a new session starts.
     pub fn open(&self, request: &OpenRequest) -> Result<SessionDto, String> {
         let config = request.to_config().map_err(|e| e.to_string())?;
-        let session = self
+        let resumable = self
             .manager
-            .open(&config, None)
-            .map_err(|e| e.to_string())?;
+            .list()
+            .into_iter()
+            .filter(|s| s.state != SessionState::Open && s.state != SessionState::Closed)
+            .filter(|s| s.info.name == config.path)
+            .map(|s| s.id.0)
+            .filter(|id| request.session.is_none_or(|wanted| wanted == *id))
+            .max();
+        let id = match resumable {
+            Some(id) => {
+                self.manager
+                    .reopen(SessionId(id), &config)
+                    .map_err(|e| e.to_string())?;
+                SessionId(id)
+            }
+            None => self
+                .manager
+                .open(&config, None)
+                .map_err(|e| e.to_string())?
+                .id(),
+        };
         self.manager
-            .set_auto_reconnect(session.id(), request.auto_reconnect)
+            .set_auto_reconnect(id, request.auto_reconnect)
             .map_err(|e| e.to_string())?;
         self.manager
             .list()
             .iter()
-            .find(|s| s.id == session.id())
+            .find(|s| s.id == id)
             .map(session_dto)
             .ok_or_else(|| "the session closed while opening".to_owned())
+    }
+
+    /// Closes a session's port but keeps the session and its log (its tab
+    /// stays). Timed and file sends stop; a capture to file keeps its file
+    /// and continues after a reopen.
+    pub fn release(&self, id: u32) -> Result<(), String> {
+        self.repeaters.stop(id);
+        self.file_sends.stop(id);
+        self.manager
+            .release(SessionId(id))
+            .map_err(|e| e.to_string())
     }
 
     /// Reopens a disconnected or failed session's port now (same session,
@@ -395,7 +436,7 @@ impl AppState {
             .map_err(|e| e.to_string())
     }
 
-    /// Closes a session and forgets it; the frontend keeps what it shows.
+    /// Closes a session and forgets it with its log (closing its tab).
     pub fn close(&self, id: u32) -> Result<(), String> {
         self.repeaters.stop(id);
         self.file_sends.remove(id);
@@ -419,7 +460,11 @@ impl AppState {
     /// new has arrived.
     pub fn read(&self, id: u32, cursor: u64, max_bytes: usize) -> Result<LogChunk, String> {
         let session = self.manager.get(SessionId(id)).map_err(|e| e.to_string())?;
-        let (state, error) = state_parts(session.state());
+        let (state, error) = if self.manager.is_released(SessionId(id)) {
+            ("closed", None)
+        } else {
+            state_parts(session.state())
+        };
         let result = session
             .read(Cursor(cursor), max_bytes.clamp(1, MAX_READ_BYTES))
             .map_err(|e| e.to_string())?;
@@ -1058,6 +1103,64 @@ mod tests {
         assert!(app.sessions()[0].auto_reconnect);
         assert!(app.reconnect(9).unwrap_err().contains("no session"));
         assert!(app.set_auto_reconnect(9, true).is_err());
+    }
+
+    #[test]
+    fn released_sessions_keep_their_log_and_continue_on_open() {
+        let (app, devices) = state();
+        app.open(&request("mock0")).unwrap();
+        app.write(1, b"before").unwrap();
+        app.release(1).unwrap();
+        // Still listed, as closed, with its log.
+        assert_eq!(app.sessions()[0].state, "closed");
+        let chunk = app.read(1, 0, 1024).unwrap();
+        assert_eq!(chunk.state, "closed");
+        assert!(chunk.entries.iter().any(|e| e.data == b"before"));
+        assert!(app.write(1, b"x").is_err(), "the port is closed");
+        // Opening the port again continues the same session.
+        let reopened = app
+            .open(&OpenRequest {
+                baud_rate: 9600,
+                ..request("mock0")
+            })
+            .unwrap();
+        assert_eq!(reopened.id, 1);
+        assert_eq!(reopened.state, "open");
+        assert_eq!(app.sessions().len(), 1);
+        app.write(1, b"after").unwrap();
+        assert_eq!(devices.lock().unwrap()["mock0"].take_written(), b"after");
+        // Releasing twice is fine; the tab's × removes it.
+        app.release(1).unwrap();
+        app.release(1).unwrap();
+        app.close(1).unwrap();
+        assert!(app.sessions().is_empty());
+        assert!(app.release(1).is_err());
+    }
+
+    #[test]
+    fn open_continues_the_named_session_or_the_newest() {
+        let (app, _) = state();
+        app.open(&request("mock0")).unwrap();
+        app.release(1).unwrap();
+        // With session 1 closed, a new open starts session 1 again (newest).
+        assert_eq!(app.open(&request("mock0")).unwrap().id, 1);
+        // Two closed sessions on the same port: the named one continues.
+        app.release(1).unwrap();
+        let other = app.open(&request("mock1")).unwrap().id;
+        assert_ne!(other, 1);
+        let named = OpenRequest {
+            session: Some(1),
+            ..request("mock0")
+        };
+        assert_eq!(app.open(&named).unwrap().id, 1);
+        // An open session elsewhere is not continued: a named session on
+        // another port is ignored and a new one starts.
+        let elsewhere = OpenRequest {
+            session: Some(other),
+            ..request("mock2")
+        };
+        let fresh = app.open(&elsewhere).unwrap().id;
+        assert!(fresh != 1 && fresh != other);
     }
 
     #[test]
