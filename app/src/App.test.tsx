@@ -899,6 +899,28 @@ describe("App", () => {
     expect(panel().getByRole("button", { name: "Send raw" })).toHaveTextContent("rawhex 01 02");
   });
 
+  it("keeps the tab of a port an agent closed, so its actions can be looked back at", async () => {
+    const { backend, user } = setup();
+    let board = 0;
+    act(() => {
+      board = backend.addSession("COM7", "board").id;
+      backend.agentWrites(board, "reset\r\n", "agent reset the board");
+      backend.appendMarker(board, "released");
+      backend.setState(board, "closed");
+    });
+    await user.click(await screen.findByRole("tab", { name: "board" }));
+    await waitFor(() => expect(status()).toHaveTextContent("COM7 · Closed"));
+    expect(tabs()).toEqual(["board"]);
+    expect(log()).toHaveTextContent("agent reset the board");
+    expect(log()).toHaveTextContent("Port closed. Open it again to continue here");
+    // Open continues it in the same tab.
+    await user.click(screen.getByRole("button", { name: "Open" }));
+    await waitFor(() => expect(status()).toHaveTextContent("COM7 · Open"));
+    expect(backend.opened.at(-1)?.session).toBe(board);
+    expect(tabs()).toEqual(["board"]);
+    expect(log()).toHaveTextContent("agent reset the board");
+  });
+
   it("points the connection bar at the tab being looked at", async () => {
     const { backend, user } = setup();
     await openPort(user, "COM3");

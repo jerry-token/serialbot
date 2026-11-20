@@ -181,7 +181,7 @@ Windows 上 command 填 `serialbot.exe` 的路径（安装版或免安装版都�
 | `io.wait_for` | 等待接收内容匹配某个正则表达式 |
 | `io.send_and_expect` | 发送一条命令并等待期望的回复 |
 | `io.signals` | 设置 DTR / RTS，读取 CTS / DSR / RI / CD |
-| `session.close` | 关闭会话的端口，日志仍可读取 |
+| `session.close` | 关闭会话的端口；会话和日志保留，方便回看，再次 `session.open` 同一端口会接着记录 |
 | `session.release` / `session.reopen` | 把端口让给其他工具（如烧录器）再取回，日志接着记 |
 | `session.configure` | 不断开修改波特率 |
 | `log.mark` / `log.query` | 插入命名标记；汇总或搜索标记之后的日志 |
