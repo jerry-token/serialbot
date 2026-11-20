@@ -99,7 +99,26 @@ class FakeBackend implements Backend {
   async openSession(request: OpenRequest): Promise<SessionInfo> {
     if (this.failOpen) throw this.failOpen;
     this.opened.push(request);
+    // Like the app: a closed or lost session on the port continues.
+    const resumable = [...this.sessions.values()]
+      .map((s) => s.info)
+      .filter((i) => i.port === request.port && i.state !== "open")
+      .filter((i) => request.session === undefined || i.id === request.session)
+      .at(-1);
+    if (resumable) {
+      this.setState(resumable.id, "open");
+      this.appendMarker(resumable.id, "reconnected");
+      return this.sessions.get(resumable.id)?.info ?? resumable;
+    }
     return this.addSession(request.port, null);
+  }
+
+  released: number[] = [];
+
+  async releaseSession(id: number) {
+    this.released.push(id);
+    this.appendMarker(id, "released");
+    this.setState(id, "closed");
   }
 
   async closeSession(id: number) {
@@ -525,7 +544,7 @@ class FakeBackend implements Backend {
     return [...this.sessions.values()].map((s) => s.info);
   }
 
-  private notify(ids: number[]) {
+  notify(ids: number[]) {
     const list = this.list();
     setTimeout(() => {
       for (const l of this.sessionListeners) l(list);
@@ -758,6 +777,20 @@ describe("App", () => {
     // Selecting the port of a session turns Open into Close.
     await user.selectOptions(screen.getByLabelText("Port"), "COM4");
     await user.click(screen.getByRole("button", { name: "Close" }));
+    // Close closes the port but keeps the tab and its log.
+    await waitFor(() => expect(status()).toHaveTextContent("COM4 · Closed"));
+    expect(tabs()).toEqual(["COM3", "esp32"]);
+    expect(backend.released).toEqual([2]);
+    expect(log()).toHaveTextContent("from agent");
+    expect(log()).toHaveTextContent("Port closed. Open it again to continue here");
+    // Open continues the same session in the same tab.
+    await user.click(screen.getByRole("button", { name: "Open" }));
+    await waitFor(() => expect(status()).toHaveTextContent("COM4 · Open"));
+    expect(backend.opened.at(-1)?.session).toBe(2);
+    expect(tabs()).toEqual(["COM3", "esp32"]);
+    expect(log()).toHaveTextContent("from agent");
+    // The tab's × removes the session.
+    await user.click(screen.getByRole("button", { name: "Close tab COM4" }));
     await waitFor(() => expect(tabs()).toEqual(["COM3"]));
     expect(backend.closed).toEqual([2]);
     expect(status()).toHaveTextContent("COM3 · Open");
@@ -784,7 +817,7 @@ describe("App", () => {
     expect(log()).toHaveTextContent("last words");
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
 
-    await user.click(screen.getByRole("button", { name: "Close session COM3" }));
+    await user.click(screen.getByRole("button", { name: "Close tab COM3" }));
     await waitFor(() => expect(tabs()).toEqual([]));
     expect(status()).toHaveTextContent("Closed");
     expect(backend.closed).toEqual([1]);
@@ -820,7 +853,7 @@ describe("App", () => {
     expect(backend.sessions.get(1)?.info.autoReconnect).toBe(false);
     await user.click(chip());
     await waitFor(() => expect(chip()).toHaveAttribute("aria-pressed", "true"));
-    await user.click(screen.getByRole("button", { name: "Close session COM3" }));
+    await user.click(screen.getByRole("button", { name: "Close tab COM3" }));
     await waitFor(() => expect(tabs()).toEqual([]));
     expect(screen.queryByRole("button", { name: "Auto-reconnect" })).toBeNull();
   });
@@ -884,7 +917,7 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByLabelText("Connection type")).toHaveValue("tcp"));
     expect(screen.getByLabelText("Host")).toHaveValue("fe80::1");
     await user.click(screen.getByRole("button", { name: "Close" }));
-    await waitFor(() => expect(backend.closed).toEqual([tcp]));
+    await waitFor(() => expect(backend.released).toEqual([tcp]));
     // A port the system does not list is still shown and stays selected.
     await user.click(screen.getByRole("tab", { name: "/tmp/ttyV0" }));
     await waitFor(() => expect(screen.getByLabelText("Port")).toHaveValue("/tmp/ttyV0"));
@@ -979,8 +1012,20 @@ describe("App", () => {
     expect(backend.windowClosed).toBe(1);
     expect(onPinnedClosed).not.toHaveBeenCalled();
 
+    // Close port keeps the window and log; Open port continues.
     await user.click(screen.getByRole("button", { name: "Close port" }));
-    expect(backend.closed).toEqual([mine.id]);
+    await waitFor(() => expect(status()).toHaveTextContent("COM4 · Closed"));
+    expect(backend.released).toEqual([mine.id]);
+    expect(log()).toHaveTextContent("mine");
+    await user.click(screen.getByRole("button", { name: "Open port" }));
+    await waitFor(() => expect(status()).toHaveTextContent("COM4 · Open"));
+    expect(backend.reconnects).toEqual([mine.id]);
+    expect(onPinnedClosed).not.toHaveBeenCalled();
+    // The window closes once the session is removed (the main window's ×).
+    act(() => {
+      backend.sessions.delete(mine.id);
+      backend.notify([]);
+    });
     await waitFor(() => expect(onPinnedClosed).toHaveBeenCalled());
   });
 
@@ -1381,7 +1426,7 @@ describe("App", () => {
     await waitFor(() => expect(status()).toHaveTextContent("session is Disconnected"));
 
     backend.failClose = true;
-    await user.click(screen.getByRole("button", { name: "Close" }));
+    await user.click(screen.getByRole("button", { name: "Close tab COM3" }));
     await waitFor(() => expect(status()).toHaveTextContent("no session s1"));
     expect(screen.getByRole("button", { name: "Open" })).toBeInTheDocument();
 
