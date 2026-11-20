@@ -83,7 +83,11 @@ export function ConnectionBar(props: Props) {
             value={settings.port}
             onChange={(e) => set("port", e.target.value)}
           >
-            {ports.length === 0 && <option value="">{t.noPorts}</option>}
+            {ports.length === 0 && settings.port === "" && <option value="">{t.noPorts}</option>}
+            {/* An open port the system does not list (e.g. a virtual one) is still shown. */}
+            {settings.port !== "" && !ports.some((p) => p.path === settings.port) && (
+              <option value={settings.port}>{settings.port}</option>
+            )}
             {ports.map((p) => (
               <option key={p.path} value={p.path}>
                 {portLabel(p)}

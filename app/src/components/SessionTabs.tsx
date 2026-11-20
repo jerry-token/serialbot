@@ -40,6 +40,8 @@ interface Props {
   popped?: ReadonlySet<number>;
   /** Shows a session in its own window (double-click on a tab, or a list entry marked ⧉). */
   onPopOut?: (id: number) => void;
+  /** Sessions with news (data, AI writes, a lost device) since they were last shown. */
+  activity?: ReadonlySet<number>;
   /** Replaces the tab row (a session's own window shows its name instead). */
   header?: ReactNode;
   /** View options, shown in their own row under the tabs. */
@@ -64,6 +66,7 @@ export function SessionTabs({
   onClose,
   popped = NONE,
   onPopOut,
+  activity = NONE,
   header,
   children,
 }: Props) {
@@ -94,11 +97,17 @@ export function SessionTabs({
               type="button"
               role="tab"
               aria-selected={s.id === activeId}
-              title={onPopOut ? `${fullName(s)}\n${t.popOutByDoubleClick}` : fullName(s)}
+              title={[
+                fullName(s),
+                activity.has(s.id) ? t.newActivity : null,
+                onPopOut ? t.popOutByDoubleClick : null,
+              ]
+                .filter(Boolean)
+                .join("\n")}
               onClick={() => onSelect(s.id)}
               onDoubleClick={() => onPopOut?.(s.id)}
             >
-              <span className={`dot ${s.state}`} aria-hidden="true" />
+              <Dot session={s} news={activity.has(s.id)} />
               <span className="tab-name">{tabLabel(s.port, s.alias)}</span>
             </button>
             <button
@@ -136,7 +145,7 @@ export function SessionTabs({
                         close();
                       }}
                     >
-                      <span className={`dot ${s.state}`} aria-hidden="true" />
+                      <Dot session={s} news={activity.has(s.id)} />
                       {fullName(s)}
                       {own && <span className="own-window"> ⧉</span>}
                     </button>
@@ -156,6 +165,11 @@ export function SessionTabs({
       {children && <div className="view-options">{children}</div>}
     </>
   );
+}
+
+/** A session's state dot; with news it gets a ring in the accent colour (the tooltip says why). */
+function Dot({ session, news }: { session: SessionInfo; news: boolean }) {
+  return <span className={`dot ${session.state}${news ? " news" : ""}`} aria-hidden="true" />;
 }
 
 interface ToggleProps {

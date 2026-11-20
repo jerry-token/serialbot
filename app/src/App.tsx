@@ -24,7 +24,7 @@ import { CommandPanel } from "./components/CommandPanel";
 import { DisplaySettings } from "./components/DisplaySettings";
 import { FileSend, type FileSendOptions } from "./components/FileSend";
 import { HelpPanel } from "./components/HelpPanel";
-import { endpointPath, isNetworkPath } from "./endpoint";
+import { endpointFields, endpointPath, isNetworkPath } from "./endpoint";
 import { SearchBar } from "./components/SearchBar";
 import { ConnectionBar, type PortSettings } from "./components/ConnectionBar";
 import { LogView } from "./components/LogView";
@@ -158,6 +158,8 @@ export function App({
     flowControl: "none",
   });
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
   const [activeId, setActiveId] = useState<number | null>(pinned);
   // Main window: sessions shown in their own windows (their tabs are hidden).
   const [popped, setPopped] = useState<ReadonlySet<number>>(new Set());
@@ -240,6 +242,24 @@ export function App({
   const [version, setVersion] = useState(0);
   const redraw = () => setVersion((v) => v + 1);
 
+  // Sessions with news since they were last shown: their tab dot says so.
+  const [activity, setActivity] = useState<ReadonlySet<number>>(new Set());
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
+  const noteActivity = (id: number) => {
+    if (id === activeIdRef.current) return;
+    setActivity((all) => (all.has(id) ? all : new Set(all).add(id)));
+  };
+  useEffect(() => {
+    if (activeId === null) return;
+    setActivity((all) => {
+      if (!all.has(activeId)) return all;
+      const next = new Set(all);
+      next.delete(activeId);
+      return next;
+    });
+  }, [activeId]);
+
   const viewOf = (id: number): SessionView => {
     let view = views.current.get(id);
     if (!view) {
@@ -283,6 +303,7 @@ export function App({
           view.cursor = chunk.next;
           if (chunk.missed > 0) view.terminal.info(t.missed(chunk.missed), nowUs());
           view.terminal.push(chunk.entries);
+          if (chunk.entries.length > 0) noteActivity(id);
           for (const e of chunk.entries) {
             if (e.kind === "rx") view.rx += e.data.length;
             if (e.kind === "tx") view.tx += e.data.length;
@@ -295,6 +316,7 @@ export function App({
             // Everything received before the port went away has been shown.
             view.ended = true;
             view.terminal.info(chunk.error ?? t.deviceGone, nowUs());
+            noteActivity(id);
             redraw();
           }
           if (!view.again) break;
@@ -305,7 +327,7 @@ export function App({
         view.reading = false;
       }
     },
-    // viewOf and redraw only touch refs and state setters.
+    // viewOf, redraw and noteActivity only touch refs and state setters.
     [backend, t],
   );
 
@@ -338,8 +360,12 @@ export function App({
   // Keeps the selected port while it is still present.
   const applyPorts = useCallback((list: PortInfo[]) => {
     setPorts(list);
+    // An open port stays selected even if the system does not list it.
     setSettings((s) =>
-      list.some((p) => p.path === s.port) ? s : { ...s, port: list[0]?.path ?? "" },
+      list.some((p) => p.path === s.port) ||
+      sessionsRef.current.some((session) => session.port === s.port)
+        ? s
+        : { ...s, port: list[0]?.path ?? "" },
     );
   }, []);
 
@@ -453,6 +479,19 @@ export function App({
           localPort: settings.localPort,
         });
   const portSession = ("path" in target && sessions.find((s) => s.port === target.path)) || null;
+
+  // The connection bar follows the selected tab, so Close closes the port
+  // being looked at. It can still be changed to open or close another one.
+  useEffect(() => {
+    const session = sessionsRef.current.find((s) => s.id === activeId);
+    if (!session) return;
+    const { kind, host, port, localPort } = endpointFields(session.port);
+    setSettings((s) =>
+      kind === "serial"
+        ? { ...s, kind, port: session.port }
+        : { ...s, kind, host, netPort: port, localPort },
+    );
+  }, [activeId]);
 
   const open = async () => {
     if ("error" in target) {
@@ -905,6 +944,7 @@ export function App({
               onClose={(id) => void close(id)}
               popped={popped}
               onPopOut={popOut}
+              activity={activity}
               header={
                 pinned !== null &&
                 active && (
