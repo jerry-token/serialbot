@@ -20,7 +20,7 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use serialbot_core::{Cursor, Direction, Entry, EntryKind, Session, SessionState};
+use serialbot_core::{Cursor, Direction, Entry, EntryKind, Session};
 
 /// File format of an export or capture.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
@@ -249,11 +249,14 @@ impl std::fmt::Debug for Captures {
 impl Captures {
     /// Starts saving the session's log to `path` (replacing the file):
     /// everything already in the log, then new entries as they arrive,
-    /// until stopped or the session ends. Replaces a previous capture.
+    /// until stopped. It goes on while the port is closed and after it is
+    /// reopened or reconnected (same session, same file); it ends by itself
+    /// only once nothing else holds the session (it was removed). Replaces
+    /// a previous capture.
     pub fn start(
         &self,
         id: u32,
-        session: Arc<Session>,
+        session: &Arc<Session>,
         path: &Path,
         format: ExportFormat,
         utc_offset_min: i32,
@@ -270,13 +273,19 @@ impl Captures {
         let thread = {
             let stop = Arc::clone(&stop);
             let status = Arc::clone(&status);
+            // Only a weak link: a session that is closed and reopened (or
+            // reconnected) keeps its capture; one that is gone ends it.
+            let session = Arc::downgrade(session);
             std::thread::spawn(move || {
                 let mut cursor = Cursor(0);
                 loop {
                     let stopping = stop.load(Ordering::Relaxed);
-                    let ended = session.state() != SessionState::Open;
+                    let Some(session) = session.upgrade() else {
+                        break;
+                    };
                     let saved = copy_new(&session, cursor, &mut out, format, utc_offset_min)
                         .and_then(|r| out.flush().map(|()| r).map_err(|e| e.to_string()));
+                    drop(session);
                     match saved {
                         Ok((next, bytes)) => {
                             cursor = next;
@@ -287,9 +296,8 @@ impl Captures {
                             break;
                         }
                     }
-                    // Save what arrived before a stop or the end of the
-                    // session, then finish.
-                    if stopping || ended {
+                    // Save what arrived before a stop, then finish.
+                    if stopping {
                         break;
                     }
                     std::thread::sleep(CAPTURE_POLL);
@@ -359,7 +367,7 @@ mod tests {
     use std::time::Instant;
 
     use serialbot_core::transport::mock::{self, MockDevice};
-    use serialbot_core::{ManualClock, SessionId, SessionOptions};
+    use serialbot_core::{ManualClock, SessionId, SessionOptions, SessionState};
 
     use super::*;
     use crate::test_dir::TempDir;
@@ -477,9 +485,7 @@ mod tests {
         let path = dir.0.join("live.bin");
         let captures = Captures::default();
         assert_eq!(captures.status(1), CaptureStatus::default());
-        let started = captures
-            .start(1, Arc::clone(&s), &path, ExportFormat::Raw, 0)
-            .unwrap();
+        let started = captures.start(1, &s, &path, ExportFormat::Raw, 0).unwrap();
         assert!(started.active);
         assert_eq!(
             started.path.as_deref(),
@@ -500,32 +506,73 @@ mod tests {
     }
 
     #[test]
-    fn capture_ends_with_the_session_and_reports_errors() {
+    fn capture_outlives_a_lost_port_and_ends_with_the_session() {
         let (s, device, _clock) = session();
         let dir = TempDir::new("capture-end");
         let captures = Captures::default();
         captures
-            .start(
-                1,
-                Arc::clone(&s),
-                &dir.0.join("a.log"),
-                ExportFormat::Log,
-                0,
-            )
+            .start(1, &s, &dir.0.join("a.log"), ExportFormat::Log, 0)
             .unwrap();
         device.send(b"last\n");
         device.disconnect();
+        wait_until(|| s.state() != SessionState::Open);
+        std::thread::sleep(CAPTURE_POLL * 3);
+        assert!(captures.status(1).active, "a lost port may come back");
+        // Once nothing holds the session any more, the capture ends.
+        drop(s);
         wait_until(|| !captures.status(1).active);
         let text = std::fs::read_to_string(dir.0.join("a.log")).unwrap();
         assert!(text.contains("RX last\\n"), "{text}");
+        let (s, _device, _clock) = session();
         assert!(
             captures
-                .start(1, s, &dir.0.join("no/such/dir.log"), ExportFormat::Log, 0)
+                .start(1, &s, &dir.0.join("no/such/dir.log"), ExportFormat::Log, 0)
                 .unwrap_err()
                 .contains("cannot write")
         );
         assert!(format!("{captures:?}").contains("Captures"));
         captures.stop_all();
+    }
+
+    #[test]
+    fn capture_continues_when_the_port_is_closed_and_reopened() {
+        use serialbot_core::SessionManager;
+        use serialbot_core::transport::serial::SerialConfig;
+
+        let devices: Arc<Mutex<Vec<MockDevice>>> = Arc::default();
+        let opened = Arc::clone(&devices);
+        let manager = SessionManager::new(
+            Box::new(move |config: &SerialConfig| {
+                let (connection, device) = mock::connection(&config.path, Duration::from_millis(5));
+                lock(&opened).push(device);
+                Ok(connection)
+            }),
+            Arc::new(serialbot_core::SystemClock),
+            SessionOptions::default(),
+        );
+        let config = SerialConfig::new("mock0", 115_200);
+        let id = manager.open(&config, None).unwrap().id();
+        let dir = TempDir::new("capture-reopen");
+        let path = dir.0.join("live.bin");
+        let captures = Captures::default();
+        captures
+            .start(1, &manager.get(id).unwrap(), &path, ExportFormat::Raw, 0)
+            .unwrap();
+        lock(&devices)[0].send(b"one ");
+        wait_until(|| captures.status(1).bytes >= 4);
+
+        manager.release(id).unwrap();
+        std::thread::sleep(CAPTURE_POLL * 3);
+        assert!(
+            captures.status(1).active,
+            "closing the port keeps the capture"
+        );
+        manager.reopen(id, &config).unwrap();
+        lock(&devices)[1].send(b"two");
+        wait_until(|| captures.status(1).bytes >= 7);
+        captures.stop(1);
+        assert_eq!(std::fs::read(&path).unwrap(), b"one two");
+        manager.close_all();
     }
 
     #[test]
