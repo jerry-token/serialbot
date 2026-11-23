@@ -2,6 +2,7 @@
 //! the sessions run on mock devices.
 #![allow(
     clippy::unwrap_used,
+    clippy::expect_used,
     reason = "test harness helpers outside #[test] functions"
 )]
 

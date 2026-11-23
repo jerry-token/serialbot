@@ -6,6 +6,7 @@ members = [
     "crates/serialbot-jobs",
     "crates/serialbot-mcp",
     "app/src-tauri",
+    "xtask",
 ]
 
 [workspace.package]
@@ -52,6 +53,7 @@ must_use_candidate = "allow"
 missing_errors_doc = "allow"
 # Never allow these to slip into the codebase.
 unwrap_used = "warn"
+expect_used = "warn"
 dbg_macro = "warn"
 todo = "warn"
 print_stdout = "warn"
