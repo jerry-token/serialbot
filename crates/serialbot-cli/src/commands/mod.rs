@@ -8,3 +8,4 @@ pub mod ports;
 pub mod run;
 pub mod send;
 pub mod signal;
+pub mod tui;

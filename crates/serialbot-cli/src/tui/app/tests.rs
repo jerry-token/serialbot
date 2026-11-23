@@ -1,0 +1,420 @@
+use std::time::{Duration, Instant};
+
+use clap::Parser;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
+use ratatui::Terminal;
+use ratatui::backend::TestBackend;
+use serialbot_core::transport::mock::MockDevice;
+
+use super::*;
+use crate::args::{Cli, Command};
+use crate::commands::tui::{Env, prepare};
+use crate::testing::Fixture;
+use crate::tui::view;
+
+fn env(color: bool, lang: Lang) -> Env {
+    Env {
+        terminal: true,
+        interrupted: Arc::default(),
+        utc_offset_min: 0,
+        color,
+        lang,
+    }
+}
+
+/// `tui <args>` as parsed from a command line.
+fn start(f: &Fixture, args: &[&str], color: bool, lang: Lang) -> Tui {
+    let mut line = vec!["serialbot-cli", "tui"];
+    line.extend_from_slice(args);
+    let Command::Tui(args) = Cli::try_parse_from(line).unwrap().command else {
+        panic!("not tui");
+    };
+    prepare(&args, &f.manager, &env(color, lang)).unwrap()
+}
+
+struct Rig {
+    f: Fixture,
+    tui: Tui,
+    term: Terminal<TestBackend>,
+}
+
+impl Rig {
+    fn new(args: &[&str], width: u16, height: u16) -> Self {
+        let f = Fixture::new();
+        let tui = start(&f, args, false, Lang::En);
+        let term = Terminal::new(TestBackend::new(width, height)).unwrap();
+        let mut rig = Self { f, tui, term };
+        rig.draw();
+        rig
+    }
+
+    fn device(&self, port: &str) -> MockDevice {
+        self.f.devices.lock().unwrap()[port].clone()
+    }
+
+    fn draw(&mut self) {
+        let tui = &mut self.tui;
+        self.term.draw(|frame| view::render(tui, frame)).unwrap();
+    }
+
+    fn screen(&self) -> String {
+        let buffer = self.term.backend().buffer();
+        let mut text = String::new();
+        for y in 0..buffer.area.height {
+            let mut skip = 0;
+            for x in 0..buffer.area.width {
+                if skip > 0 {
+                    skip -= 1;
+                    continue;
+                }
+                let symbol = buffer[(x, y)].symbol();
+                skip = unicode_width::UnicodeWidthStr::width(symbol).saturating_sub(1);
+                text.push_str(symbol);
+            }
+            text.push('\n');
+        }
+        text
+    }
+
+    /// Whether a line of session `i` contains `text`.
+    fn logged(&self, i: usize, text: &str) -> bool {
+        self.tui.panes[i].lines.iter().any(|l| l.contains(text))
+    }
+
+    fn row(&self, y: u16) -> String {
+        self.screen()
+            .lines()
+            .nth(usize::from(y))
+            .unwrap_or_default()
+            .to_owned()
+    }
+
+    fn keys(&mut self, keys: &[KeyEvent]) -> Flow {
+        let mut flow = Flow::Continue;
+        for key in keys {
+            flow = self.tui.key(*key, 30);
+        }
+        self.draw();
+        flow
+    }
+
+    fn type_line(&mut self, text: &str) -> Flow {
+        let mut keys: Vec<KeyEvent> = text.chars().map(|c| press(KeyCode::Char(c))).collect();
+        keys.push(press(KeyCode::Enter));
+        self.keys(&keys)
+    }
+
+    fn prefix(&mut self, code: KeyCode) -> Flow {
+        self.keys(&[ctrl('a'), press(code)])
+    }
+
+    /// Ticks and draws until the screen shows `text` (five seconds at most).
+    fn until_shows(&mut self, text: &str) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            self.tui.tick();
+            self.draw();
+            if self.screen().contains(text) {
+                return;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "no {text:?} in\n{}",
+                self.screen()
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    fn click(&mut self, column: u16, row: u16) {
+        self.mouse(MouseEventKind::Down(MouseButton::Left), column, row);
+    }
+
+    fn mouse(&mut self, kind: MouseEventKind, column: u16, row: u16) {
+        self.tui.mouse(MouseEvent {
+            kind,
+            column,
+            row,
+            modifiers: KeyModifiers::NONE,
+        });
+        self.draw();
+    }
+}
+
+fn press(code: KeyCode) -> KeyEvent {
+    KeyEvent::new(code, KeyModifiers::NONE)
+}
+
+fn ctrl(c: char) -> KeyEvent {
+    KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)
+}
+
+#[test]
+fn starts_empty_and_opens_sessions_from_the_input_box() {
+    let mut r = Rig::new(&[], 120, 30);
+    assert!(
+        r.screen().contains("No session yet: type /open"),
+        "{}",
+        r.screen()
+    );
+    r.type_line("hello");
+    assert!(
+        r.screen().contains("· no session is open"),
+        "{}",
+        r.screen()
+    );
+    r.type_line("/open mock0 9600");
+    assert_eq!(r.tui.panes.len(), 1);
+    assert!(r.screen().contains("▸ ● mock0"), "{}", r.screen());
+    assert!(
+        r.screen().contains("Sessions"),
+        "the list shows on wide screens"
+    );
+    assert!(
+        r.row(29).contains("mock0  9600 8N1  RX 0 TX 0"),
+        "{}",
+        r.row(29)
+    );
+    r.type_line("AT");
+    assert_eq!(r.device("mock0").take_written(), b"AT\r\n");
+    r.until_shows("→ AT\\r\\n");
+    r.device("mock0").send(b"OK\r\n");
+    r.until_shows("│OK");
+    // Opening it again focuses it instead.
+    r.type_line("/open mock0");
+    assert_eq!(r.tui.panes.len(), 1);
+    r.type_line("/open busy0");
+    assert!(r.screen().contains("cannot open busy0"), "{}", r.screen());
+    r.type_line("/open mock0 fast");
+    assert!(
+        r.screen().contains("/open mock0 fast: unknown command"),
+        "{}",
+        r.screen()
+    );
+}
+
+#[test]
+fn panes_side_by_side_or_stacked_and_the_focus_moves() {
+    let mut r = Rig::new(&["mock0", "mock1", "mock2"], 120, 30);
+    assert_eq!(r.tui.shown, [0, 1, 2]);
+    assert_eq!(r.tui.focus, 0, "the first port has the focus");
+    let top = r.row(0);
+    assert!(
+        top.contains("▸ ● mock0") && top.contains("● mock1") && top.contains("● mock2"),
+        "{top}"
+    );
+    r.prefix(KeyCode::Right);
+    assert_eq!(r.tui.focus, 1);
+    r.prefix(KeyCode::Left);
+    r.prefix(KeyCode::Left);
+    assert_eq!(r.tui.focus, 2, "it wraps around");
+    r.type_line("to two");
+    assert_eq!(r.device("mock2").take_written(), b"to two\r\n");
+    assert!(r.device("mock0").take_written().is_empty());
+
+    r.prefix(KeyCode::Char('-'));
+    assert!(!r.tui.side_by_side);
+    let rows = r.screen();
+    let at = |name: &str| rows.lines().position(|l| l.contains(name)).unwrap();
+    assert!(
+        at("● mock0") < at("● mock1") && at("● mock1") < at("● mock2"),
+        "{rows}"
+    );
+    r.prefix(KeyCode::Char('|'));
+    assert!(r.tui.side_by_side);
+
+    // A fifth session replaces the focused pane; four fit.
+    r.type_line("/open mock3");
+    assert_eq!(r.tui.shown, [0, 1, 2, 3]);
+    r.type_line("/open mock4");
+    assert_eq!(r.tui.shown, [0, 1, 2, 4]);
+    assert_eq!(r.tui.focus, 4);
+}
+
+#[test]
+fn unread_dots_clicks_and_the_list() {
+    let mut r = Rig::new(&["mock0", "mock1"], 120, 30);
+    r.tui.select(0);
+    // Only one shown: mock1 goes out of view.
+    r.tui.shown = vec![0];
+    r.draw();
+    r.device("mock1").send(b"news\n");
+    r.until_shows("● mock1 •");
+    assert!(r.row(29).contains("• 1"), "{}", r.row(29));
+    // Click its row in the list (rows start under the border).
+    let list = r.tui.regions.list;
+    r.click(list.x + 2, list.y + 2);
+    assert_eq!(r.tui.focus, 1);
+    assert_eq!(
+        r.tui.shown,
+        [0, 1],
+        "shown in a new pane while there is room"
+    );
+    assert!(!r.tui.panes[1].unread);
+    r.until_shows("news");
+    // A click in a pane focuses it.
+    let (_, area) = r.tui.regions.panes[0];
+    r.click(area.x + 3, area.y + 3);
+    assert_eq!(r.tui.focus, 0);
+    // The splitting keys bring a hidden session in.
+    r.tui.shown = vec![0];
+    r.prefix(KeyCode::Char('|'));
+    assert_eq!(r.tui.shown, [0, 1]);
+}
+
+#[test]
+fn scrolls_back_with_keys_and_the_wheel() {
+    let mut r = Rig::new(&["mock0"], 120, 30);
+    let lines = (0..100)
+        .map(|i| format!("line {i}\n"))
+        .collect::<Vec<_>>()
+        .concat();
+    r.device("mock0").send(lines.as_bytes());
+    r.until_shows("line 99");
+    r.keys(&[press(KeyCode::PageUp)]);
+    assert_eq!(r.tui.panes[0].scroll, 15);
+    assert!(!r.screen().contains("line 99"));
+    assert!(r.screen().contains("↑15"), "{}", r.screen());
+    // New data does not move what is being read.
+    r.device("mock0").send(b"line 100\n");
+    r.until_shows("↑16");
+    let (_, area) = r.tui.regions.panes[0];
+    r.mouse(MouseEventKind::ScrollDown, area.x + 2, area.y + 2);
+    assert_eq!(r.tui.panes[0].scroll, 13);
+    r.keys(&[press(KeyCode::PageDown)]);
+    assert_eq!(r.tui.panes[0].scroll, 0);
+    r.mouse(MouseEventKind::ScrollUp, area.x + 2, area.y + 2);
+    assert_eq!(r.tui.panes[0].scroll, 3);
+    // Sending follows the newest data again.
+    r.type_line("x");
+    assert_eq!(r.tui.panes[0].scroll, 0);
+    // Scrolling far back stops at the first line.
+    r.tui.panes[0].scroll = 10_000;
+    r.draw();
+    assert!(r.screen().contains("line 0"), "{}", r.screen());
+}
+
+#[test]
+fn narrow_screens_show_only_the_focused_session() {
+    let mut r = Rig::new(&["mock0", "mock1"], 80, 20);
+    assert!(!r.tui.wide);
+    assert!(!r.screen().contains("Sessions"));
+    assert_eq!(r.tui.regions.panes.len(), 1);
+    assert!(r.row(0).contains("▸ ● mock0"), "{}", r.row(0));
+    r.prefix(KeyCode::Right);
+    assert!(r.row(0).contains("▸ ● mock1"), "{}", r.row(0));
+}
+
+#[test]
+fn console_commands_reach_the_focused_session() {
+    let mut r = Rig::new(&["mock0", "mock1"], 120, 30);
+    r.tui.select(1);
+    r.type_line("/hex");
+    assert!(r.tui.panes[1].console.feed.display.hex);
+    assert!(!r.tui.panes[0].console.feed.display.hex);
+    r.device("mock1").send(b"AB");
+    r.until_shows("41 42");
+    r.prefix(KeyCode::Char('c'));
+    assert!(r.tui.panes[1].lines.is_empty());
+    r.prefix(KeyCode::Char('z'));
+    assert!(r.logged(1, "Ctrl+A ←/→ focus"));
+    assert!(r.logged(1, "Ctrl+A then: Z help"), "the keys of open too");
+    r.type_line("/raw");
+    assert!(r.logged(1, "raw mode works in serialbot-cli open"));
+    r.prefix(KeyCode::Char('j'));
+    assert!(r.logged(1, "Ctrl+A J works in serialbot-cli open"));
+    r.prefix(KeyCode::Char('v'));
+    assert!(r.logged(1, "comes in a later version"));
+    r.prefix(KeyCode::Char('g'));
+    assert_eq!(r.tui.keys.editor.text(), "/run ");
+    r.keys(&[press(KeyCode::Esc)]);
+    r.keys(&[ctrl('a'), ctrl('a')]);
+    assert_eq!(r.device("mock1").take_written(), [0x01]);
+    r.keys(&[ctrl('a')]);
+    assert!(r.row(29).contains("Ctrl+A …"), "{}", r.row(29));
+    r.keys(&[press(KeyCode::Esc)]);
+    r.tui.paste("pasted");
+    assert_eq!(r.tui.keys.editor.text(), "pasted");
+    r.keys(&[press(KeyCode::Esc)]);
+
+    r.type_line("/close");
+    assert!(r.screen().contains("closed mock1"), "{}", r.screen());
+    for _ in 0..3 {
+        r.tui.tick();
+    }
+    r.draw();
+    assert!(r.screen().contains("○ mock1"), "the session stays, closed");
+    assert!(!r.logged(1, "waiting"), "a closed port is not waited for");
+    assert_eq!(r.type_line("/quit"), Flow::Quit);
+    assert_eq!(r.prefix(KeyCode::Char('x')), Flow::Quit);
+    r.tui.close_all();
+    assert!(r.f.manager.list().is_empty());
+}
+
+#[test]
+fn colors_follow_the_device_and_no_color_keeps_text() {
+    let f = Fixture::new();
+    let mut tui = start(&f, &["mock0"], true, Lang::Zh);
+    let mut term = Terminal::new(TestBackend::new(120, 20)).unwrap();
+    f.devices.lock().unwrap()["mock0"].send(b"\x1b[32mgreen\x1b[0m\n");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while tui.panes[0].lines.is_empty() {
+        assert!(Instant::now() < deadline);
+        tui.tick();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    term.draw(|frame| view::render(&mut tui, frame)).unwrap();
+    let buffer = term.backend().buffer();
+    let (_, area) = tui.regions.panes[0];
+    let cell = &buffer[(area.x + 1, area.y + 1)];
+    assert_eq!(cell.symbol(), "g");
+    assert_eq!(cell.fg, ratatui::style::Color::Green);
+    assert_eq!(
+        buffer[(area.x, area.y)].fg,
+        ratatui::style::Color::Cyan,
+        "focused border"
+    );
+    let text: String = (0..120)
+        .map(|x| buffer[(x, 0)].symbol().to_owned())
+        .collect();
+    assert!(text.contains('会') && text.contains('话'), "{text}");
+    tui.close_all();
+}
+
+#[test]
+fn bad_options_and_ports_fail_before_the_screen() {
+    let f = Fixture::new();
+    let parse = |extra: &[&str]| {
+        let mut argv = vec!["serialbot-cli", "tui"];
+        argv.extend_from_slice(extra);
+        match Cli::try_parse_from(argv).unwrap().command {
+            Command::Tui(a) => a,
+            _ => panic!("not tui"),
+        }
+    };
+    let e = env(false, Lang::En);
+    let fail = |extra: &[&str]| prepare(&parse(extra), &f.manager, &e).unwrap_err();
+    assert_eq!(fail(&["--encoding", "nope"]).exit, crate::exit::Exit::Usage);
+    assert_eq!(
+        fail(&["--reset-sequence", "dtr=x"]).exit,
+        crate::exit::Exit::Usage
+    );
+    assert_eq!(fail(&["mock0", "busy0"]).exit, crate::exit::Exit::Busy);
+    assert!(
+        f.manager.list().is_empty(),
+        "the ports opened before are closed"
+    );
+    let ran = f.run(&["tui", "mock0"]);
+    assert_eq!(ran.code, 2, "no terminal");
+    assert!(ran.err.contains("tui needs a terminal"), "{}", ran.err);
+    let tui = prepare(
+        &parse(&["--hex", "--time", "-b", "9600", "mock0"]),
+        &f.manager,
+        &e,
+    )
+    .unwrap();
+    let pane = &tui.panes[0];
+    assert!(pane.console.feed.display.hex);
+    assert_eq!(pane.console.feed.display.stamps, Stamps::Time);
+    assert_eq!(pane.console.settings().baud, 9600);
+}
