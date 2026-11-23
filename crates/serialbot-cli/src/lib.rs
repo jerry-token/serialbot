@@ -101,6 +101,7 @@ where
     let result = match &cli.command {
         Command::Ports(a) => commands::ports::run(a, &*ctx.list_ports, &mut out),
         Command::Send(a) => commands::send::run(a, &ctx.manager, &mut out),
+        Command::Signal(a) => commands::signal::run(a, &ctx.manager, &mut out),
         Command::Monitor(a) => commands::monitor::run(
             a,
             &ctx.manager,
