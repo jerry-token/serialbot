@@ -244,6 +244,20 @@ fn modem_lines_on_a_pty_are_reported_as_unsupported() {
     ));
 }
 
+#[test]
+fn initial_line_levels_are_ignored_on_a_pty() {
+    let Some(pair) = virtual_pair("initial-lines") else {
+        return;
+    };
+    let mut config = SerialConfig::new(pair.a.to_str().unwrap(), 115_200);
+    config.dtr_on_open = Some(false);
+    config.rts_on_open = Some(false);
+    let mut a = serial::open(&config).unwrap();
+    let mut b = open(&pair.b);
+    a.control.write_all(b"hi").unwrap();
+    assert_eq!(read_exact(&mut b, 2, Duration::from_secs(5)), b"hi");
+}
+
 /// Byte `i` of the stress stream: depends on the position, so a lost,
 /// repeated or reordered byte shows up as a mismatch.
 fn pattern(i: u64) -> u8 {

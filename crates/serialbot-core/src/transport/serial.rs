@@ -75,6 +75,15 @@ pub struct SerialConfig {
     pub flow_control: FlowControl,
     /// Longest time a single read blocks before returning `Ok(0)`.
     pub read_timeout: Duration,
+    /// DTR level to set right after opening (and after every reopen);
+    /// `None` leaves what the OS does. Boards such as the ESP32 reset when
+    /// DTR/RTS toggle, so `Some(false)` for both avoids a reset on open.
+    /// Linux raises DTR for a moment while opening whatever is asked.
+    /// Ignored on ports without modem lines (PTYs, many virtual ports).
+    pub dtr_on_open: Option<bool>,
+    /// RTS level to set right after opening; as [`SerialConfig::dtr_on_open`].
+    /// Ignored with hardware flow control, which drives RTS itself.
+    pub rts_on_open: Option<bool>,
 }
 
 impl TryFrom<u8> for DataBits {
@@ -121,6 +130,8 @@ impl SerialConfig {
             stop_bits: StopBits::default(),
             flow_control: FlowControl::default(),
             read_timeout: Duration::from_millis(20),
+            dtr_on_open: None,
+            rts_on_open: None,
         }
     }
 
@@ -225,7 +236,11 @@ fn drop_macos_dial_in_duplicates(ports: &mut Vec<PortInfo>) {
 /// programs silently stealing each other's bytes.
 pub fn open(config: &SerialConfig) -> Result<Connection, TransportError> {
     config.validate()?;
-    let port = serialport::new(&config.path, config.baud_rate)
+    let mut builder = serialport::new(&config.path, config.baud_rate);
+    if let Some(dtr) = config.dtr_on_open {
+        builder = builder.dtr_on_open(dtr);
+    }
+    let port = builder
         .data_bits(match config.data_bits {
             DataBits::Five => serialport::DataBits::Five,
             DataBits::Six => serialport::DataBits::Six,
@@ -250,6 +265,8 @@ pub fn open(config: &SerialConfig) -> Result<Connection, TransportError> {
         .open()
         .map_err(|e| map_open_error(&config.path, e, is_listed))?;
     let reader_port = port.try_clone().map_err(map_error)?;
+    let mut control = SerialControl { port };
+    set_initial_lines(&mut control, config)?;
     Ok(Connection {
         info: TransportInfo {
             kind: TransportKind::Serial,
@@ -260,8 +277,36 @@ pub fn open(config: &SerialConfig) -> Result<Connection, TransportError> {
             port: reader_port,
             gone: false,
         }),
-        control: Box::new(SerialControl { port }),
+        control: Box::new(control),
     })
+}
+
+/// Applies [`SerialConfig::dtr_on_open`] and [`SerialConfig::rts_on_open`].
+/// A port without modem lines ignores them; any other refusal fails the
+/// open, since a board might then be held in reset.
+fn set_initial_lines(
+    control: &mut dyn TransportControl,
+    config: &SerialConfig,
+) -> Result<(), TransportError> {
+    let rts = config
+        .rts_on_open
+        .filter(|_| config.flow_control != FlowControl::Hardware);
+    let wanted = [
+        config.dtr_on_open.map(|level| (true, level)),
+        rts.map(|level| (false, level)),
+    ];
+    for (is_dtr, level) in wanted.into_iter().flatten() {
+        let result = if is_dtr {
+            control.set_dtr(level)
+        } else {
+            control.set_rts(level)
+        };
+        match result {
+            Ok(()) | Err(TransportError::Unsupported(_)) => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(())
 }
 
 /// Maps errors from opening a port, naming the port in the message.
@@ -484,6 +529,81 @@ impl TransportControl for SerialControl {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Records line changes, or refuses them with a chosen error.
+    struct Lines {
+        set: Vec<(&'static str, bool)>,
+        refuse: Option<fn() -> TransportError>,
+    }
+
+    impl TransportControl for Lines {
+        fn write_all(&mut self, _: &[u8]) -> Result<(), TransportError> {
+            Ok(())
+        }
+        fn set_dtr(&mut self, level: bool) -> Result<(), TransportError> {
+            self.refuse.map_or(Ok(()), |e| Err(e()))?;
+            self.set.push(("dtr", level));
+            Ok(())
+        }
+        fn set_rts(&mut self, level: bool) -> Result<(), TransportError> {
+            self.refuse.map_or(Ok(()), |e| Err(e()))?;
+            self.set.push(("rts", level));
+            Ok(())
+        }
+        fn line_states(&mut self) -> Result<LineStates, TransportError> {
+            Ok(LineStates::default())
+        }
+        fn send_break(&mut self, _: Duration) -> Result<(), TransportError> {
+            Ok(())
+        }
+        fn set_baud_rate(&mut self, _: u32) -> Result<(), TransportError> {
+            Ok(())
+        }
+    }
+
+    fn lines(refuse: Option<fn() -> TransportError>) -> Lines {
+        Lines {
+            set: Vec::new(),
+            refuse,
+        }
+    }
+
+    #[test]
+    fn initial_lines_are_set_only_when_asked() {
+        let mut config = SerialConfig::new("COM3", 115_200);
+        assert_eq!((config.dtr_on_open, config.rts_on_open), (None, None));
+        let mut control = lines(None);
+        set_initial_lines(&mut control, &config).unwrap();
+        assert!(control.set.is_empty(), "the OS default stays");
+
+        config.dtr_on_open = Some(false);
+        config.rts_on_open = Some(false);
+        set_initial_lines(&mut control, &config).unwrap();
+        assert_eq!(control.set, [("dtr", false), ("rts", false)]);
+
+        // Hardware flow control drives RTS itself.
+        config.flow_control = FlowControl::Hardware;
+        let mut control = lines(None);
+        set_initial_lines(&mut control, &config).unwrap();
+        assert_eq!(control.set, [("dtr", false)]);
+    }
+
+    #[test]
+    fn ports_without_modem_lines_ignore_them_but_refusals_fail() {
+        let mut config = SerialConfig::new("/dev/pts/3", 115_200);
+        config.dtr_on_open = Some(true);
+        config.rts_on_open = Some(false);
+        let mut pty = lines(Some(|| TransportError::Unsupported("modem lines")));
+        set_initial_lines(&mut pty, &config).unwrap();
+        let mut picky = lines(Some(|| TransportError::DriverRejected {
+            what: "setting DTR",
+            reason: "Invalid argument".into(),
+        }));
+        assert!(matches!(
+            set_initial_lines(&mut picky, &config),
+            Err(TransportError::DriverRejected { .. })
+        ));
+    }
 
     #[test]
     fn bit_counts_convert() {
