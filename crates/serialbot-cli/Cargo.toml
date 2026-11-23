@@ -21,6 +21,7 @@ regex.workspace = true
 clap = { version = "4.5", features = ["derive", "env"] }
 sys-locale = "0.3"
 ctrlc = "3.4"
+crossterm = "0.29"
 jiff = "0.2"
 
 [lints]
