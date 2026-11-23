@@ -13,8 +13,10 @@ fn main() {
     let stdout = std::io::stdout();
     let out_is_terminal = stdout.is_terminal();
     let interactive = out_is_terminal && std::io::stdin().is_terminal();
-    let mut out = stdout.lock();
-    let mut err = std::io::stderr().lock();
+    // Not locked for the whole run: `mcp stdio` writes to stdout from
+    // another thread.
+    let mut out = stdout;
+    let mut err = std::io::stderr();
     let manager = Arc::new(SessionManager::with_serial_ports());
     let interrupted = Arc::new(AtomicBool::new(false));
     let flag = Arc::clone(&interrupted);
@@ -37,6 +39,7 @@ fn main() {
         utc_offset_min: jiff::Zoned::now().offset().seconds() / 60,
         stdin: Some(Box::new(std::io::stdin())),
         interactive,
+        config_dir: serialbot_cli::config::config_dir(),
     };
     let code = run(std::env::args_os(), &mut ctx);
     manager.close_all();

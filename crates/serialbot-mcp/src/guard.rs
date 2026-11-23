@@ -3,8 +3,8 @@
 //! Tools that send data, change lines or settings, or open and close ports
 //! describe what they are about to do as an [`Action`] and wait for the
 //! [`Guard`] to approve it. Reading never asks. Without a guard
-//! ([`AllowAll`]) every action goes ahead, which suits the standalone
-//! `serialbot-mcp` binary and tests.
+//! ([`AllowAll`]) every action goes ahead, which suits tests and
+//! `serialbot-cli mcp serve --approve all`.
 
 use std::fmt::Write as _;
 use std::future::Future;

@@ -88,6 +88,8 @@ pub struct Strings {
     pub empty_data: &'static str,
     /// Interactive terminal texts.
     pub term: &'static Term,
+    /// MCP server texts.
+    pub mcp: &'static McpTexts,
     /// The usage line prefix.
     pub usage: &'static str,
     /// Heading of the subcommand list.
@@ -97,6 +99,27 @@ pub struct Strings {
     /// Help texts by key: `about`, global options by name, subcommands by
     /// name, their options as `subcommand.option`.
     pub help: &'static [(&'static str, &'static str)],
+}
+
+/// Texts of `mcp serve` and `mcp stdio`.
+#[derive(Debug)]
+pub struct McpTexts {
+    /// Before the URL.
+    pub serving: &'static str,
+    /// Before the network URL.
+    pub lan: &'static str,
+    /// How stdio clients connect.
+    pub stdio_hint: &'static str,
+    /// `--approve ask` needs a terminal.
+    pub ask_needs_terminal: &'static str,
+    /// The network plus no confirmation.
+    pub lan_all_warning: &'static str,
+    /// Before a request.
+    pub ask: &'static str,
+    /// The answers to a request.
+    pub choices: &'static str,
+    /// No server to bridge to.
+    pub unreachable: &'static str,
 }
 
 /// Texts of the interactive terminal (`open`).
@@ -243,6 +266,28 @@ static ZH_TERM: Term = Term {
     script_busy: "已有脚本在运行；/stop 可停止它",
 };
 
+static EN_MCP: McpTexts = McpTexts {
+    serving: "SerialBot MCP server",
+    lan: "on the network",
+    stdio_hint: "stdio clients (Claude Desktop): serialbot-cli mcp stdio",
+    ask_needs_terminal: "--approve ask needs a terminal to ask in; use --approve all or --approve deny",
+    lan_all_warning: "anyone on the network with the token can drive the ports without being asked",
+    ask: "AI wants",
+    choices: "  y allow · s allow for this session · n deny",
+    unreachable: "no SerialBot MCP server is running: start `serialbot-cli mcp serve`, or turn the server on in the app",
+};
+
+static ZH_MCP: McpTexts = McpTexts {
+    serving: "SerialBot MCP 服务",
+    lan: "局域网地址",
+    stdio_hint: "stdio 客户端（Claude Desktop）：serialbot-cli mcp stdio",
+    ask_needs_terminal: "--approve ask 需要终端来询问；请用 --approve all 或 --approve deny",
+    lan_all_warning: "局域网内任何拿到 token 的人都能不经确认操作串口",
+    ask: "AI 想要",
+    choices: "  y 允许 · s 本会话内都允许 · n 拒绝",
+    unreachable: "没有正在运行的 SerialBot MCP 服务：请启动 `serialbot-cli mcp serve`，或在 App 里打开 MCP 服务",
+};
+
 static EN: Strings = Strings {
     error: "error",
     no_ports: "No serial ports found.",
@@ -259,6 +304,7 @@ static EN: Strings = Strings {
     cannot_read: "cannot read",
     empty_data: "nothing to send",
     term: &EN_TERM,
+    mcp: &EN_MCP,
     usage: "Usage",
     commands: "Commands",
     options: "Options",
@@ -433,6 +479,31 @@ static EN: Strings = Strings {
             "Line ending after send text (the script can change it with an ending line)",
         ),
         ("run.encoding", "Text encoding (utf-8, gbk, ...)"),
+        ("mcp", "MCP server for AI agents, without the desktop app"),
+        (
+            "mcp.serve",
+            "Serve MCP over HTTP on this computer's ports; Ctrl+C stops it",
+        ),
+        (
+            "mcp.serve.listen",
+            "Who can reach it: local (this computer, default) or lan (the network; HTTP is not encrypted)",
+        ),
+        (
+            "mcp.serve.port",
+            "Preferred port; the next free one of the following nine is used if it is taken",
+        ),
+        (
+            "mcp.serve.token",
+            "Bearer token clients send (default: the one saved in cli.json, made on first use)",
+        ),
+        (
+            "mcp.serve.approve",
+            "Agents' changes: ask (in this terminal, default), all (allow) or deny",
+        ),
+        (
+            "mcp.stdio",
+            "For clients that start servers as processes (Claude Desktop): forwards to a running mcp serve, else the app",
+        ),
     ],
 };
 
@@ -452,11 +523,15 @@ static ZH: Strings = Strings {
     cannot_read: "无法读取",
     empty_data: "没有要发送的数据",
     term: &ZH_TERM,
+    mcp: &ZH_MCP,
     usage: "用法",
     commands: "命令",
     options: "选项",
     help: &[
-        ("about", "终端里的 SerialBot：列出串口、发送、监视。"),
+        (
+            "about",
+            "终端里的 SerialBot：串口列表、发送、监视、交互终端、脚本和 MCP 服务。",
+        ),
         ("color", "何时使用颜色：auto（默认）、always 或 never"),
         ("help", "显示帮助"),
         ("version", "显示版本"),
@@ -611,6 +686,28 @@ static ZH: Strings = Strings {
             "send 文本后追加的行尾（脚本里可用 ending 行修改）",
         ),
         ("run.encoding", "文本编码（utf-8、gbk……）"),
+        ("mcp", "给 AI 智能体用的 MCP 服务，不需要桌面 App"),
+        (
+            "mcp.serve",
+            "通过 HTTP 提供 MCP 服务，操作本机串口；Ctrl+C 停止",
+        ),
+        (
+            "mcp.serve.listen",
+            "谁可以访问：local（仅本机，默认）或 lan（局域网；HTTP 未加密）",
+        ),
+        ("mcp.serve.port", "首选端口；被占用时依次尝试后面九个"),
+        (
+            "mcp.serve.token",
+            "客户端要发送的 Bearer token（默认用 cli.json 里保存的，首次使用时生成）",
+        ),
+        (
+            "mcp.serve.approve",
+            "智能体的修改操作：ask（在本终端询问，默认）、all（全部允许）或 deny（全部拒绝）",
+        ),
+        (
+            "mcp.stdio",
+            "给以子进程启动服务的客户端（Claude Desktop）：转发到正在运行的 mcp serve，没有则转发到 App",
+        ),
     ],
 };
 

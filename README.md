@@ -215,7 +215,7 @@ sudo apt install libwebkit2gtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev
 cd app && npm ci && npm run tauri dev     # run the desktop app
 cargo test --workspace                    # Rust tests
 cd app && npm test                        # frontend tests
-cargo run -p serialbot-mcp                  # MCP server only, without a window
+cargo run -p serialbot-cli -- mcp serve   # MCP server only, without a window
 ```
 
 Every change ships with tests and must pass the format, clippy, test and coverage checks; see [CLAUDE.md](CLAUDE.md).

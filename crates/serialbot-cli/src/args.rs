@@ -61,6 +61,62 @@ pub enum Command {
     Open(OpenArgs),
     /// Run a script.
     Run(RunArgs),
+    /// MCP server for AI agents.
+    Mcp(McpArgs),
+}
+
+/// `mcp serve` or `mcp stdio`.
+#[derive(Debug, Args)]
+pub struct McpArgs {
+    /// Which.
+    #[command(subcommand)]
+    pub command: McpCommand,
+}
+
+/// The `mcp` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum McpCommand {
+    /// Serve MCP over HTTP.
+    Serve(ServeArgs),
+    /// Bridge stdio to a running server.
+    Stdio,
+}
+
+/// Options of `mcp serve`.
+#[derive(Debug, Args)]
+pub struct ServeArgs {
+    /// Who can reach the server.
+    #[arg(long, value_enum, default_value_t = ListenArg::Local)]
+    pub listen: ListenArg,
+    /// Preferred port.
+    #[arg(long, default_value_t = serialbot_mcp::DEFAULT_PORT)]
+    pub port: u16,
+    /// Bearer token.
+    #[arg(long)]
+    pub token: Option<String>,
+    /// How agents' changes are approved.
+    #[arg(long, value_enum, default_value_t = Approve::Ask)]
+    pub approve: Approve,
+}
+
+/// `--listen`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum ListenArg {
+    /// 127.0.0.1 only.
+    Local,
+    /// Every address.
+    Lan,
+}
+
+/// `--approve`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum Approve {
+    /// Ask in the terminal.
+    Ask,
+    /// Allow everything.
+    All,
+    /// Refuse every change.
+    Deny,
 }
 
 /// Options of `ports`.
@@ -400,14 +456,30 @@ pub fn command(lang: Lang) -> clap::Command {
         }
         c
     };
-    let mut cmd = localize(Cli::command().about(text("about")), "");
+    localize_tree(
+        localize(Cli::command().about(text("about")), ""),
+        "",
+        &text,
+        &localize,
+    )
+}
+
+/// Localizes the subcommands of `cmd` (and theirs), keyed `parent.name`.
+fn localize_tree(
+    mut cmd: clap::Command,
+    prefix: &str,
+    text: &dyn Fn(&str) -> &'static str,
+    localize: &dyn Fn(clap::Command, &str) -> clap::Command,
+) -> clap::Command {
     let names: Vec<String> = cmd
         .get_subcommands()
         .map(|c| c.get_name().to_owned())
         .collect();
     for name in names {
+        let key = format!("{prefix}{name}");
         cmd = cmd.mut_subcommand(name.as_str(), |c| {
-            localize(c.about(text(&name)), &format!("{name}."))
+            let c = localize(c.about(text(&key)), &format!("{key}."));
+            localize_tree(c, &format!("{key}."), text, localize)
         });
     }
     cmd
@@ -425,18 +497,23 @@ mod tests {
 
     #[test]
     fn every_option_has_help_in_both_languages() {
+        fn walk(cmd: &clap::Command, prefix: &str, keys: &mut Vec<String>) {
+            for sub in cmd.get_subcommands() {
+                let key = format!("{prefix}{}", sub.get_name());
+                keys.push(key.clone());
+                for arg in sub.get_arguments() {
+                    let id = arg.get_id().as_str();
+                    if !matches!(id, "help" | "color") {
+                        keys.push(format!("{key}.{id}"));
+                    }
+                }
+                walk(sub, &format!("{key}."), keys);
+            }
+        }
         let mut keys = vec!["about".to_owned()];
         let cli = Cli::command();
         keys.extend(cli.get_arguments().map(|a| a.get_id().to_string()));
-        for sub in cli.get_subcommands() {
-            keys.push(sub.get_name().to_owned());
-            for arg in sub.get_arguments() {
-                let id = arg.get_id().as_str();
-                if !matches!(id, "help" | "color") {
-                    keys.push(format!("{}.{id}", sub.get_name()));
-                }
-            }
-        }
+        walk(&cli, "", &mut keys);
         for lang in [Lang::En, Lang::Zh] {
             for key in &keys {
                 assert!(

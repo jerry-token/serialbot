@@ -215,7 +215,7 @@ sudo apt install libwebkit2gtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev
 cd app && npm ci && npm run tauri dev     # 运行桌面版
 cargo test --workspace                    # Rust 测试
 cd app && npm test                        # 前端测试
-cargo run -p serialbot-mcp                  # 不带界面，单独运行 MCP 服务
+cargo run -p serialbot-cli -- mcp serve   # 不带界面，单独运行 MCP 服务
 ```
 
 每次改动都要附带测试，并通过格式、clippy、测试和覆盖率检查，详见 [CLAUDE.md](CLAUDE.md)。
