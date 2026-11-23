@@ -29,6 +29,7 @@ tokio-util.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "io-util"] }
+rmcp = { workspace = true, features = ["client", "transport-streamable-http-client-reqwest"] }
 
 [build-dependencies]
 tauri-build.workspace = true
