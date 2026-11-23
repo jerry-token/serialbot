@@ -142,6 +142,17 @@ impl MockReader {
         }
         n
     }
+
+    /// Bytes already queued, if any. Checked again after seeing the
+    /// disconnect flag: the device queues its last bytes *before* setting
+    /// it, so they may have arrived after the first look, and must still be
+    /// delivered before the disconnect.
+    fn queued(&mut self, buf: &mut [u8]) -> Option<usize> {
+        while let Ok(chunk) = self.rx.try_recv() {
+            self.pending.extend(chunk);
+        }
+        (!self.pending.is_empty()).then(|| self.drain_into(buf))
+    }
 }
 
 impl TransportReader for MockReader {
@@ -149,16 +160,11 @@ impl TransportReader for MockReader {
         if buf.is_empty() {
             return Ok(0);
         }
-        // Pull everything already queued so bytes sent before a disconnect
-        // are still delivered.
-        while let Ok(chunk) = self.rx.try_recv() {
-            self.pending.extend(chunk);
-        }
-        if !self.pending.is_empty() {
-            return Ok(self.drain_into(buf));
+        if let Some(n) = self.queued(buf) {
+            return Ok(n);
         }
         if lock(&self.state).disconnected {
-            return Err(TransportError::Disconnected);
+            return self.queued(buf).ok_or(TransportError::Disconnected);
         }
         match self.rx.recv_timeout(self.timeout) {
             Ok(chunk) => {
@@ -167,7 +173,7 @@ impl TransportReader for MockReader {
             }
             Err(RecvTimeoutError::Timeout) => {
                 if lock(&self.state).disconnected {
-                    Err(TransportError::Disconnected)
+                    self.queued(buf).ok_or(TransportError::Disconnected)
                 } else {
                     Ok(0)
                 }
@@ -243,6 +249,30 @@ mod tests {
             out.extend_from_slice(&buf[..n]);
         }
         out
+    }
+
+    #[test]
+    fn bytes_sent_just_before_a_disconnect_are_never_lost() {
+        // The device may queue its last bytes and disconnect while the
+        // reader is between looking at the queue and looking at the flag.
+        for _ in 0..2_000 {
+            let (mut c, d) = connection("mock0", Duration::from_millis(1));
+            let device = std::thread::spawn(move || {
+                d.send(b"last");
+                d.disconnect();
+            });
+            let mut got = Vec::new();
+            let mut buf = [0u8; 8];
+            loop {
+                match c.reader.read(&mut buf) {
+                    Ok(n) => got.extend_from_slice(&buf[..n]),
+                    Err(TransportError::Disconnected) => break,
+                    Err(e) => panic!("{e}"),
+                }
+            }
+            device.join().unwrap();
+            assert_eq!(got, b"last");
+        }
     }
 
     #[test]
