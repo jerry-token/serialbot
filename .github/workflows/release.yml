@@ -3,6 +3,8 @@
 #   - push a version tag:  git tag v0.1.0-alpha.1 && git push origin v0.1.0-alpha.1
 #   - Actions → Release → "Run workflow", entering the version; the tag is
 #     then created on the selected commit.
+# The app's installers and serialbot-cli's archives (and .deb) are built in
+# parallel and published together.
 # Versions with a pre-release part (-alpha, -beta, -rc) are marked pre-release.
 name: Release
 
@@ -125,9 +127,95 @@ jobs:
           args: ${{ matrix.args }}
           uploadPlainBinary: ${{ matrix.plain_binary }}
 
+  # serialbot-cli is a separate download: archives for every system, and a
+  # .deb on Linux (see .github/scripts/package_cli.py).
+  cli:
+    name: CLI (${{ matrix.name }})
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x64
+            platform: ubuntu-22.04
+            package: linux-x64
+            python: python3
+          - name: Linux arm64
+            platform: ubuntu-22.04-arm
+            package: linux-arm64
+            python: python3
+          - name: macOS universal
+            platform: macos-latest
+            package: macos-universal
+            python: python3
+          - name: Windows x64
+            platform: windows-latest
+            package: windows-x64
+            python: python
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y -qq libudev-dev
+
+      - name: Build
+        run: |
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            rustup toolchain install
+            rustup target add aarch64-apple-darwin x86_64-apple-darwin
+            for target in aarch64-apple-darwin x86_64-apple-darwin; do
+              cargo build --release --locked -p serialbot-cli --target "$target"
+            done
+            mkdir -p target/universal
+            lipo -create -output target/universal/serialbot-cli \
+              target/aarch64-apple-darwin/release/serialbot-cli \
+              target/x86_64-apple-darwin/release/serialbot-cli
+            echo "BINARY=target/universal/serialbot-cli" >> "$GITHUB_ENV"
+          else
+            cargo build --release --locked -p serialbot-cli
+            exe=""
+            if [[ "$RUNNER_OS" == Windows ]]; then exe=".exe"; fi
+            echo "BINARY=target/release/serialbot-cli$exe" >> "$GITHUB_ENV"
+          fi
+
+      - name: Package
+        run: |
+          ${{ matrix.python }} .github/scripts/package_cli.py --binary "$BINARY" \
+            --version "${TAG#v}" --platform ${{ matrix.package }} --out dist
+
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+        run: |
+          for file in dist/*; do
+            name=$(basename "$file")
+            # A re-run replaces the file uploaded before.
+            old=$(gh api "repos/${{ github.repository }}/releases/$RELEASE_ID/assets" \
+              --jq ".[] | select(.name == \"$name\") | .id")
+            if [[ -n "$old" ]]; then
+              gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$old"
+            fi
+            curl -fsS -X POST \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary @"$file" \
+              "https://uploads.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets?name=$name" \
+              > /dev/null
+            echo "uploaded $name"
+          done
+
   publish:
     name: Publish release
-    needs: [create-release, build]
+    needs: [create-release, build, cli]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

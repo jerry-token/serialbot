@@ -27,6 +27,7 @@ checks marked *slow*), the commit-msg hook checks the message.
 | The layout below names every crate. | `check:layout-doc` |
 | This table and `cargo xtask check` list the same checks. | `check:rules-doc` |
 | Every source file (`.rs`, `.ts`, `.tsx`, `.js`, `.mjs`, `.css`, `.py`) starts with the `SPDX-License-Identifier: GPL-3.0-only` and `Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot` comment lines (see NOTICE and TRADEMARKS.md). | `check:copyright-headers` |
+| The release scripts (`.github/scripts`: CLI packages, download sizes) pass their tests. | `check:release-scripts` |
 
 Not automated, still required:
 
@@ -114,6 +115,10 @@ Not automated, still required:
 - `.github/workflows/release.yml` builds Windows (NSIS installer + portable
   exe), macOS (universal .dmg/.app, ad-hoc signed, not notarized) and Linux
   (.deb, .AppImage, x64 and arm64) and publishes them on the GitHub release page.
+  Its `cli` job builds `serialbot-cli` separately (the app's installers do not
+  include it): `serialbot-cli-<version>-<platform>.tar.gz` / `.zip` with
+  completions, plus `serialbot-cli-<version>-linux-<arch>.deb`, packaged by
+  `.github/scripts/package_cli.py`.
 - Release by pushing a tag from `main` (`git tag v0.1.0-alpha.2 && git push
   origin v0.1.0-alpha.2`) or with Actions → Release → "Run workflow" on
   `main`, entering the tag. Tags with `-alpha`/`-beta`/`-rc` are pre-releases.
