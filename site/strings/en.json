@@ -78,5 +78,15 @@
  "footer_license": "© 2026 Jerry. SerialBot is open source under GPL-3.0; official releases come only from this site and github.com/jerry-token/serialbot.",
  "footer_issues": "Report a problem",
  "verify_title": "Agents you can trust check their own work",
- "verify_body": "<p>The teams getting the most out of coding agents treat verification as the core of the work, not an afterthought. <a href=\"https://x.com/poteto\">Lauren Tan (@poteto)</a>, who builds Grok Bot, describes letting agents run the app, take traces and test it the way a user would, and keep going until it really works. Closing that loop is what makes their pull requests trustworthy.</p><p>Firmware has had no such loop. The truth about embedded code is on the board, and the board speaks through its serial port, so a person has had to watch the terminal and relay what it said. SerialBot is the missing piece: it lets the agent run the board and read the answer itself.</p>"
+ "verify_body": "<p>The teams getting the most out of coding agents treat verification as the core of the work, not an afterthought. <a href=\"https://x.com/poteto\">Lauren Tan (@poteto)</a>, who builds Grok Bot, describes letting agents run the app, take traces and test it the way a user would, and keep going until it really works. Closing that loop is what makes their pull requests trustworthy.</p><p>Firmware has had no such loop. The truth about embedded code is on the board, and the board speaks through its serial port, so a person has had to watch the terminal and relay what it said. SerialBot is the missing piece: it lets the agent run the board and read the answer itself.</p>",
+ "cli_title": "In the terminal, too",
+ "cli_intro": "<code>serialbot-cli</code> is SerialBot without a window, a separate download: one-shot commands for scripts and CI, an interactive terminal with minicom's keys, a full-screen view of several ports with a waveform and the AI panel, scripts, and the same MCP server.",
+ "cli_then": "<code>serialbot-cli mcp serve</code> runs the MCP server on its own and asks about an agent's changes in the terminal; <code>serialbot-cli completions bash|zsh|fish|powershell</code> prints completions.",
+ "dl_cli": "Command line (serialbot-cli)",
+ "dl_cli_win": "Windows 10/11 x64",
+ "dl_cli_mac": "macOS 11+, Apple silicon and Intel",
+ "dl_cli_deb": "Debian / Ubuntu x64, with completions",
+ "dl_cli_linux": "Other Linux x64",
+ "dl_cli_deb_arm": "Debian / Ubuntu arm64, with completions",
+ "dl_cli_linux_arm": "Other Linux arm64"
 }

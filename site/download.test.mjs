@@ -26,6 +26,18 @@ test("assets are matched by suffix, missing ones left out", () => {
   assert.deepEqual(pickAssets(undefined, ["_amd64.deb"]), {});
 });
 
+test("the app's and the CLI's packages are told apart", () => {
+  const both = {
+    assets: [
+      { name: "serialbot-cli-0.3.0-linux-amd64.deb", size: 1, browser_download_url: "https://x/cli" },
+      { name: "SerialBot_0.3.0_amd64.deb", size: 2, browser_download_url: "https://x/app" },
+    ],
+  };
+  const found = pickAssets(both, ["_amd64.deb", "-linux-amd64.deb"]);
+  assert.equal(found["_amd64.deb"].url, "https://x/app");
+  assert.equal(found["-linux-amd64.deb"].url, "https://x/cli");
+});
+
 test("the table gets links, names, sizes and the tag", () => {
   const row = (suffix) => {
     const link = { href: "https://github.com/x/releases", textContent: "placeholder" };

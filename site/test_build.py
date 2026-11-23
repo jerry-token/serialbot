@@ -40,6 +40,8 @@ class BuildTest(unittest.TestCase):
             self.assertNotIn("{{", text, lang)
             self.assertIn("support@aiany.cc", text)
             self.assertIn("© 2026 Jerry", text)
+            self.assertIn('data-asset="-linux-amd64.deb"', text)
+            self.assertIn("serialbot-cli tui", text)
             self.assertIn('<path class="wire"', text)
 
     def test_local_links_resolve(self):

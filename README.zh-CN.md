@@ -187,6 +187,36 @@ Windows 上 command 填 `serialbot.exe` 的路径（安装版或免安装版都�
 | `log.mark` / `log.query` | 插入命名标记；汇总或搜索标记之后的日志 |
 | `command.list` / `command.call` | 其余命令：改别名、自动重连、发送 BREAK |
 
+## ⌨️ 命令行版：serialbot-cli
+
+`serialbot-cli` 是不带窗口的 SerialBot，适合 SSH、脚本和 CI。它单独发布在 [Releases 页面](https://github.com/jerry-token/serialbot/releases)（App 安装包里不含）：
+
+| 系统 | 文件 |
+|---|---|
+| 🪟 Windows 10/11 x64 | `serialbot-cli-*-windows-x64.zip`：解压后把 `serialbot-cli.exe` 放进 PATH |
+| 🍎 macOS 11+ | `serialbot-cli-*-macos-universal.tar.gz`：`tar xzf …` 解压，再执行一次 `xattr -d com.apple.quarantine serialbot-cli` |
+| 🐧 Debian / Ubuntu x64 · arm64 | `serialbot-cli-*-linux-amd64.deb` · `…-linux-arm64.deb`：`sudo apt install ./serialbot-cli-*.deb`（含命令补全） |
+| 🐧 其他 Linux x64 · arm64 | `serialbot-cli-*-linux-x64.tar.gz` · `…-linux-arm64.tar.gz` |
+
+也可以从源码安装：`cargo install --git https://github.com/jerry-token/serialbot serialbot-cli`。
+
+```sh
+serialbot-cli ports                                   # 列出串口（也支持 --json）
+serialbot-cli send /dev/ttyUSB0 AT --expect OK       # 发送并等待回复；超时退出码为 1
+serialbot-cli monitor /dev/ttyUSB0 --until 'boot ok'  # 只接收（文本、--hex 或 --json 逐行）
+serialbot-cli signal /dev/ttyUSB0 dtr=0 100ms dtr=1   # DTR/RTS 时序、BREAK
+serialbot-cli run /dev/ttyUSB0 boot.txt               # 脚本：send、expect、wait、dtr、rts、mark……
+serialbot-cli open /dev/ttyUSB0 -b 921600             # 交互终端，按键兼容 minicom（Ctrl+A Z）
+serialbot-cli tui /dev/ttyUSB0 /dev/ttyUSB1           # 全屏界面：多串口分屏、波形图、AI 面板
+serialbot-cli mcp serve                               # 不开 App 的 MCP 服务，在终端里确认
+```
+
+- **`open`** 可以替代 minicom/picocom：`Ctrl+A` 加字母的含义相同（`X` 退出、`L` 保存日志、`S` 发送文件、`1`/`2` DTR/RTS……），输入框支持历史和 Ctrl+R 搜索，`/` 命令可按 Tab 补全，原始模式可跑 shell 和 vim，设备拔插后自动重连。输出被管道接走时变成纯管道。
+- **`tui`** 最多同时显示四个会话，可左右或上下分屏（`Ctrl+A |`、`Ctrl+A -`、`Ctrl+A ←/→`、鼠标），带会话列表和回看。`Ctrl+A V` 把数据里的数值画成波形（`name=value`、数字列，或 `--plot 'temp=([0-9.]+)'`），最多 6 条曲线，用颜色**和**点形区分。`--mcp` 打开 AI 面板，按 `y`/`s` 允许、`n` 拒绝智能体的修改操作。`/groups <文件>` 显示 App 导出的命令分组。
+- **`mcp serve`** 的 token 保存在 App 设置旁边的 `cli.json`；`mcp stdio` 是给 Claude Desktop 用的桥接，连到 `mcp serve`，没有运行时连到 App。
+- 退出码便于写脚本：0 成功、1 超时、2 参数错误、3 串口被占用或不存在、4 设备断开。
+- 提示文字跟随系统语言（中文或英文）。`serialbot-cli completions bash|zsh|fish|powershell` 输出命令补全脚本。
+
 ## 🗺️ 路线图
 
 - [x] 串口、TCP、UDP；多会话；文本 / HEX、ANSI 颜色、多编码、自动断帧
