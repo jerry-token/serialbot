@@ -148,6 +148,16 @@ pub struct Term {
     pub raw: &'static str,
     /// Status bar: waiting for the device.
     pub waiting: &'static str,
+    /// A script started; followed by its file.
+    pub script_start: &'static str,
+    /// A script finished.
+    pub script_done: &'static str,
+    /// A script's `expect` timed out.
+    pub script_timeout: &'static str,
+    /// A script was stopped.
+    pub script_stopped: &'static str,
+    /// A script is already running.
+    pub script_busy: &'static str,
 }
 
 impl Strings {
@@ -161,10 +171,10 @@ static EN_TERM: Term = Term {
     help: &[
         "Ctrl+A then: Z help · X quit · Q quit without reset · C clear · E echo · N timestamps",
         "F break · H hang up (DTR) · 1 DTR · 2 RTS · 3 reset sequence · L save to file",
-        "S send a file · P baud rate · A add LF to CR · W wrap · T display · J shell",
+        "S send a file · G run a script · P baud rate · A add LF to CR · W wrap · T display · J shell",
         "Ctrl+A Ctrl+A sends Ctrl+A · Ctrl+A / opens commands (also leaves raw mode)",
         "Input box: Enter sends · Shift+Enter new line · ↑↓ history · Ctrl+R search · Ctrl+C clears (or sends ETX)",
-        "Commands: /baud /hex /time /echo /log /send-file /dtr /rts /break /reset /raw /clear /quit · // sends a /",
+        "Commands: /baud /hex /time /echo /log /send-file /run /stop /dtr /rts /break /reset /raw /clear /quit · // sends a /",
     ],
     help_hint: "Ctrl+A Z help",
     unsupported: "is a modem key minicom has; SerialBot does not offer it",
@@ -188,16 +198,21 @@ static EN_TERM: Term = Term {
     hex: "HEX",
     raw: "RAW",
     waiting: "waiting for the device",
+    script_start: "running",
+    script_done: "script finished",
+    script_timeout: "script stopped: no reply matched within the timeout",
+    script_stopped: "script stopped",
+    script_busy: "a script is already running; /stop ends it",
 };
 
 static ZH_TERM: Term = Term {
     help: &[
         "先按 Ctrl+A 再按：Z 帮助 · X 退出 · Q 退出不复位 · C 清屏 · E 回显 · N 时间戳",
         "F BREAK · H 挂断（DTR）· 1 DTR · 2 RTS · 3 复位时序 · L 保存到文件",
-        "S 发送文件 · P 波特率 · A 回车补换行 · W 自动换行 · T 显示设置 · J 临时进入 shell",
+        "S 发送文件 · G 运行脚本 · P 波特率 · A 回车补换行 · W 自动换行 · T 显示设置 · J 临时进入 shell",
         "Ctrl+A Ctrl+A 发送 Ctrl+A 本身 · Ctrl+A / 打开命令（也用于退出原始模式）",
         "输入框：Enter 发送 · Shift+Enter 换行 · ↑↓ 历史 · Ctrl+R 搜索 · Ctrl+C 清空（空时发送 ETX）",
-        "命令：/baud /hex /time /echo /log /send-file /dtr /rts /break /reset /raw /clear /quit · // 发送 /",
+        "命令：/baud /hex /time /echo /log /send-file /run /stop /dtr /rts /break /reset /raw /clear /quit · // 发送 /",
     ],
     help_hint: "Ctrl+A Z 帮助",
     unsupported: "是 minicom 的调制解调器按键，SerialBot 不提供",
@@ -221,6 +236,11 @@ static ZH_TERM: Term = Term {
     hex: "HEX",
     raw: "原始",
     waiting: "等待设备",
+    script_start: "正在运行",
+    script_done: "脚本已完成",
+    script_timeout: "脚本已停止：超时内没有收到匹配的回复",
+    script_stopped: "脚本已停止",
+    script_busy: "已有脚本在运行；/stop 可停止它",
 };
 
 static EN: Strings = Strings {
@@ -381,6 +401,38 @@ static EN: Strings = Strings {
         ),
         ("open.hex", "Show received data as hex"),
         ("open.time", "Start each line with the local time"),
+        (
+            "run",
+            "Run a script (send, expect, wait, dtr, rts, break, mark, timeout, ending) or an app command export; stops at the first failure",
+        ),
+        (
+            "run.port",
+            "Serial port (/dev/ttyUSB0, COM3) or network address",
+        ),
+        ("run.baud", "Baud rate"),
+        ("run.data", "Data bits (5-8)"),
+        ("run.parity", "Parity"),
+        ("run.stop", "Stop bits (1 or 2)"),
+        ("run.flow", "Flow control"),
+        (
+            "run.dtr",
+            "DTR level right after opening (0 keeps boards like the ESP32 out of reset)",
+        ),
+        ("run.rts", "RTS level right after opening"),
+        (
+            "run.script",
+            "The script: a text file (one step per line), or a .json command export of the app",
+        ),
+        (
+            "run.group",
+            "Which group of a command export to run (by name)",
+        ),
+        ("run.print", "Print received data to standard output"),
+        (
+            "run.ending",
+            "Line ending after send text (the script can change it with an ending line)",
+        ),
+        ("run.encoding", "Text encoding (utf-8, gbk, ...)"),
     ],
 };
 
@@ -533,6 +585,32 @@ static ZH: Strings = Strings {
         ),
         ("open.hex", "以 HEX 显示收到的数据"),
         ("open.time", "每行开头加上本地时间"),
+        (
+            "run",
+            "运行脚本（send、expect、wait、dtr、rts、break、mark、timeout、ending）或 App 导出的命令分组；遇到失败即停止",
+        ),
+        ("run.port", "串口（/dev/ttyUSB0、COM3）或网络地址"),
+        ("run.baud", "波特率"),
+        ("run.data", "数据位（5-8）"),
+        ("run.parity", "校验位"),
+        ("run.stop", "停止位（1 或 2）"),
+        ("run.flow", "流控"),
+        (
+            "run.dtr",
+            "打开后立即设置的 DTR 电平（设为 0 可避免 ESP32 等板子复位）",
+        ),
+        ("run.rts", "打开后立即设置的 RTS 电平"),
+        (
+            "run.script",
+            "脚本：文本文件（每行一步），或 App 导出的 .json 命令分组",
+        ),
+        ("run.group", "要运行命令分组里的哪一组（按名称）"),
+        ("run.print", "把收到的数据输出到标准输出"),
+        (
+            "run.ending",
+            "send 文本后追加的行尾（脚本里可用 ending 行修改）",
+        ),
+        ("run.encoding", "文本编码（utf-8、gbk……）"),
     ],
 };
 

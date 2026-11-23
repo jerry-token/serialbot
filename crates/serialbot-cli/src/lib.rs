@@ -11,6 +11,7 @@ pub mod commands;
 pub mod exit;
 pub mod i18n;
 pub mod output;
+pub mod script;
 pub mod term;
 pub mod values;
 
@@ -111,6 +112,7 @@ where
         Command::Ports(a) => commands::ports::run(a, &*ctx.list_ports, &mut out),
         Command::Send(a) => commands::send::run(a, &ctx.manager, &mut out),
         Command::Signal(a) => commands::signal::run(a, &ctx.manager, &mut out),
+        Command::Run(a) => commands::run::run(a, &ctx.manager, &ctx.interrupted, &mut out),
         Command::Open(a) => {
             let io = commands::open::Io {
                 stdin: stdin.unwrap_or_else(|| Box::new(std::io::empty())),

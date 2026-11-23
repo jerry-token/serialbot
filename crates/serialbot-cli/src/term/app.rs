@@ -5,7 +5,8 @@
 
 use std::io::{self, Write};
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
 
 use crossterm::event::KeyEvent;
@@ -21,6 +22,19 @@ use super::screen::{Bottom, Screen};
 use crate::args::Ending;
 use crate::commands::signal::Step;
 use crate::i18n::Lang;
+use crate::script::{self, Progress, Stop};
+
+/// What a running script reports.
+enum ScriptEvent {
+    Step(Progress),
+    Done(Result<(), Stop>),
+}
+
+/// A script running on its own thread.
+struct Running {
+    stop: Arc<AtomicBool>,
+    events: mpsc::Receiver<ScriptEvent>,
+}
 
 /// How often a lost device is looked for.
 const RETRY: Duration = Duration::from_secs(1);
@@ -96,6 +110,7 @@ pub struct Interactive {
     wrap: bool,
     lost: bool,
     last_retry: Instant,
+    script: Option<Running>,
 }
 
 impl std::fmt::Debug for Interactive {
@@ -134,6 +149,7 @@ impl Interactive {
             wrap: true,
             lost: false,
             last_retry: Instant::now(),
+            script: None,
         })
     }
 
@@ -201,6 +217,7 @@ impl Interactive {
             self.cursor = chunk.next;
         }
         self.follow_file(&mut lines);
+        self.follow_script(&mut lines);
         let flow = self.follow_connection(&mut lines);
         if self.keys.mode == Mode::Raw {
             out.flush()?;
@@ -229,8 +246,12 @@ impl Interactive {
         self.act(out, vec![Action::Command(slash)])
     }
 
-    /// Stops background jobs (file send, capture) before the port closes.
+    /// Stops background jobs (script, file send, capture) before the port
+    /// closes.
     pub fn stop_jobs(&self) {
+        if let Some(running) = &self.script {
+            running.stop.store(true, Ordering::Relaxed);
+        }
         self.files.stop_all();
         self.captures.stop_all();
     }
@@ -329,7 +350,8 @@ impl Interactive {
             Local::CycleTimestamp => self.feed.display.stamps = self.feed.display.stamps.next(),
             Local::PortSettings => self.prefill("/baud "),
             Local::SendFile | Local::TypeFile => self.prefill("/send-file "),
-            Local::RunScript | Local::Config => notes.push(t.later.to_owned()),
+            Local::RunScript => self.prefill("/run "),
+            Local::Config => notes.push(t.later.to_owned()),
             Local::ToggleWrap => self.wrap = !self.wrap,
             Local::ToggleAddLf => self.feed.display.add_lf = !self.feed.display.add_lf,
             // Received line feeds already start a new line here.
@@ -385,7 +407,10 @@ impl Interactive {
             Slash::Echo => return self.local(Local::ToggleEcho, out, notes),
             Slash::Log(path) => self.toggle_capture(path.map(PathBuf::from), notes),
             Slash::SendFile(path) => self.send_file(&path, notes),
-            Slash::Run(_) => notes.push(t.later.to_owned()),
+            Slash::Run(path) => self.run_script(&path, notes),
+            Slash::Stop => {
+                self.stop_jobs_but_capture();
+            }
             Slash::Raw => self.set_mode(Mode::Raw, out, notes)?,
             Slash::Dtr => return self.local(Local::ToggleDtr, out, notes),
             Slash::Rts => return self.local(Local::ToggleRts, out, notes),
@@ -501,6 +526,88 @@ impl Interactive {
                 notes.push(format!("{} {path} ({} B)", t.sending, status.total));
             }
             Err(e) => notes.push(format!("{}: {e}", t.failed)),
+        }
+    }
+
+    /// `/stop`: ends a script and a file send (saving to a file goes on).
+    fn stop_jobs_but_capture(&mut self) {
+        if let Some(running) = &self.script {
+            running.stop.store(true, Ordering::Relaxed);
+        }
+        self.files.stop(1);
+    }
+
+    fn run_script(&mut self, path: &str, notes: &mut Vec<String>) {
+        let t = self.term();
+        if self.script.is_some() {
+            notes.push(t.script_busy.to_owned());
+            return;
+        }
+        let text = match std::fs::read_to_string(path) {
+            Ok(text) => text,
+            Err(e) => {
+                notes.push(format!("{}: {path}: {e}", t.failed));
+                return;
+            }
+        };
+        let items = if std::path::Path::new(path)
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("json"))
+        {
+            script::parse_groups(&text, None)
+        } else {
+            script::parse_text(&text, self.settings.ending, &self.settings.encoding)
+        };
+        let items = match items {
+            Ok(items) => items,
+            Err(e) => {
+                notes.push(format!("{}: {e}", t.failed));
+                return;
+            }
+        };
+        let (tx, events) = mpsc::channel();
+        let stop = Arc::new(AtomicBool::new(false));
+        let session = Arc::clone(&self.session);
+        let flag = Arc::clone(&stop);
+        std::thread::spawn(move || {
+            let result = script::run(&session, &items, &flag, &mut |p| {
+                let _ = tx.send(ScriptEvent::Step(p.clone()));
+            });
+            let _ = tx.send(ScriptEvent::Done(result));
+        });
+        notes.push(format!("{} {path}", t.script_start));
+        self.script = Some(Running { stop, events });
+    }
+
+    fn follow_script(&mut self, lines: &mut Vec<String>) {
+        let Some(running) = &self.script else {
+            return;
+        };
+        let t = self.term();
+        let mut done = false;
+        let mut notes = Vec::new();
+        while let Ok(event) = running.events.try_recv() {
+            match event {
+                ScriptEvent::Step(p) => {
+                    let mark = if p.stop.is_none() { "✓" } else { "✗" };
+                    notes.push(format!("{mark} {}  {}", p.line, p.source));
+                }
+                ScriptEvent::Done(result) => {
+                    done = true;
+                    notes.push(match result {
+                        Ok(()) => t.script_done.to_owned(),
+                        Err(Stop::Timeout) => t.script_timeout.to_owned(),
+                        Err(Stop::Interrupted) => t.script_stopped.to_owned(),
+                        Err(Stop::Failed(why)) => format!("{}: {why}", t.failed),
+                    });
+                }
+            }
+        }
+        for note in notes {
+            lines.extend(self.feed.note(&note));
+        }
+        if done {
+            self.script = None;
         }
     }
 
@@ -626,6 +733,9 @@ impl Interactive {
         }
         if let Some(path) = &self.capture {
             parts.push(format!("⏺ {}", path.display()));
+        }
+        if self.script.is_some() {
+            parts.push("▶".to_owned());
         }
         if self.file_running {
             let s = self.files.status(1);

@@ -59,6 +59,8 @@ pub enum Command {
     Signal(SignalArgs),
     /// The interactive terminal.
     Open(OpenArgs),
+    /// Run a script.
+    Run(RunArgs),
 }
 
 /// Options of `ports`.
@@ -302,6 +304,28 @@ pub fn minicom_device(args: Vec<std::ffi::OsString>) -> Vec<std::ffi::OsString> 
         }
     }
     out
+}
+
+/// Options of `run`.
+#[derive(Debug, Args)]
+pub struct RunArgs {
+    /// Port and its settings.
+    #[command(flatten)]
+    pub port: PortArgs,
+    /// The script: a text file, or a command export (`.json`) of the app.
+    pub script: PathBuf,
+    /// Which group of a command export to run.
+    #[arg(long)]
+    pub group: Option<String>,
+    /// Print received data.
+    #[arg(long)]
+    pub print: bool,
+    /// Line ending after `send` text.
+    #[arg(long, value_enum, default_value_t = Ending::Crlf)]
+    pub ending: Ending,
+    /// Text encoding.
+    #[arg(long, default_value = "utf-8")]
+    pub encoding: String,
 }
 
 /// Options of `signal`.
