@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! What each key does in the interactive terminal, as a pure state
 //! machine: keys in, [`Action`]s out. No terminal and no port are touched
 //! here, so every key is tested.

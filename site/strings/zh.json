@@ -75,7 +75,7 @@
  "dl_deb_arm": "Debian / Ubuntu arm64，树莓派 4/5",
  "dl_appimage_arm": "其他 Linux arm64",
  "download_note": "SerialBot 目前是 Beta 版，安装包还没有签名，macOS 和 Windows 首次打开会有提示，发布说明里写了打开方法。",
- "footer_license": "SerialBot 以 GPL-3.0 开源。",
+ "footer_license": "© 2026 Jerry。SerialBot 以 GPL-3.0 开源；正式版本只从本站和 github.com/jerry-token/serialbot 发布。",
  "footer_issues": "反馈问题",
  "verify_title": "值得信任的 Agent，会自己验证",
  "verify_body": "<p>把编码 Agent 用得最好的团队，都把验证当作工作的核心，而不是事后补充。打造 Grok Bot 的 <a href=\"https://x.com/poteto\">Lauren Tan（@poteto）</a> 分享过她的做法：让 Agent 自己运行应用、抓性能数据、像用户一样去测试，直到真的没问题为止。正是这个闭环，让 Agent 提交的代码值得信任。</p><p>固件开发一直缺这样的闭环。嵌入式代码跑得对不对，答案在板子上，而板子只通过串口说话，所以一直得有人盯着终端，再把看到的转述给 AI。SerialBot 补上的就是这一环：让 Agent 自己操作板子、自己读懂回答。</p>"

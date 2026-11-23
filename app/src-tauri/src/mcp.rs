@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! The MCP server embedded in the app.
 //!
 //! It serves the same [`SessionManager`] as the window, so a port opened in

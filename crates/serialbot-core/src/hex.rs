@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! Bytes as hex text and back, the form people type and read raw data in.
 
 /// Formats bytes as lowercase hex pairs separated by single spaces.

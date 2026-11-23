@@ -27,6 +27,8 @@
   },
   "bundle": {
     "active": true,
+    "copyright": "Copyright (C) 2026 Jerry. GPL-3.0-only. https://github.com/jerry-token/serialbot",
+    "publisher": "Jerry",
     "targets": "all",
     "icon": [
       "icons/32x32.png",

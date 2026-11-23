@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! Network endpoints through the session manager, over real localhost
 //! sockets: the same paths a user or an MCP client would open.
 #![allow(clippy::unwrap_used)]

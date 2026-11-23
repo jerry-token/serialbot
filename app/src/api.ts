@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 // Typed access to the Rust backend (app/src-tauri/src/commands.rs).
 // Components receive a `Backend` so tests can substitute a fake.
 

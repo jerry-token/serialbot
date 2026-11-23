@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! One session's console: received data as lines, local commands, jobs
 //! (saving, file sends, scripts) and reconnecting. It draws nothing:
 //! [`super::app::Interactive`] (`open`) and the full-screen `tui` each put

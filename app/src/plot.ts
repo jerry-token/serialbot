@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 // Numbers in received text, as time series for the Plot view.
 
 /** CSI, OSC and two-byte escape sequences, removed before parsing. */

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 import type { FlowControl, Parity, PortInfo } from "../api";
 import { portLabel } from "../api";
 import { CONNECTION_KINDS, type ConnectionKind } from "../endpoint";

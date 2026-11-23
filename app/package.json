@@ -1,6 +1,8 @@
 {
   "name": "serialbot-app",
   "private": true,
+  "author": "Jerry <support@aiany.cc>",
+  "license": "GPL-3.0-only",
   "version": "0.2.0",
   "type": "module",
   "scripts": {

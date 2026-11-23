@@ -75,7 +75,7 @@
  "dl_deb_arm": "Debian / Ubuntu arm64, Raspberry Pi 4/5",
  "dl_appimage_arm": "Other Linux arm64",
  "download_note": "SerialBot is in beta. The builds are not signed yet, so macOS and Windows warn on first launch; the release notes say how to open them.",
- "footer_license": "SerialBot is open source under GPL-3.0.",
+ "footer_license": "© 2026 Jerry. SerialBot is open source under GPL-3.0; official releases come only from this site and github.com/jerry-token/serialbot.",
  "footer_issues": "Report a problem",
  "verify_title": "Agents you can trust check their own work",
  "verify_body": "<p>The teams getting the most out of coding agents treat verification as the core of the work, not an afterthought. <a href=\"https://x.com/poteto\">Lauren Tan (@poteto)</a>, who builds Grok Bot, describes letting agents run the app, take traces and test it the way a user would, and keep going until it really works. Closing that loop is what makes their pull requests trustworthy.</p><p>Firmware has had no such loop. The truth about embedded code is on the board, and the board speaks through its serial port, so a person has had to watch the terminal and relay what it said. SerialBot is the missing piece: it lets the agent run the board and read the answer itself.</p>"

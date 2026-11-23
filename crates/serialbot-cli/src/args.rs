@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! The command line: subcommands and their options, as plain data.
 //!
 //! Help texts come from [`crate::i18n::Strings::help`], keyed by
@@ -20,6 +22,11 @@ use crate::values::{Checksum, parse_duration, parse_level};
 #[command(
     name = "serialbot-cli",
     version,
+    long_version = concat!(
+        env!("CARGO_PKG_VERSION"),
+        "\nCopyright (C) 2026 Jerry <support@aiany.cc>",
+        "\nGPL-3.0-only: https://github.com/jerry-token/serialbot"
+    ),
     disable_help_flag = true,
     disable_version_flag = true,
     disable_help_subcommand = true,

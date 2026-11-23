@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! Text encodings for what users type and what devices print.
 //!
 //! Labels follow the WHATWG Encoding Standard (`utf-8`, `gbk`, `gb18030`,

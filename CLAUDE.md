@@ -26,6 +26,7 @@ checks marked *slow*), the commit-msg hook checks the message.
 | No session links or session trailers in commits. | `check:no-session-links` |
 | The layout below names every crate. | `check:layout-doc` |
 | This table and `cargo xtask check` list the same checks. | `check:rules-doc` |
+| Every source file (`.rs`, `.ts`, `.tsx`, `.js`, `.mjs`, `.css`, `.py`) starts with the `SPDX-License-Identifier: GPL-3.0-only` and `Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot` comment lines (see NOTICE and TRADEMARKS.md). | `check:copyright-headers` |
 
 Not automated, still required:
 

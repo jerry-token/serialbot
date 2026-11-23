@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! `send`: open the port, send once, optionally wait for a reply, close.
 //!
 //! Sending and waiting happen within one open, so a reply that comes right

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! `serialbot mcp`: the stdio MCP bridge for clients that start their MCP
 //! servers as child processes (Claude Desktop). It runs no window: it reads
 //! the running app's MCP settings and forwards to its HTTP server.

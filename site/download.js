@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 // Fills the download table from the newest GitHub release (pre-releases
 // included, since every release is a pre-release for now). Without JavaScript or if
 // GitHub cannot be reached, every link still points at the releases page.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 import type { Strings } from "../i18n";
 
 /**
@@ -91,6 +93,9 @@ export function HelpPanel({ t, version, onOpenLink }: Props) {
           ))}
         </ul>
       </section>
+      <footer>
+        <p className="muted help-copyright">{h.copyright}</p>
+      </footer>
     </article>
   );
 }

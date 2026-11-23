@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! A session owns one open connection.
 //!
 //! A dedicated reader thread moves every received chunk into the session's

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 // Network endpoints are opened like ports, under a URL as their path:
 // tcp://host:port, tcp-server://addr:port, udp://host:port?local=addr:port.
 // The backend parses them; this module builds them from the form.

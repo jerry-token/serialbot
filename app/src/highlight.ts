@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 // Keywords the user wants to stand out in the log.
 
 /** One keyword and the background it is marked with. */

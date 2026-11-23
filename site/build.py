@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 """Builds the SerialBot site into a folder: `python3 site/build.py _site`.
 
 One template (`template.html`), one string table per language

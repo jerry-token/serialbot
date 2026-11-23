@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! The interactive terminal (`open`) for one session: a [`Console`] whose
 //! lines scroll above an input box and a status bar. It writes to any
 //! [`Write`], so it is tested with mock devices and a terminal emulator;

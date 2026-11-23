@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! Saving a session's log to a file: a one-off export of what the log holds
 //! now, or a live capture that keeps appending new entries.
 //!

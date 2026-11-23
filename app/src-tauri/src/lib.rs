@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! SerialBot desktop app: a Tauri shell whose window is one more view of the
 //! sessions owned by the core's [`serialbot_core::SessionManager`]. The
 //! embedded MCP server ([`mcp`]) is another view of the same sessions.

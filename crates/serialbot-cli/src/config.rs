@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! The CLI's own settings (`cli.json` in the app's config directory, next
 //! to the app's `mcp.json`, never shared with it) and the app's MCP
 //! settings, read only to reach a running app.

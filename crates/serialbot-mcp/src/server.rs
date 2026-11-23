@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! Running the MCP server on a TCP port, for any front end (the desktop
 //! app, the command-line tool).
 //!

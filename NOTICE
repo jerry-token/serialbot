@@ -1,0 +1,21 @@
+SerialBot
+Copyright (C) 2026 Jerry <support@aiany.cc>, <strongwong003@gmail.com>
+
+Official repository: https://github.com/jerry-token/serialbot
+Official website:    https://serialbot.aiany.cc
+
+This program is free software: you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the Free
+Software Foundation, version 3 only (see LICENSE).
+
+If you convey a copy or a modified version, the GPL requires you to:
+
+- keep this notice, the copyright lines at the top of each source file
+  and the LICENSE file intact (section 4);
+- state prominently that you changed the files, and when (section 5a);
+- release your changes under the same license, with their source code
+  (sections 5c and 6).
+
+The name "SerialBot" and its logo are not licensed by the GPL; see
+TRADEMARKS.md. A modified version must not be presented as SerialBot or as
+coming from its author.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! The real `serialbot-cli` program against virtual serial ports made by
 //! `socat` (Linux only, like the core's socat tests; skipped without socat
 //! unless `SERIALBOT_REQUIRE_SOCAT` is set).
