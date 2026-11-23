@@ -1,19 +1,19 @@
-//! Asking the user in the window before an AI agent changes anything.
+//! Asking the user before an AI agent changes anything.
 //!
-//! [`Approvals`] is the [`Guard`] of the embedded MCP server. Each action an
-//! agent wants to carry out becomes a pending [`ApprovalRequest`]; the
-//! window shows the queue and answers with a [`Decision`]. An unanswered
-//! request is refused after the timeout, and one whose agent gave up (the
-//! tool call was cancelled) leaves the queue by itself.
+//! [`Approvals`] is a [`Guard`] for the MCP server. Each action an agent
+//! wants to carry out becomes a pending [`ApprovalRequest`]; the front end
+//! (a window, a terminal) shows the queue and answers with a [`Decision`].
+//! An unanswered request is refused after the timeout, and one whose agent
+//! gave up (the tool call was cancelled) leaves the queue by itself.
 
 use std::collections::{BTreeMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
+use crate::guard::{Action, Approval, Guard};
 use serde::{Deserialize, Serialize};
 use serialbot_core::SessionId;
-use serialbot_mcp::guard::{Action, Approval, Guard};
 use tokio::sync::oneshot;
 
 /// How long a request waits for the user before it is refused.
