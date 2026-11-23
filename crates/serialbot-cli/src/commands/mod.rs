@@ -4,5 +4,6 @@
 pub mod monitor;
 pub mod open;
 pub mod ports;
+pub mod run;
 pub mod send;
 pub mod signal;

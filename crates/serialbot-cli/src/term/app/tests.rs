@@ -311,10 +311,11 @@ fn display_options() {
     assert!(r.shows("add LF on · wrap off"), "{}", r.screen());
     r.prefix('b');
     assert!(r.shows("Shift+PgUp"), "{}", r.screen());
-    r.prefix('g');
     r.prefix('o');
-    r.type_line("/run x");
     assert!(r.shows("later version"), "{}", r.screen());
+    r.prefix('g');
+    assert_eq!(r.app.keys.editor.text(), "/run ");
+    r.keys(&[press(KeyCode::Esc)]);
     r.prefix('c');
     assert!(!r.shows("later version"), "cleared");
     r.type_line("/clear");
@@ -398,4 +399,60 @@ fn unknown_encodings_are_refused_and_colors_dim_the_status() {
     };
     let app = Interactive::new(session, Arc::clone(&f.manager), colored, 60).unwrap();
     assert!(app.status().starts_with("\x1b[2m"));
+}
+
+#[test]
+fn scripts_run_in_the_background_with_progress() {
+    let dir = std::env::temp_dir().join(format!("serialbot-cli-script-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let script = dir.join("check.txt");
+    std::fs::write(&script, "send AT\nexpect OK\nmark checked\n").unwrap();
+    let mut r = Rig::new();
+    r.type_line(&format!("/run {}", script.display()));
+    assert!(r.shows("running"), "{}", r.screen());
+    assert!(r.shows("▶"), "the status shows a running script");
+    r.type_line(&format!("/run {}", script.display()));
+    assert!(r.shows("already running"), "{}", r.screen());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while r.device.take_written() != b"AT\r\n" {
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    r.device.send(b"OK\r\n");
+    r.until(|r| r.shows("script finished"));
+    assert!(
+        r.shows("✓ 1  send AT") && r.shows("✓ 2  expect OK"),
+        "{}",
+        r.screen()
+    );
+    assert!(r.shows("# checked"), "{}", r.screen());
+
+    // A script that waits forever is stopped with /stop.
+    std::fs::write(&script, "timeout 30s\nexpect never\n").unwrap();
+    r.type_line(&format!("/run {}", script.display()));
+    r.type_line("/stop");
+    r.until(|r| r.shows("script stopped"));
+    std::fs::write(&script, "timeout 10ms\nexpect never\n").unwrap();
+    r.type_line(&format!("/run {}", script.display()));
+    r.until(|r| r.shows("no reply matched"));
+    std::fs::write(&script, "frobnicate\n").unwrap();
+    r.type_line(&format!("/run {}", script.display()));
+    assert!(r.shows("line 1"), "{}", r.screen());
+    r.type_line("/run /no/such/script");
+    assert!(r.shows("failed: /no/such/script"), "{}", r.screen());
+    let json = dir.join("groups.json");
+    std::fs::write(
+        &json,
+        r#"[{"name": "G", "commands": [{"text": "x", "ending": "none"}]}]"#,
+    )
+    .unwrap();
+    r.type_line(&format!("/run {}", json.display()));
+    r.until(|r| r.shows("script finished"));
+    // Quitting stops a running script too.
+    std::fs::write(&script, "wait 30s\n").unwrap();
+    r.type_line(&format!("/run {}", script.display()));
+    r.app.stop_jobs();
+    // "script stopped" twice before, plus this one.
+    r.until(|r| r.screen().matches("script stopped").count() == 3);
+    let _ = std::fs::remove_dir_all(&dir);
 }

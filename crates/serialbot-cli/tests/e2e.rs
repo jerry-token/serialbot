@@ -234,3 +234,33 @@ fn signal_reports_ports_without_modem_lines() {
     assert_eq!(out.status.code(), Some(0));
     assert_eq!(out.stdout, b"DTR -  RTS -\n");
 }
+
+#[test]
+fn run_a_script_over_a_real_port() {
+    let Some(pair) = virtual_pair("cli-run") else {
+        return;
+    };
+    let device = responder(&pair.b);
+    let script = pair.a.with_file_name("check.txt");
+    std::fs::write(&script, "send AT\nexpect ^OK\nmark done\n").unwrap();
+    let out = cli(&[
+        "run",
+        pair.a.to_str().unwrap(),
+        script.to_str().unwrap(),
+        "--print",
+    ]);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(out.stdout, b"OK\r\n");
+    assert_eq!(device.join().unwrap(), b"AT\r\n");
+    let steps = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        steps.lines().filter(|l| l.starts_with('✓')).count(),
+        3,
+        "{steps}"
+    );
+}

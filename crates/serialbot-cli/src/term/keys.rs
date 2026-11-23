@@ -98,6 +98,8 @@ pub enum Slash {
     SendFile(String),
     /// `/run <script>`.
     Run(String),
+    /// `/stop`: stop a running script or file send.
+    Stop,
     /// `/raw`: switch to raw mode.
     Raw,
     /// `/echo`: local echo on/off.
@@ -136,6 +138,7 @@ pub const SLASH_COMMANDS: &[(&str, &str)] = &[
     ("rts", ""),
     ("run", "<script>"),
     ("send-file", "<file>"),
+    ("stop", ""),
     ("time", ""),
 ];
 
@@ -159,6 +162,7 @@ impl Slash {
             ("send-file", Some(a)) => Self::SendFile(a),
             ("run", Some(a)) => Self::Run(a),
             ("raw", None) => Self::Raw,
+            ("stop", None) => Self::Stop,
             ("echo", None) => Self::Echo,
             ("dtr", None) => Self::Dtr,
             ("rts", None) => Self::Rts,
@@ -616,6 +620,7 @@ mod tests {
             ("send-file fw.bin", Slash::SendFile("fw.bin".into())),
             ("run boot.txt", Slash::Run("boot.txt".into())),
             ("raw", Slash::Raw),
+            ("stop", Slash::Stop),
             ("echo", Slash::Echo),
             ("dtr", Slash::Dtr),
             ("rts", Slash::Rts),

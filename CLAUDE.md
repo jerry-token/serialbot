@@ -66,7 +66,8 @@ Not automated, still required:
   stops them when a session closes
 - `crates/serialbot-cli` — `serialbot-cli`, the terminal front end
   - `src/lib.rs` — `run(args, Context)`: commands get output, language and devices passed in
-  - `src/commands/` — one file per subcommand (`ports`, `send`, `monitor`, `signal`, `open`)
+  - `src/commands/` — one file per subcommand (`ports`, `send`, `monitor`, `signal`, `open`, `run`)
+  - `src/script.rs` — `run` / `/run` scripts: text steps or the app's command export
   - `src/term/` — the interactive terminal: `keys.rs` (minicom keys, pure), `editor.rs`
     (input box), `feed.rs` (entries to lines), `screen.rs` (redraws only the bottom rows),
     `app.rs` (one session; tested with mock devices and the `vt100` emulator)
