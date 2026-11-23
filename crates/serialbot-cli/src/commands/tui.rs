@@ -18,22 +18,24 @@ use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use serialbot_core::{SessionManager, encoding};
 
-use crate::Failure;
 use crate::args::{ParityArg, TuiArgs};
+use crate::commands::mcp;
 use crate::commands::signal::parse_steps;
 use crate::exit::Exit;
 use crate::i18n::Lang;
 use crate::output::Output;
 use crate::term::console::{Flow, Settings};
+use crate::tui::ai::Ai;
 use crate::tui::app::{Options, Tui};
 use crate::tui::plot::Pattern;
 use crate::tui::view;
+use crate::{Failure, PortLister};
+use serialbot_mcp::server::Listen;
 
 /// How often the screen is updated.
 const FRAME: Duration = Duration::from_millis(33);
 
 /// What `tui` needs besides its options.
-#[derive(Debug)]
 pub struct Env {
     /// Whether both standard input and output are terminals.
     pub terminal: bool,
@@ -45,6 +47,18 @@ pub struct Env {
     pub color: bool,
     /// Language.
     pub lang: Lang,
+    /// Lists the ports (for agents, with `--mcp`).
+    pub list_ports: Arc<PortLister>,
+    /// Where `cli.json` lives (the MCP token).
+    pub config_dir: Option<std::path::PathBuf>,
+}
+
+impl std::fmt::Debug for Env {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Env")
+            .field("terminal", &self.terminal)
+            .finish_non_exhaustive()
+    }
 }
 
 /// The state `tui` starts with: the ports of the command line opened.
@@ -97,6 +111,26 @@ pub fn prepare(args: &TuiArgs, manager: &Arc<SessionManager>, env: &Env) -> Resu
     }
     if let Some(&first) = tui.shown.first() {
         tui.select(first);
+    }
+    if args.mcp {
+        let started =
+            mcp::token(None, args.mcp_port, env.config_dir.as_deref()).and_then(|token| {
+                mcp::start(mcp::Start {
+                    manager: Arc::clone(manager),
+                    list_ports: Arc::clone(&env.list_ports),
+                    approve: args.approve,
+                    listen: Listen::Local,
+                    port: args.mcp_port,
+                    token,
+                })
+            });
+        match started {
+            Ok(running) => tui.ai = Some(Ai::new(running)),
+            Err(e) => {
+                tui.close_all();
+                return Err(e);
+            }
+        }
     }
     Ok(tui)
 }

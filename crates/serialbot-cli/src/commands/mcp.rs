@@ -32,7 +32,8 @@ use crate::{Failure, PortLister};
 const ASK_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// Something for the terminal to show.
-enum Event {
+#[derive(Debug)]
+pub enum Event {
     /// The queue of requests waiting for the user changed.
     Queue(Vec<ApprovalRequest>),
     /// An action was decided: allowed, or refused with the reason.
@@ -41,9 +42,11 @@ enum Event {
     Line(String),
 }
 
-type Events = Arc<Mutex<mpsc::Sender<Event>>>;
+/// Where the server's events go.
+pub type Events = Arc<Mutex<mpsc::Sender<Event>>>;
 
-fn send(events: &Events, event: Event) {
+/// Sends `event`, if anyone still listens.
+pub fn send(events: &Events, event: Event) {
     let _ = events
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
@@ -103,28 +106,80 @@ impl std::fmt::Debug for Serve {
     }
 }
 
-/// Runs the server until Ctrl+C. Exit codes: 0 after Ctrl+C; 2 `ask`
-/// without a terminal, or an invalid token or config file; 3 no port free.
-pub fn serve(args: &ServeArgs, env: Serve, out: &mut Output<'_>) -> Result<(), Failure> {
-    let m = out.strings().mcp;
-    if args.approve == Approve::Ask && !env.interactive {
-        return Err(Failure::new(Exit::Usage, m.ask_needs_terminal));
+/// How to start a server.
+pub struct Start {
+    /// The sessions agents work on.
+    pub manager: Arc<SessionManager>,
+    /// Lists the ports.
+    pub list_ports: Arc<PortLister>,
+    /// How agents' changes are decided.
+    pub approve: Approve,
+    /// Who can reach it.
+    pub listen: Listen,
+    /// Preferred port (the next free of [`PORT_ATTEMPTS`] is used).
+    pub port: u16,
+    /// Bearer token clients send.
+    pub token: String,
+}
+
+/// A running server and what it reports.
+pub struct Running {
+    /// The server.
+    pub server: RunningServer,
+    /// Its token.
+    pub token: String,
+    /// Requests waiting for the user (`--approve ask` only).
+    pub approvals: Option<Arc<Approvals>>,
+    /// Queue changes and decisions.
+    pub events: mpsc::Receiver<Event>,
+    /// For more events (typed lines).
+    pub sender: Events,
+    runtime: tokio::runtime::Runtime,
+}
+
+impl std::fmt::Debug for Running {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Running")
+            .field("url", &self.server.url())
+            .finish_non_exhaustive()
     }
-    let token = token(args, env.config_dir.as_deref())?;
+}
+
+impl Running {
+    /// Stops the server.
+    pub fn stop(self) {
+        let Self {
+            server, runtime, ..
+        } = self;
+        runtime.block_on(server.stop());
+    }
+}
+
+/// Starts the curated tools on `start.manager`. Exit code 3 when no port
+/// is free (or the runtime cannot start).
+pub fn start(start: Start) -> Result<Running, Failure> {
+    let Start {
+        manager,
+        list_ports,
+        approve,
+        listen,
+        port,
+        token,
+    } = start;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .map_err(|e| Failure::new(Exit::Busy, e.to_string()))?;
     let (tx, rx) = mpsc::channel();
     let events: Events = Arc::new(Mutex::new(tx));
-    let approvals = (args.approve == Approve::Ask).then(|| {
+    let approvals = (approve == Approve::Ask).then(|| {
         let queue_events = Arc::clone(&events);
         Arc::new(Approvals::new(
             ASK_TIMEOUT,
             Box::new(move |queue| send(&queue_events, Event::Queue(queue))),
         ))
     });
-    let inner: Arc<dyn Guard> = match (&approvals, args.approve) {
+    let inner: Arc<dyn Guard> = match (&approvals, approve) {
         (Some(a), _) => Arc::clone(a) as Arc<dyn Guard>,
         (None, Approve::Deny) => Arc::new(DenyAll),
         (None, _) => Arc::new(AllowAll),
@@ -133,20 +188,41 @@ pub fn serve(args: &ServeArgs, env: Serve, out: &mut Output<'_>) -> Result<(), F
         inner,
         events: Arc::clone(&events),
     });
-    let tools =
-        SerialTools::new(Arc::clone(&env.manager), Arc::clone(&env.list_ports)).with_guard(guard);
+    let tools = SerialTools::new(manager, list_ports).with_guard(guard);
+    let server = runtime
+        .block_on(RunningServer::start(tools, token.clone(), listen, port))
+        .map_err(|e| Failure::new(Exit::Busy, e))?;
+    Ok(Running {
+        server,
+        token,
+        approvals,
+        events: rx,
+        sender: events,
+        runtime,
+    })
+}
+
+/// Runs the server until Ctrl+C. Exit codes: 0 after Ctrl+C; 2 `ask`
+/// without a terminal, or an invalid token or config file; 3 no port free.
+pub fn serve(args: &ServeArgs, env: Serve, out: &mut Output<'_>) -> Result<(), Failure> {
+    let m = out.strings().mcp;
+    if args.approve == Approve::Ask && !env.interactive {
+        return Err(Failure::new(Exit::Usage, m.ask_needs_terminal));
+    }
+    let token = token(args.token.as_deref(), args.port, env.config_dir.as_deref())?;
     let listen = match args.listen {
         crate::args::ListenArg::Local => Listen::Local,
         crate::args::ListenArg::Lan => Listen::Lan,
     };
-    let server = runtime
-        .block_on(RunningServer::start(
-            tools,
-            token.clone(),
-            listen,
-            args.port,
-        ))
-        .map_err(|e| Failure::new(Exit::Busy, e))?;
+    let running = start(Start {
+        manager: Arc::clone(&env.manager),
+        list_ports: Arc::clone(&env.list_ports),
+        approve: args.approve,
+        listen,
+        port: args.port,
+        token,
+    })?;
+    let (server, token) = (&running.server, &running.token);
     out.line(&format!("{}: {}", m.serving, server.url()));
     if let Some(lan) = server.lan_url() {
         out.line(&format!("{}: {lan}", m.lan));
@@ -163,31 +239,37 @@ pub fn serve(args: &ServeArgs, env: Serve, out: &mut Output<'_>) -> Result<(), F
     if listen == Listen::Lan && args.approve == Approve::All {
         out.error(m.lan_all_warning);
     }
-    read_lines(env.stdin, Arc::clone(&events));
-    prompt_loop(&rx, approvals.as_deref(), &env.interrupted, out);
-    runtime.block_on(server.stop());
+    read_lines(env.stdin, Arc::clone(&running.sender));
+    prompt_loop(
+        &running.events,
+        running.approvals.as_deref(),
+        &env.interrupted,
+        out,
+    );
+    running.stop();
     env.manager.close_all();
     Ok(())
 }
 
-/// `--token`, else the one in `cli.json`, else a new one saved there.
-fn token(args: &ServeArgs, dir: Option<&Path>) -> Result<String, Failure> {
+/// `explicit` (`--token`), else the one in `cli.json`, else a new one
+/// saved there; `port` is saved as where to find the server.
+pub fn token(explicit: Option<&str>, port: u16, dir: Option<&Path>) -> Result<String, Failure> {
     let usage = |e: String| Failure::new(Exit::Usage, e);
-    if let Some(token) = &args.token {
+    if let Some(token) = explicit {
         if token.len() < serialbot_mcp::MIN_TOKEN_LEN {
             return Err(usage(format!(
                 "the token must be at least {} characters",
                 serialbot_mcp::MIN_TOKEN_LEN
             )));
         }
-        return Ok(token.clone());
+        return Ok(token.to_owned());
     }
     let mut config = match dir {
         Some(dir) => CliConfig::load(dir).map_err(usage)?,
         None => CliConfig::default(),
     };
     if let Some(token) = config.mcp_token.clone() {
-        config.mcp_port = Some(args.port);
+        config.mcp_port = Some(port);
         if let Some(dir) = dir {
             config.save(dir).map_err(usage)?;
         }
@@ -195,7 +277,7 @@ fn token(args: &ServeArgs, dir: Option<&Path>) -> Result<String, Failure> {
     }
     let token = generate_token().map_err(|e| usage(format!("cannot generate a token: {e}")))?;
     config.mcp_token = Some(token.clone());
-    config.mcp_port = Some(args.port);
+    config.mcp_port = Some(port);
     if let Some(dir) = dir {
         config.save(dir).map_err(usage)?;
     }

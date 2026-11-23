@@ -8,17 +8,21 @@
 use std::collections::VecDeque;
 use std::sync::Arc;
 
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{
+    KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+};
 use ratatui::layout::{Position, Rect};
 use serialbot_core::SessionManager;
 use serialbot_core::session::SessionState;
 
+use super::ai::Ai;
 use super::plot::{Pattern, Plot};
 use crate::args::PortArgs;
 use crate::i18n::{Lang, TuiTexts};
 use crate::term::console::{Console, Effect, Flow, Settings};
 use crate::term::feed::Stamps;
 use crate::term::keys::{Action, Keys, Local, Mode, Slash, Towards};
+use serialbot_mcp::approval::Decision;
 
 /// At most this many sessions are shown side by side.
 pub const MAX_SHOWN: usize = 4;
@@ -116,6 +120,8 @@ pub struct Tui {
     pub regions: Regions,
     /// The last frame was wide enough for the list and several panes.
     pub wide: bool,
+    /// The AI panel (`--mcp`).
+    pub ai: Option<Ai>,
     manager: Arc<SessionManager>,
     options: Options,
 }
@@ -142,6 +148,7 @@ impl Tui {
             messages: Vec::new(),
             regions: Regions::default(),
             wide: true,
+            ai: None,
             manager,
             options,
         }
@@ -190,6 +197,18 @@ impl Tui {
         let mut settings = self.options.console.clone();
         port.clone_into(&mut settings.port);
         settings.baud = args.baud;
+        self.add(session, settings)?;
+        self.select(self.panes.len() - 1);
+        Ok(())
+    }
+
+    /// A pane for `session`, not focused.
+    fn add(
+        &mut self,
+        session: Arc<serialbot_core::session::Session>,
+        settings: Settings,
+    ) -> Result<(), String> {
+        let port = settings.port.clone();
         let Some(mut console) = Console::new(session, Arc::clone(&self.manager), settings) else {
             return Err(format!(
                 "unknown encoding {:?}",
@@ -204,15 +223,44 @@ impl Tui {
         };
         self.panes.push(Pane {
             console,
-            name: port.to_owned(),
+            name: port,
             lines: VecDeque::new(),
             scroll: 0,
             unread: false,
             plot: Plot::new(self.options.plot.clone()),
             plot_shown: !self.options.plot.is_empty(),
         });
-        self.select(self.panes.len() - 1);
         Ok(())
+    }
+
+    /// Sessions an agent opened (`--mcp`) get a pane too, shown while
+    /// there is room.
+    fn adopt(&mut self) {
+        for summary in self.manager.list() {
+            if self
+                .panes
+                .iter()
+                .any(|p| p.console.session().id() == summary.id)
+            {
+                continue;
+            }
+            let Ok(session) = self.manager.get(summary.id) else {
+                continue;
+            };
+            let mut settings = self.options.console.clone();
+            settings.port.clone_from(&summary.info.name);
+            settings.baud = 0;
+            settings.frame = String::new();
+            if self.add(session, settings).is_ok() {
+                let i = self.panes.len() - 1;
+                self.panes[i].unread = true;
+                if self.panes.len() == 1 {
+                    self.select(0);
+                } else if self.shown.len() < MAX_SHOWN {
+                    self.shown.push(i);
+                }
+            }
+        }
     }
 
     /// Focuses session `i`, showing it in the focused pane's place if it
@@ -237,6 +285,9 @@ impl Tui {
         if key.kind == KeyEventKind::Release {
             return Flow::Continue;
         }
+        if self.answer(key) {
+            return Flow::Continue;
+        }
         if !self.keys.prefix_pending() && self.keys.search.is_none() {
             let page = usize::from(height / 2).max(1);
             match key.code {
@@ -247,6 +298,29 @@ impl Tui {
         }
         let actions = self.keys.key(key);
         self.act(actions)
+    }
+
+    /// While the agent waits for an answer, plain keys answer it: `y`
+    /// allow, `s` allow for this session, `n` or Esc deny; other plain keys
+    /// do nothing. `Ctrl` keys (and `Ctrl+A` commands) work as usual.
+    fn answer(&mut self, key: KeyEvent) -> bool {
+        let Some(ai) = self.ai.as_mut() else {
+            return false;
+        };
+        let modified = key
+            .modifiers
+            .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
+        if ai.asking().is_none() || modified || self.keys.prefix_pending() {
+            return false;
+        }
+        let decision = match key.code {
+            KeyCode::Char('y' | 'Y') => Decision::Once,
+            KeyCode::Char('s' | 'S') => Decision::Session,
+            KeyCode::Char('n' | 'N') | KeyCode::Esc => Decision::Deny,
+            _ => return true,
+        };
+        ai.answer(decision);
+        true
     }
 
     /// Handles pasted text.
@@ -290,6 +364,10 @@ impl Tui {
 
     /// Takes in what every session received and follows their jobs.
     pub fn tick(&mut self) {
+        if let Some(ai) = self.ai.as_mut() {
+            ai.poll();
+            self.adopt();
+        }
         let focus = self.focus;
         for (i, pane) in self.panes.iter_mut().enumerate() {
             let (tick, _) = pane.console.tick(false);
@@ -307,6 +385,9 @@ impl Tui {
 
     /// Stops every session's jobs and closes their ports (on quit).
     pub fn close_all(&mut self) {
+        if let Some(ai) = self.ai.as_mut() {
+            ai.stop();
+        }
         for pane in &self.panes {
             pane.console.stop_jobs();
             let _ = self.manager.remove(pane.console.session().id());

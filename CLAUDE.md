@@ -77,7 +77,8 @@ Not automated, still required:
   - `src/tui/` — the full-screen terminal: `app.rs` (sessions, up to four panes, focus, one
     input box; tested with mock devices and ratatui's `TestBackend`), `view.rs` (drawing),
     `sgr.rs` (color sequences to styles, wrapping), `plot.rs` (waveform: numbers from lines,
-    six curves told apart by color and point shape)
+    six curves told apart by color and point shape), `ai.rs` (`--mcp`: the AI panel and its
+    y/s/n answers; the server comes from `commands/mcp.rs`)
   - `src/i18n.rs` — every message and help text in English and Chinese
   - `tests/e2e.rs` — the real binary against socat virtual ports (Linux only)
   - `tests/interactive.rs` — `open` in a real pseudo terminal (`expectrl`) against socat
