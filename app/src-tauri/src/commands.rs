@@ -1066,6 +1066,89 @@ mod tests {
         );
     }
 
+    /// Waits up to five seconds for `done`.
+    fn wait_until(mut done: impl FnMut() -> bool) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !done() {
+            assert!(Instant::now() < deadline, "timed out");
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
+
+    #[test]
+    fn repeats_with_a_count_end_by_themselves() {
+        let (app, devices) = state();
+        app.open(&request("mock0")).unwrap();
+        app.start_repeat(1, b"x".to_vec(), 1, Some(3)).unwrap();
+        wait_until(|| !app.repeat_status(1).running);
+        let status = app.repeat_status(1);
+        assert_eq!((status.sent, status.error), (3, None));
+        assert_eq!(devices.lock().unwrap()["mock0"].take_written(), b"xxx");
+        assert!(
+            app.start_repeat(1, Vec::new(), 10, None).is_err(),
+            "nothing to send"
+        );
+        app.shutdown();
+    }
+
+    #[test]
+    fn closing_the_port_stops_sends_and_keeps_the_capture() {
+        let (app, devices) = state();
+        let dir = crate::settings::tests::TempDir::new("commands-release");
+        let fw = dir.0.join("fw.bin");
+        std::fs::write(&fw, b"0123456789").unwrap();
+        let live = dir.0.join("live.log");
+        app.open(&request("mock0")).unwrap();
+        app.start_repeat(1, b"r".to_vec(), 60_000, None).unwrap();
+        app.send_file(1, fw.to_str().unwrap(), 1, 60_000).unwrap();
+        app.start_capture(1, live.to_str().unwrap(), ExportFormat::Raw, 0)
+            .unwrap();
+        devices.lock().unwrap()["mock0"].send(b"one ");
+        wait_until(|| app.capture_status(1).bytes >= 4);
+
+        app.release(1).unwrap();
+        assert!(!app.repeat_status(1).running, "timed send stops");
+        assert!(!app.file_send_status(1).running, "file send stops");
+        assert!(app.capture_status(1).active, "the capture keeps its file");
+
+        // Reopening continues the session, and the capture with it.
+        app.open(&request("mock0")).unwrap();
+        devices.lock().unwrap()["mock0"].send(b"two");
+        wait_until(|| app.capture_status(1).bytes >= 7);
+        app.stop_capture(1);
+        assert_eq!(std::fs::read(&live).unwrap(), b"one two");
+        app.shutdown();
+    }
+
+    #[test]
+    fn log_exports_show_time_and_direction() {
+        let (app, devices) = state();
+        let dir = crate::settings::tests::TempDir::new("commands-log");
+        let path = dir.0.join("session.log");
+        let path = path.to_str().unwrap();
+        app.open(&request("mock0")).unwrap();
+        app.write(1, b"AT\r\n").unwrap();
+        devices.lock().unwrap()["mock0"].send(b"OK\r\n");
+        wait_until(|| {
+            app.read(1, 0, 16)
+                .unwrap()
+                .entries
+                .iter()
+                .any(|e| e.data == b"OK\r\n")
+        });
+        app.export_log(1, path, ExportFormat::Log, 0).unwrap();
+        let text = std::fs::read_to_string(path).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        assert!(lines.iter().any(|l| l.ends_with(" TX AT\\r\\n")), "{text}");
+        assert!(lines.iter().any(|l| l.ends_with(" RX OK\\r\\n")), "{text}");
+        // Each line starts with a local date and time.
+        assert!(
+            lines.iter().all(|l| l.as_bytes().get(4) == Some(&b'-')),
+            "{text}"
+        );
+        app.shutdown();
+    }
+
     #[test]
     fn sessions_can_be_withheld_from_ai_agents() {
         let (app, _devices) = state();

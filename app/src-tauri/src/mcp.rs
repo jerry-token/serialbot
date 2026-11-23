@@ -278,8 +278,17 @@ async fn bind_from(listen: Listen, first: u16) -> Option<TcpListener> {
 mod tests {
     use std::time::Duration;
 
+    use rmcp::ServiceExt;
+    use rmcp::model::{CallToolRequestParams, CallToolResult, ClientConfig};
+    use rmcp::service::{RoleClient, RunningService};
+    use rmcp::transport::StreamableHttpClientTransport;
+    use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
+    use serde_json::json;
     use serialbot_core::transport::TransportError;
+    use serialbot_core::transport::mock::{self, MockDevice};
     use serialbot_core::{SessionOptions, SystemClock};
+
+    use crate::approval::{ApprovalRequest, Decision};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     use super::*;
@@ -565,5 +574,134 @@ mod tests {
         assert!(status.error.unwrap().contains("at least"));
         assert!(format!("{c:?}").contains("McpController"));
         assert!(!c.approvals.enabled(), "the loaded setting applies at once");
+    }
+
+    type Devices = Arc<std::sync::Mutex<std::collections::HashMap<String, MockDevice>>>;
+
+    /// A manager whose `mock*` ports open as mock devices.
+    fn mock_manager() -> (Arc<SessionManager>, Devices) {
+        let devices: Devices = Arc::default();
+        let registry = Arc::clone(&devices);
+        let opener = move |config: &serialbot_core::transport::serial::SerialConfig| {
+            if !config.path.starts_with("mock") {
+                return Err(TransportError::NotFound(config.path.clone()));
+            }
+            let (connection, device) = mock::connection(&config.path, Duration::from_millis(5));
+            registry.lock().unwrap().insert(config.path.clone(), device);
+            Ok(connection)
+        };
+        let manager = SessionManager::new(
+            Box::new(opener),
+            Arc::new(SystemClock),
+            SessionOptions::default(),
+        );
+        (Arc::new(manager), devices)
+    }
+
+    /// Starts a tool call in the background, as an agent waiting for the
+    /// user does.
+    fn start_call(
+        client: &RunningService<RoleClient, ClientConfig>,
+        tool: &'static str,
+        args: serde_json::Value,
+    ) -> tokio::task::JoinHandle<CallToolResult> {
+        let peer = client.peer().clone();
+        let serde_json::Value::Object(args) = args else {
+            panic!("arguments must be an object");
+        };
+        tokio::spawn(async move {
+            peer.call_tool(CallToolRequestParams::new(tool).with_arguments(args))
+                .await
+                .unwrap()
+        })
+    }
+
+    /// The request the user is asked about next.
+    async fn next_request(approvals: &Approvals) -> ApprovalRequest {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            if let Some(request) = approvals.pending().into_iter().next() {
+                return request;
+            }
+            assert!(tokio::time::Instant::now() < deadline, "nothing was asked");
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+    }
+
+    /// Answers the next request with `decision` and returns the tool result.
+    async fn answer(
+        approvals: &Approvals,
+        call: tokio::task::JoinHandle<CallToolResult>,
+        decision: Decision,
+    ) -> (ApprovalRequest, CallToolResult) {
+        let request = next_request(approvals).await;
+        approvals.answer(request.id, decision).unwrap();
+        (request, call.await.unwrap())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn agent_actions_wait_for_the_users_answer() {
+        let (manager, devices) = mock_manager();
+        let approvals = Arc::new(Approvals::new(Duration::from_secs(10), Box::new(|_| {})));
+        let c = McpController::new(
+            Arc::clone(&manager),
+            Arc::new(|| Ok(Vec::new())),
+            Arc::clone(&approvals),
+            enabled(free_port().await, TOKEN),
+            None,
+            None,
+        );
+        let port = port_of(&c.start_if_enabled().await);
+        let transport = StreamableHttpClientTransport::from_config(
+            StreamableHttpClientTransportConfig::with_uri(format!("http://127.0.0.1:{port}/mcp"))
+                .auth_header(TOKEN),
+        );
+        let client = ClientConfig::default().serve(transport).await.unwrap();
+
+        // Opening a port is asked about before it happens.
+        let open = start_call(&client, "session.open", json!({"port": "mock0"}));
+        let (request, opened) = answer(&approvals, open, Decision::Once).await;
+        assert_eq!(
+            (
+                request.tool.as_str(),
+                request.session,
+                request.port.as_str()
+            ),
+            ("session.open", None, "mock0")
+        );
+        assert_ne!(opened.is_error, Some(true), "{opened:?}");
+        let device = devices.lock().unwrap()["mock0"].clone();
+
+        // Allowed once: written; declined: nothing written, the agent is told.
+        let write = start_call(&client, "io.write", json!({"session": "s1", "text": "AT"}));
+        let (request, written) = answer(&approvals, write, Decision::Once).await;
+        assert_eq!(
+            (request.tool.as_str(), request.session),
+            ("io.write", Some(1))
+        );
+        assert!(request.detail.contains("AT"), "{request:?}");
+        assert_ne!(written.is_error, Some(true), "{written:?}");
+        let write = start_call(&client, "io.write", json!({"session": "s1", "text": "no"}));
+        let (_, declined) = answer(&approvals, write, Decision::Deny).await;
+        assert_eq!(declined.is_error, Some(true));
+        let text = &declined.content[0].as_text().unwrap().text;
+        assert!(text.contains("the user declined io.write"), "{text}");
+        assert_eq!(
+            device.take_written(),
+            b"AT",
+            "a declined write sends nothing"
+        );
+
+        // Trusting the session lets later actions on it through unasked.
+        let write = start_call(&client, "io.write", json!({"session": "s1", "text": "1"}));
+        answer(&approvals, write, Decision::Session).await;
+        let again = start_call(&client, "io.write", json!({"session": "s1", "text": "2"}));
+        assert_ne!(again.await.unwrap().is_error, Some(true));
+        assert!(approvals.pending().is_empty());
+        assert_eq!(device.take_written(), b"12");
+
+        client.cancel().await.unwrap();
+        c.stop().await;
+        manager.close_all();
     }
 }
