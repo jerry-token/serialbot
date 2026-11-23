@@ -216,3 +216,21 @@ fn monitor_streams_until_a_match_or_ctrl_c() {
     let reopened = cli(&["send", &a, "x"]);
     assert_eq!(reopened.status.code(), Some(0), "the port was released");
 }
+
+#[test]
+fn signal_reports_ports_without_modem_lines() {
+    let Some(pair) = virtual_pair("cli-signal") else {
+        return;
+    };
+    let a = pair.a.to_str().unwrap();
+    let out = cli(&["signal", a, "dtr=0"]);
+    assert_eq!(out.status.code(), Some(3));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("not supported"),
+        "{out:?}"
+    );
+    // Only showing the levels works without modem lines.
+    let out = cli(&["signal", a]);
+    assert_eq!(out.status.code(), Some(0));
+    assert_eq!(out.stdout, b"DTR -  RTS -\n");
+}

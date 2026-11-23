@@ -55,6 +55,8 @@ pub enum Command {
     Send(SendArgs),
     /// Only receive, streaming to standard output.
     Monitor(MonitorArgs),
+    /// Set DTR/RTS, send a BREAK or run a reset sequence.
+    Signal(SignalArgs),
 }
 
 /// Options of `ports`.
@@ -223,6 +225,23 @@ pub struct MonitorArgs {
     /// Also save everything to this file.
     #[arg(long, value_name = "FILE")]
     pub log: Option<PathBuf>,
+}
+
+/// Options of `signal`.
+#[derive(Debug, Args)]
+pub struct SignalArgs {
+    /// Port and its settings.
+    #[command(flatten)]
+    pub port: PortArgs,
+    /// Steps: `dtr=0|1`, `rts=0|1`, a pause like `100ms`, `break[=250ms]`.
+    #[arg(value_name = "STEP")]
+    pub steps: Vec<String>,
+    /// The same steps in one string, run after the others.
+    #[arg(long, value_name = "STEPS")]
+    pub sequence: Option<String>,
+    /// Send a BREAK of this length last.
+    #[arg(long = "break", value_parser = parse_duration, value_name = "DURATION")]
+    pub r#break: Option<Duration>,
 }
 
 fn parse_regex(text: &str) -> Result<Regex, String> {

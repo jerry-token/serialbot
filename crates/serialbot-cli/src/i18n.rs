@@ -201,6 +201,27 @@ static EN: Strings = Strings {
             "monitor.log",
             "Also save everything to this file, with timestamps",
         ),
+        (
+            "signal",
+            "Set DTR/RTS, send a BREAK or run a reset sequence within one open, then show the line levels",
+        ),
+        ("signal.port", "Serial port (/dev/ttyUSB0, COM3)"),
+        ("signal.baud", "Baud rate"),
+        ("signal.data", "Data bits (5-8)"),
+        ("signal.parity", "Parity"),
+        ("signal.stop", "Stop bits (1 or 2)"),
+        ("signal.flow", "Flow control"),
+        ("signal.dtr", "DTR level right after opening"),
+        ("signal.rts", "RTS level right after opening"),
+        (
+            "signal.steps",
+            "Steps in order: dtr=0|1, rts=0|1, a pause like 100ms, break[=250ms]; e.g. dtr=0 rts=1 100ms rts=0",
+        ),
+        (
+            "signal.sequence",
+            "The same steps in one quoted string, run after the others",
+        ),
+        ("signal.break", "Send a BREAK of this length last"),
     ],
 };
 
@@ -292,6 +313,27 @@ static ZH: Strings = Strings {
         ("monitor.hex", "以 HEX 显示字节"),
         ("monitor.time", "每行开头加上本地时间"),
         ("monitor.log", "同时把全部内容带时间戳保存到这个文件"),
+        (
+            "signal",
+            "在一次打开内设置 DTR/RTS、发送 BREAK 或执行复位时序，然后显示各信号线电平",
+        ),
+        ("signal.port", "串口（/dev/ttyUSB0、COM3）"),
+        ("signal.baud", "波特率"),
+        ("signal.data", "数据位（5-8）"),
+        ("signal.parity", "校验位"),
+        ("signal.stop", "停止位（1 或 2）"),
+        ("signal.flow", "流控"),
+        ("signal.dtr", "打开后立即设置的 DTR 电平"),
+        ("signal.rts", "打开后立即设置的 RTS 电平"),
+        (
+            "signal.steps",
+            "按顺序执行的步骤：dtr=0|1、rts=0|1、暂停如 100ms、break[=250ms]；例如 dtr=0 rts=1 100ms rts=0",
+        ),
+        (
+            "signal.sequence",
+            "写在一个带引号字符串里的同样步骤，在前面的步骤之后执行",
+        ),
+        ("signal.break", "最后发送这么长的 BREAK"),
     ],
 };
 
