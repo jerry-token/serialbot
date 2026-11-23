@@ -129,9 +129,14 @@ impl Term {
 
     /// Reads output until the screen shows `text`.
     fn wait_for(&mut self, text: &str) {
+        self.wait_until(text, |screen| screen.contains(text));
+    }
+
+    /// Reads output until `done` holds for the screen's text.
+    fn wait_until(&mut self, text: &str, done: impl Fn(&str) -> bool) {
         let deadline = Instant::now() + Duration::from_secs(10);
         let mut buf = [0u8; 4096];
-        while !self.screen.screen().contents().contains(text) {
+        while !done(&self.screen.screen().contents()) {
             assert!(
                 Instant::now() < deadline,
                 "{text:?} never showed; screen:\n{}",
@@ -204,7 +209,14 @@ fn a_session_in_a_real_terminal() {
     t.send(b"\r");
     receive(&mut dev, b"AT\r\n");
     dev.control.write_all(b"OK\r\nuart:~$ ").unwrap();
-    t.wait_for("uart:~$");
+    // The input box is drawn again after the received text: wait for both.
+    t.wait_until("uart:~$ and the input box below it", |screen| {
+        let lines: Vec<&str> = screen.lines().collect();
+        lines
+            .iter()
+            .position(|l| l.starts_with("uart:~$"))
+            .is_some_and(|i| lines.get(i + 1).is_some_and(|l| l.starts_with('›')))
+    });
     let screen = t.screen.screen().contents();
     let lines: Vec<&str> = screen.lines().collect();
     let ok = lines.iter().position(|l| *l == "OK").unwrap();
