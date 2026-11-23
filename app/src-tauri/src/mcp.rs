@@ -2,28 +2,22 @@
 //!
 //! It serves the same [`SessionManager`] as the window, so a port opened in
 //! the UI can be driven by an agent and everything the agent sends shows up
-//! in the UI. It listens on 127.0.0.1 only.
+//! in the UI. It listens on 127.0.0.1, or on the local network when the
+//! settings say so. Running the server is [`RunningServer`]'s job; this
+//! module keeps the settings (`mcp.json`) and tells the windows.
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
 
 use serde::Serialize;
 use serialbot_core::SessionManager;
-use serialbot_mcp::{MCP_PATH, McpOptions, PortLister, SerialTools};
-use tokio::net::TcpListener;
+use serialbot_mcp::server::RunningServer;
+pub use serialbot_mcp::server::{PORT_ATTEMPTS, lan_address};
+use serialbot_mcp::{PortLister, SerialTools};
 use tokio::sync::Mutex;
-use tokio::task::JoinHandle;
-use tokio_util::sync::CancellationToken;
 
 use crate::approval::Approvals;
-use crate::settings::{self, Listen, McpSettings};
-
-/// How many ports after the preferred one are tried when it is taken.
-pub const PORT_ATTEMPTS: u16 = 10;
-
-/// How long stopping waits for open connections to finish.
-const STOP_GRACE: Duration = Duration::from_secs(2);
+use crate::settings::{self, McpSettings};
 
 /// What the UI shows about the MCP server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -46,15 +40,9 @@ pub struct McpStatus {
     pub stdio_command: Option<String>,
 }
 
-struct Running {
-    port: u16,
-    shutdown: CancellationToken,
-    task: JoinHandle<std::io::Result<()>>,
-}
-
 struct Inner {
     settings: McpSettings,
-    running: Option<Running>,
+    running: Option<RunningServer>,
     error: Option<String>,
 }
 
@@ -133,15 +121,8 @@ impl McpController {
         McpStatus {
             settings: inner.settings.clone(),
             running: inner.running.is_some(),
-            url: inner
-                .running
-                .as_ref()
-                .map(|r| format!("http://127.0.0.1:{}{MCP_PATH}", r.port)),
-            lan_url: inner
-                .running
-                .as_ref()
-                .filter(|_| inner.settings.listen == Listen::Lan)
-                .and_then(|r| lan_address().map(|ip| format!("http://{ip}:{}{MCP_PATH}", r.port))),
+            url: inner.running.as_ref().map(RunningServer::url),
+            lan_url: inner.running.as_ref().and_then(RunningServer::lan_url),
             error: inner.error.clone(),
             stdio_command: crate::cli::launcher(),
         }
@@ -196,82 +177,31 @@ impl McpController {
     }
 
     async fn start(&self, inner: &mut Inner) {
-        let options = match McpOptions::new(inner.settings.token.clone()) {
-            // Other computers reach it by this computer's address or name.
-            Ok(options) if inner.settings.listen == Listen::Lan => options.with_any_host(),
-            Ok(options) => options,
-            Err(e) => {
-                inner.error = Some(e.to_string());
-                return;
-            }
-        };
-        let Some(listener) = bind_from(inner.settings.listen, inner.settings.port).await else {
-            inner.error = Some(format!(
-                "ports {}-{} are all in use",
-                inner.settings.port,
-                inner.settings.port.saturating_add(PORT_ATTEMPTS - 1)
-            ));
-            return;
-        };
-        let port = match listener.local_addr() {
-            Ok(addr) => addr.port(),
-            Err(e) => {
-                inner.error = Some(e.to_string());
-                return;
-            }
-        };
-        let shutdown = CancellationToken::new();
         let guard: Arc<dyn serialbot_mcp::guard::Guard> = Arc::clone(&self.approvals) as _;
         let tools = SerialTools::new(Arc::clone(&self.manager), Arc::clone(&self.list_ports))
             .with_guard(guard);
-        let app = serialbot_mcp::router(tools, &options, &shutdown);
-        let task = tokio::spawn(serialbot_mcp::serve(listener, app, shutdown.clone()));
-        inner.running = Some(Running {
-            port,
-            shutdown,
-            task,
-        });
-        inner.error = None;
+        let settings = &inner.settings;
+        match RunningServer::start(
+            tools,
+            settings.token.clone(),
+            settings.listen,
+            settings.port,
+        )
+        .await
+        {
+            Ok(server) => {
+                inner.running = Some(server);
+                inner.error = None;
+            }
+            Err(e) => inner.error = Some(e),
+        }
     }
 
     async fn stop_running(inner: &mut Inner) {
-        if let Some(running) = inner.running.take() {
-            running.shutdown.cancel();
-            let abort = running.task.abort_handle();
-            if tokio::time::timeout(STOP_GRACE, running.task)
-                .await
-                .is_err()
-            {
-                abort.abort();
-            }
+        if let Some(server) = inner.running.take() {
+            server.stop().await;
         }
     }
-}
-
-/// Binds 127.0.0.1 on `first` or one of the following ports.
-/// This computer's IPv4 address on the network its default route uses, or
-/// `None` without one. Asks the OS which local address a UDP "connection"
-/// would use; no packet is sent.
-pub fn lan_address() -> Option<std::net::Ipv4Addr> {
-    let socket = std::net::UdpSocket::bind(("0.0.0.0", 0)).ok()?;
-    // A documentation address (TEST-NET-1): only the route is looked up.
-    socket.connect(("192.0.2.1", 9)).ok()?;
-    match socket.local_addr().ok()?.ip() {
-        std::net::IpAddr::V4(ip) if !ip.is_loopback() && !ip.is_unspecified() => Some(ip),
-        _ => None,
-    }
-}
-
-async fn bind_from(listen: Listen, first: u16) -> Option<TcpListener> {
-    for offset in 0..PORT_ATTEMPTS {
-        let Some(port) = first.checked_add(offset) else {
-            break;
-        };
-        if let Ok(listener) = TcpListener::bind((listen.address(), port)).await {
-            return Some(listener);
-        }
-    }
-    None
 }
 
 #[cfg(test)]
@@ -292,7 +222,9 @@ mod tests {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     use super::*;
+    use crate::settings::Listen;
     use crate::settings::tests::TempDir;
+    use tokio::net::TcpListener;
 
     const TOKEN: &str = "controller-test-token";
 

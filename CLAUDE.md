@@ -51,13 +51,15 @@ ports. Plan of record: the "AI 串口助手 · 开工前计划" doc.
 - `crates/serialbot-mcp` — MCP server (rmcp, Streamable HTTP at `/mcp`)
   - `src/tools.rs` — the curated tools; all device work goes through `SessionManager`
   - `src/lib.rs` — `router`/`serve`: bearer token, Host allowlist, Origin rejected
+  - `src/server.rs` — `RunningServer`: bind local or LAN, port fallback, stop
+  - `src/approval.rs` — `Approvals`: the queue of agent actions waiting for the user
   - `src/main.rs` — `serialbot-mcp` binary on 127.0.0.1 for trying it before the app exists
   - `tests/http.rs` — real MCP client over HTTP against mock devices
 - `app/` — desktop app (Tauri 2 + React/TypeScript, Vite, Vitest)
   - `src-tauri/src/commands.rs` — everything the UI can ask for, tested with mock devices;
     `lib.rs` only forwards IPC calls to it
   - `src-tauri/src/mcp.rs` — embedded MCP server on the same `SessionManager`
-    (127.0.0.1, port fallback, settings in `mcp.json` via `settings.rs`)
+    (settings in `mcp.json` via `settings.rs`, status events to every window)
   - `src-tauri/src/watch.rs` — change detection; the window gets `sessions-changed` /
     `log-changed` events and reads new entries itself (no IPC polling)
   - `src/terminal.ts` — log entries to display lines (text/hex, line breaks, UTF-8)

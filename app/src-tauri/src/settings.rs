@@ -27,28 +27,7 @@ pub struct McpSettings {
     pub listen: Listen,
 }
 
-/// The address the MCP server listens on.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Listen {
-    /// `127.0.0.1`: only programs on this computer.
-    #[default]
-    Local,
-    /// `0.0.0.0`: also other computers on the network. Anyone who can reach
-    /// the port and has the token can drive the ports; HTTP is not
-    /// encrypted.
-    Lan,
-}
-
-impl Listen {
-    /// The address to bind.
-    pub fn address(self) -> std::net::Ipv4Addr {
-        match self {
-            Self::Local => std::net::Ipv4Addr::LOCALHOST,
-            Self::Lan => std::net::Ipv4Addr::UNSPECIFIED,
-        }
-    }
-}
+pub use serialbot_mcp::server::Listen;
 
 const fn confirm_by_default() -> bool {
     true

@@ -12,7 +12,6 @@
 //! on. `approvals-changed` carries the queue of agent actions waiting for
 //! the user (see [`approval`]).
 
-pub mod approval;
 pub mod cli;
 pub mod commands;
 pub mod links;
@@ -21,6 +20,7 @@ pub mod settings;
 pub mod watch;
 
 pub use serialbot_jobs::{export, filesend, repeat};
+pub use serialbot_mcp::approval;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
