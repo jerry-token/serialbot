@@ -608,7 +608,7 @@ impl AppState {
         let session = self.manager.get(SessionId(id)).map_err(|e| e.to_string())?;
         self.captures.start(
             id,
-            session,
+            &session,
             std::path::Path::new(path),
             format,
             utc_offset_min,
@@ -1107,6 +1107,8 @@ mod tests {
         wait_until(|| app.capture_status(1).bytes >= 4);
 
         app.release(1).unwrap();
+        // Long enough for the capture to notice the closed port.
+        std::thread::sleep(Duration::from_millis(400));
         assert!(!app.repeat_status(1).running, "timed send stops");
         assert!(!app.file_send_status(1).running, "file send stops");
         assert!(app.capture_status(1).active, "the capture keeps its file");
