@@ -11,6 +11,7 @@ pub mod commands;
 pub mod exit;
 pub mod i18n;
 pub mod output;
+pub mod values;
 
 use std::ffi::OsString;
 use std::io::Write;
@@ -94,6 +95,7 @@ where
     );
     let result = match &cli.command {
         Command::Ports(a) => commands::ports::run(a, &*ctx.list_ports, &mut out),
+        Command::Send(a) => commands::send::run(a, &ctx.manager, &mut out),
     };
     match result {
         Ok(()) => Exit::Ok as u8,
@@ -128,13 +130,19 @@ pub(crate) mod testing {
     //! A context with mock ports and in-memory output.
     #![allow(clippy::unwrap_used, reason = "test helpers")]
 
-    use std::sync::Arc;
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
 
+    use serialbot_core::transport::mock::{self, MockDevice};
     use serialbot_core::transport::serial::{PortInfo, PortKind, SerialConfig};
     use serialbot_core::transport::{Connection, TransportError};
     use serialbot_core::{SessionManager, SessionOptions, SystemClock};
 
     use super::{Context, Lang, run};
+
+    /// Mock devices by port name, as they are opened.
+    pub(crate) type Devices = Arc<Mutex<HashMap<String, MockDevice>>>;
 
     /// What one run printed and returned.
     #[derive(Debug)]
@@ -144,9 +152,10 @@ pub(crate) mod testing {
         pub(crate) err: String,
     }
 
-    /// Ports `mock0` (USB) and `mock1` (unknown) are listed; no port opens
-    /// yet.
+    /// Ports `mock0` (USB) and `mock1` (unknown) are listed; `mock*` paths
+    /// open as mock devices, anything else is not found.
     pub(crate) struct Fixture {
+        pub(crate) devices: Devices,
         pub(crate) manager: Arc<SessionManager>,
         pub(crate) ports: Vec<PortInfo>,
         pub(crate) lang: Lang,
@@ -155,8 +164,15 @@ pub(crate) mod testing {
 
     impl Fixture {
         pub(crate) fn new() -> Self {
-            let opener = |config: &SerialConfig| -> Result<Connection, TransportError> {
-                Err(TransportError::NotFound(config.path.clone()))
+            let devices: Devices = Arc::default();
+            let registry = Arc::clone(&devices);
+            let opener = move |config: &SerialConfig| -> Result<Connection, TransportError> {
+                if !config.path.starts_with("mock") {
+                    return Err(TransportError::NotFound(config.path.clone()));
+                }
+                let (connection, device) = mock::connection(&config.path, Duration::from_millis(5));
+                registry.lock().unwrap().insert(config.path.clone(), device);
+                Ok(connection)
             };
             let manager = Arc::new(SessionManager::new(
                 Box::new(opener),
@@ -180,6 +196,7 @@ pub(crate) mod testing {
                 },
             ];
             Self {
+                devices,
                 manager,
                 ports,
                 lang: Lang::En,

@@ -1,26 +1,32 @@
 //! The command line: subcommands and their options, as plain data.
 //!
-//! Help texts are written in English here and replaced by
-//! [`command`] when the language is Chinese, so `--help` follows the
-//! system language like every other message.
+//! Help texts come from [`crate::i18n::Strings::help`], keyed by
+//! `subcommand.option`, so `--help` follows the system language like every
+//! other message; a test checks that every option has a text in both
+//! languages.
 
-use clap::{ArgAction, Args, CommandFactory, Parser, Subcommand, ValueEnum};
+use std::path::PathBuf;
+use std::time::Duration;
+
+use clap::{ArgAction, ArgGroup, Args, CommandFactory, Parser, Subcommand, ValueEnum};
+use regex::bytes::Regex;
+use serialbot_core::transport::serial::{DataBits, FlowControl, Parity, SerialConfig, StopBits};
 
 use crate::i18n::Lang;
+use crate::values::{Checksum, parse_duration, parse_level};
 
 /// `serialbot-cli [--color …] <command> …`
 #[derive(Debug, Parser)]
 #[command(
     name = "serialbot-cli",
     version,
-    about = "SerialBot in the terminal: list ports, send, monitor.",
     disable_help_flag = true,
     disable_version_flag = true,
     disable_help_subcommand = true,
     arg_required_else_help = true
 )]
 pub struct Cli {
-    /// When to use colors: auto, always or never.
+    /// When to use colors.
     #[arg(
         long,
         value_enum,
@@ -43,8 +49,10 @@ pub struct Cli {
 /// The subcommands.
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// List the serial ports (name, chip, VID/PID, serial number).
+    /// List the serial ports.
     Ports(PortsArgs),
+    /// Send data once, optionally waiting for a reply.
+    Send(SendArgs),
 }
 
 /// Options of `ports`.
@@ -53,6 +61,144 @@ pub struct PortsArgs {
     /// One JSON object per line.
     #[arg(long)]
     pub json: bool,
+}
+
+/// Which port to open and how; shared by every subcommand that opens one.
+#[derive(Debug, Clone, Args)]
+pub struct PortArgs {
+    /// Serial port or network address.
+    pub port: String,
+    /// Baud rate.
+    #[arg(short, long, default_value_t = 115_200, value_parser = clap::value_parser!(u32).range(1..))]
+    pub baud: u32,
+    /// Data bits.
+    #[arg(long, default_value_t = 8, value_parser = clap::value_parser!(u8).range(5..=8))]
+    pub data: u8,
+    /// Parity.
+    #[arg(long, value_enum, default_value_t = ParityArg::None)]
+    pub parity: ParityArg,
+    /// Stop bits.
+    #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u8).range(1..=2))]
+    pub stop: u8,
+    /// Flow control.
+    #[arg(long, value_enum, default_value_t = FlowArg::None)]
+    pub flow: FlowArg,
+    /// DTR level right after opening.
+    #[arg(long, value_parser = parse_level, value_name = "0|1")]
+    pub dtr: Option<bool>,
+    /// RTS level right after opening.
+    #[arg(long, value_parser = parse_level, value_name = "0|1")]
+    pub rts: Option<bool>,
+}
+
+impl PortArgs {
+    /// The settings to open the port with. Network addresses ignore the
+    /// serial settings.
+    pub fn config(&self) -> SerialConfig {
+        let mut config = SerialConfig::new(self.port.clone(), self.baud);
+        // Both ranges are checked by the parser.
+        config.data_bits = DataBits::try_from(self.data).unwrap_or_default();
+        config.stop_bits = StopBits::try_from(self.stop).unwrap_or_default();
+        config.parity = match self.parity {
+            ParityArg::None => Parity::None,
+            ParityArg::Odd => Parity::Odd,
+            ParityArg::Even => Parity::Even,
+        };
+        config.flow_control = match self.flow {
+            FlowArg::None => FlowControl::None,
+            FlowArg::Software => FlowControl::Software,
+            FlowArg::Hardware => FlowControl::Hardware,
+        };
+        config.dtr_on_open = self.dtr;
+        config.rts_on_open = self.rts;
+        config
+    }
+}
+
+/// `--parity`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum ParityArg {
+    /// No parity bit.
+    None,
+    /// Odd parity.
+    Odd,
+    /// Even parity.
+    Even,
+}
+
+/// `--flow`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum FlowArg {
+    /// No flow control.
+    None,
+    /// XON/XOFF.
+    Software,
+    /// RTS/CTS.
+    Hardware,
+}
+
+/// What is appended to sent text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum Ending {
+    /// Nothing.
+    None,
+    /// `\r`.
+    Cr,
+    /// `\n`.
+    Lf,
+    /// `\r\n`.
+    Crlf,
+}
+
+impl Ending {
+    /// The bytes of the line ending.
+    pub fn bytes(self) -> &'static [u8] {
+        match self {
+            Self::None => b"",
+            Self::Cr => b"\r",
+            Self::Lf => b"\n",
+            Self::Crlf => b"\r\n",
+        }
+    }
+}
+
+/// Options of `send`.
+#[derive(Debug, Args)]
+#[command(group(ArgGroup::new("payload").required(true).args(["text", "hex", "file"])))]
+pub struct SendArgs {
+    /// Port and its settings.
+    #[command(flatten)]
+    pub port: PortArgs,
+    /// Text to send.
+    pub text: Option<String>,
+    /// Bytes to send, as hex.
+    #[arg(long, value_name = "HEX")]
+    pub hex: Option<String>,
+    /// A file to send as it is.
+    #[arg(long)]
+    pub file: Option<PathBuf>,
+    /// Line ending after text.
+    #[arg(long, value_enum, default_value_t = Ending::Crlf)]
+    pub ending: Ending,
+    /// Text encoding.
+    #[arg(long, default_value = "utf-8")]
+    pub encoding: String,
+    /// Checksum appended to the data.
+    #[arg(long, value_enum)]
+    pub checksum: Option<Checksum>,
+    /// Wait for a reply matching this regular expression.
+    #[arg(long, value_parser = parse_regex, value_name = "REGEX")]
+    pub expect: Option<Regex>,
+    /// How long to wait.
+    #[arg(long, value_parser = parse_duration, default_value = "5s")]
+    pub timeout: Duration,
+    /// Print what is received.
+    #[arg(long)]
+    pub print: bool,
+}
+
+fn parse_regex(text: &str) -> Result<Regex, String> {
+    Regex::new(text).map_err(|e| e.to_string())
 }
 
 /// `--color`: when output is colored.
@@ -82,29 +228,41 @@ impl ColorChoice {
 /// The parser, with help in `lang`.
 pub fn command(lang: Lang) -> clap::Command {
     let s = lang.strings();
+    let text = |key: &str| s.help_text(key).unwrap_or_default();
     let template = format!(
         "{{about-with-newline}}\n{}: {{usage}}\n\n{{all-args}}{{after-help}}",
         s.usage
     );
-    let localize_common = |c: clap::Command| {
-        c.help_template(template.clone())
-            .next_help_heading(s.options)
-            .subcommand_help_heading(s.commands)
-            .mut_arg("help", |a| a.help(s.help_flag).help_heading(s.options))
-            .mut_arg("color", |a| {
-                a.help(s.color_flag)
-                    .help_heading(s.options)
-                    .hide_default_value(lang == Lang::Zh)
-            })
-    };
-    let cmd = Cli::command().about(s.about).mut_arg("version", |a| {
-        a.help(s.version_flag).help_heading(s.options)
-    });
-    localize_common(cmd).mut_subcommand("ports", |c| {
-        c.about(s.ports_about)
+    let localize = |c: clap::Command, prefix: &str| {
+        let ids: Vec<String> = c.get_arguments().map(|a| a.get_id().to_string()).collect();
+        let mut c = c
             .help_template(template.clone())
-            .mut_arg("json", |a| a.help(s.json_flag).help_heading(s.options))
-    })
+            .next_help_heading(s.options)
+            .subcommand_help_heading(s.commands);
+        for id in ids {
+            let key = match id.as_str() {
+                "help" | "version" | "color" => id.clone(),
+                _ => format!("{prefix}{id}"),
+            };
+            c = c.mut_arg(id.as_str(), |a| {
+                a.help(text(&key))
+                    .help_heading(s.options)
+                    .hide_default_value(lang == Lang::Zh && key == "color")
+            });
+        }
+        c
+    };
+    let mut cmd = localize(Cli::command().about(text("about")), "");
+    let names: Vec<String> = cmd
+        .get_subcommands()
+        .map(|c| c.get_name().to_owned())
+        .collect();
+    for name in names {
+        cmd = cmd.mut_subcommand(name.as_str(), |c| {
+            localize(c.about(text(&name)), &format!("{name}."))
+        });
+    }
+    cmd
 }
 
 #[cfg(test)]
@@ -118,15 +276,44 @@ mod tests {
     }
 
     #[test]
+    fn every_option_has_help_in_both_languages() {
+        let mut keys = vec!["about".to_owned()];
+        let cli = Cli::command();
+        keys.extend(cli.get_arguments().map(|a| a.get_id().to_string()));
+        for sub in cli.get_subcommands() {
+            keys.push(sub.get_name().to_owned());
+            for arg in sub.get_arguments() {
+                let id = arg.get_id().as_str();
+                if !matches!(id, "help" | "color") {
+                    keys.push(format!("{}.{id}", sub.get_name()));
+                }
+            }
+        }
+        for lang in [Lang::En, Lang::Zh] {
+            for key in &keys {
+                assert!(
+                    lang.strings().help_text(key).is_some(),
+                    "{lang:?} has no help for {key}"
+                );
+            }
+            assert_eq!(
+                lang.strings().help.len(),
+                keys.len(),
+                "unused help in {lang:?}"
+            );
+        }
+    }
+
+    #[test]
     fn help_follows_the_language() {
         let zh = command(Lang::Zh).render_long_help().to_string();
         assert!(zh.contains("用法"), "{zh}");
         assert!(zh.contains("命令"), "{zh}");
         assert!(zh.contains("显示帮助"), "{zh}");
         let mut zh = command(Lang::Zh);
-        let ports = zh.find_subcommand_mut("ports").unwrap();
-        let help = ports.render_long_help().to_string();
-        assert!(help.contains("每行输出一个 JSON 对象"), "{help}");
+        let send = zh.find_subcommand_mut("send").unwrap();
+        let help = send.render_long_help().to_string();
+        assert!(help.contains("等待匹配这个正则表达式的回复"), "{help}");
         let en = command(Lang::En).render_long_help().to_string();
         assert!(en.contains("Usage"), "{en}");
         assert!(en.contains("List the serial ports"), "{en}");
@@ -139,5 +326,50 @@ mod tests {
         assert!(!ColorChoice::Auto.enabled(true, true));
         assert!(ColorChoice::Always.enabled(false, true));
         assert!(!ColorChoice::Never.enabled(true, false));
+    }
+
+    fn send_args(args: &[&str]) -> Result<SendArgs, clap::Error> {
+        let cli = Cli::try_parse_from(["x", "send", "p"].iter().chain(args))?;
+        let Command::Send(send) = cli.command else {
+            panic!("not send");
+        };
+        Ok(send)
+    }
+
+    #[test]
+    fn port_options_become_the_serial_settings() {
+        let send = send_args(&[
+            "AT", "-b", "9600", "--data", "7", "--parity", "even", "--stop", "2", "--flow",
+            "hardware", "--dtr", "0", "--rts", "off",
+        ])
+        .unwrap();
+        let c = send.port.config();
+        assert_eq!((c.path.as_str(), c.baud_rate), ("p", 9600));
+        assert_eq!(c.data_bits, DataBits::Seven);
+        assert_eq!(c.parity, Parity::Even);
+        assert_eq!(c.stop_bits, StopBits::Two);
+        assert_eq!(c.flow_control, FlowControl::Hardware);
+        assert_eq!((c.dtr_on_open, c.rts_on_open), (Some(false), Some(false)));
+        let odd = send_args(&["--hex", "01", "--parity", "odd"]).unwrap();
+        assert_eq!(odd.port.config().parity, Parity::Odd);
+        assert_eq!(odd.port.config().flow_control, FlowControl::None);
+        let soft = send_args(&["x", "--flow", "software"]).unwrap();
+        assert_eq!(soft.port.config().flow_control, FlowControl::Software);
+    }
+
+    #[test]
+    fn send_needs_exactly_one_kind_of_data_and_valid_values() {
+        assert!(send_args(&[]).is_err(), "nothing to send");
+        assert!(send_args(&["AT", "--hex", "01"]).is_err(), "two kinds");
+        assert!(send_args(&["--data", "9", "AT"]).is_err());
+        assert!(send_args(&["--stop", "3", "AT"]).is_err());
+        assert!(send_args(&["--dtr", "maybe", "AT"]).is_err());
+        assert!(send_args(&["--expect", "(", "AT"]).is_err());
+        assert!(send_args(&["--timeout", "5", "AT"]).is_err());
+        assert!(send_args(&["AT"]).is_ok());
+        assert_eq!(Ending::None.bytes(), b"");
+        assert_eq!(Ending::Cr.bytes(), b"\r");
+        assert_eq!(Ending::Lf.bytes(), b"\n");
+        assert_eq!(Ending::Crlf.bytes(), b"\r\n");
     }
 }

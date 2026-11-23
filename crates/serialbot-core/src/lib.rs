@@ -7,6 +7,7 @@
 
 pub mod clock;
 pub mod encoding;
+pub mod hex;
 pub mod log;
 pub mod manager;
 pub mod session;
