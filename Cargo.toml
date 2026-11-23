@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/serialbot-cli",
     "crates/serialbot-core",
     "crates/serialbot-jobs",
     "crates/serialbot-mcp",

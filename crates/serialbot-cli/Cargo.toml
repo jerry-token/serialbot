@@ -1,0 +1,23 @@
+[package]
+name = "serialbot-cli"
+description = "SerialBot in the terminal: list ports, send, monitor, run scripts, serve MCP."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "serialbot-cli"
+path = "src/main.rs"
+
+[dependencies]
+serialbot-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+clap = { version = "4.5", features = ["derive", "env"] }
+sys-locale = "0.3"
+
+[lints]
+workspace = true
