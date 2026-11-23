@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! `tui`: the full-screen terminal. [`crate::tui::app::Tui`] runs in the
 //! terminal's alternate screen with raw mode and mouse reporting on; the
 //! terminal is put back on every way out (quit, Ctrl+C from outside, an

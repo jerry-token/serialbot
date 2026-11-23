@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! Lines with color sequences (`ESC [ … m`, as the console makes them and
 //! devices send them) to styled ratatui text, and wrapping that text to a
 //! width.

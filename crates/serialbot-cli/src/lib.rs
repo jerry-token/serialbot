@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! `serialbot-cli`: SerialBot in the terminal.
 //!
 //! Another front end next to the desktop app: every device action goes
@@ -355,6 +357,11 @@ mod tests {
         let version = f.run(&["--version"]);
         assert_eq!(version.code, 0);
         assert!(version.out.contains(env!("CARGO_PKG_VERSION")));
+        assert!(
+            version.out.contains("Copyright (C) 2026 Jerry"),
+            "{}",
+            version.out
+        );
         let bad = f.run(&["ports", "--nope"]);
         assert_eq!(bad.code, Exit::Usage as u8);
         assert!(bad.err.contains("--nope"), "{}", bad.err);

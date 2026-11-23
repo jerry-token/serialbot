@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! The project's written rules (CLAUDE.md) that no compiler or linter
 //! checks, as pure functions of the repository's text: commit messages,
 //! the diff, manifests and CLAUDE.md itself. `main.rs` gathers the inputs
@@ -63,6 +65,39 @@ pub(crate) fn session_link_problem(message: &str) -> Option<String> {
         l.trim_start().starts_with("Claude-Session:") || l.contains("claude.ai/code/session")
     })?;
     Some(format!("remove the session link: {:?}", line.trim()))
+}
+
+/// The license line every source file starts with.
+pub(crate) const SPDX: &str = "SPDX-License-Identifier: GPL-3.0-only";
+
+/// The copyright line after it.
+pub(crate) const COPYRIGHT: &str =
+    "Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot";
+
+/// Source files that carry the header: code and styles.
+pub(crate) fn needs_header(path: &str) -> bool {
+    ["rs", "ts", "tsx", "js", "mjs", "css", "py"]
+        .iter()
+        .any(|ext| has_ext(path, ext))
+}
+
+/// What is wrong with the start of `path`, or `None`: its first lines
+/// (after a `#!` line) must be [`SPDX`] and [`COPYRIGHT`] as comments.
+pub(crate) fn header_problem(path: &str, text: &str) -> Option<String> {
+    let mut lines = text.lines().skip_while(|l| l.starts_with("#!"));
+    let strip = |l: &str| {
+        l.trim_start_matches(['/', '#', '*', ' '])
+            .trim_end_matches(['*', '/', ' '])
+            .to_owned()
+    };
+    let first = lines.next().map(strip);
+    let second = lines.next().map(strip);
+    if first.as_deref() == Some(SPDX) && second.as_deref() == Some(COPYRIGHT) {
+        return None;
+    }
+    Some(format!(
+        "{path}: start it with the comments \"{SPDX}\" and \"{COPYRIGHT}\""
+    ))
 }
 
 /// Whether `path` ends in `.<ext>` (any case).
@@ -311,6 +346,27 @@ mod tests {
         assert_eq!(subject_type("feat(cli)!: x"), Some("feat"));
         assert_eq!(subject_type("docs: x"), Some("docs"));
         assert_eq!(subject_type("nothing"), None);
+    }
+
+    #[test]
+    fn source_files_carry_the_header() {
+        assert!(needs_header("app/src/App.tsx"));
+        assert!(needs_header("site/build.py"));
+        assert!(!needs_header("README.md"));
+        let rust = format!("// {SPDX}\n// {COPYRIGHT}\n//! Docs.\n");
+        assert_eq!(header_problem("a.rs", &rust), None);
+        let css = format!("/* {SPDX}\n * {COPYRIGHT} */\nbody {{}}\n");
+        assert_eq!(header_problem("a.css", &css), None);
+        let script = format!("#!/usr/bin/env python3\n# {SPDX}\n# {COPYRIGHT}\n");
+        assert_eq!(header_problem("a.py", &script), None);
+        assert!(
+            header_problem("a.rs", "//! Docs.\n")
+                .unwrap()
+                .contains("a.rs: start it")
+        );
+        let other = format!("// {SPDX}\n// Copyright (C) 2026 Someone Else\n");
+        assert!(header_problem("a.ts", &other).is_some());
+        assert!(header_problem("a.ts", "").is_some());
     }
 
     #[test]

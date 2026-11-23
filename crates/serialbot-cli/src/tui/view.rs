@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! Draws [`Tui`] into a ratatui frame: the session list on the left (on
 //! wide screens), the shown sessions side by side or stacked, the input
 //! box and the status bar.

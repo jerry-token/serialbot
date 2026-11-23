@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 // Saved command lists: named groups of commands that can be sent one by
 // one or run in order with a delay after each.
 

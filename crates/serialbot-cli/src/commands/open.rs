@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! `open`: the interactive terminal.
 //!
 //! In a terminal, [`crate::term::app::Interactive`] runs with the terminal

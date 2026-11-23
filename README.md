@@ -233,3 +233,8 @@ For anything else, write to [support@aiany.cc](mailto:support@aiany.cc).
 ## 📄 License
 
 The core is [GPL-3.0-only](LICENSE). Plugin SDKs and device-side libraries will be MIT-licensed.
+
+Copyright © 2026 Jerry ([support@aiany.cc](mailto:support@aiany.cc), [strongwong003@gmail.com](mailto:strongwong003@gmail.com)).
+The official repository is [jerry-token/serialbot](https://github.com/jerry-token/serialbot) and the official site is [serialbot.aiany.cc](https://serialbot.aiany.cc); releases come only from there.
+
+Copies and changed versions must keep the copyright notices and say what they changed ([NOTICE](NOTICE)). The name and logo are not covered by the GPL: a fork is welcome under its own name, with a note that it is based on SerialBot ([TRADEMARKS.md](TRADEMARKS.md)).

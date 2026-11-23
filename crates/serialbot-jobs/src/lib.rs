@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! Background jobs that run on a session for as long as a front end wants
 //! them: sending a file in chunks ([`filesend`]), sending the same data on
 //! a timer ([`repeat`]), and saving or capturing the log to a file

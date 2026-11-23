@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 // `Screen` backed by xterm.js. Glue only: it needs a real browser layout, so
 // it is checked in the app rather than in jsdom (see vite.config.ts).
 import { FitAddon } from "@xterm/addon-fit";

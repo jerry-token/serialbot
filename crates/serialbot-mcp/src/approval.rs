@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! Asking the user before an AI agent changes anything.
 //!
 //! [`Approvals`] is a [`Guard`] for the MCP server. Each action an agent

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 """Tests of the site build: `python3 -m unittest discover site`."""
 
 import json
@@ -37,6 +39,7 @@ class BuildTest(unittest.TestCase):
             text = page.read_text(encoding="utf-8")
             self.assertNotIn("{{", text, lang)
             self.assertIn("support@aiany.cc", text)
+            self.assertIn("© 2026 Jerry", text)
             self.assertIn('<path class="wire"', text)
 
     def test_local_links_resolve(self):

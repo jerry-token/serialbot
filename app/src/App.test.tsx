@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -1086,6 +1088,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Help" }));
     const help = within(screen.getByRole("article", { name: "About SerialBot" }));
     expect(await help.findByText("Version 0.2.0")).toBeInTheDocument();
+    expect(help.getByText(/Copyright © 2026 Jerry · GPL-3.0-only/)).toBeInTheDocument();
     expect(help.getByRole("heading", { name: "Getting started" })).toBeInTheDocument();
     expect(help.getByText("TTY")).toBeInTheDocument();
     await user.click(help.getByRole("link", { name: "Report a problem" }));

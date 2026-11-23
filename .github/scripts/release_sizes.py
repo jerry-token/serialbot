@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 """Prints the download sizes section of the release notes.
 
 Reads the release as JSON (`gh api repos/OWNER/REPO/releases/ID`) on

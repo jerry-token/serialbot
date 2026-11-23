@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! Sending a file: its bytes are written to a session in chunks, with an
 //! optional pause after each chunk for devices that cannot keep up (no
 //! flow control, small receive buffers).

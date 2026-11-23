@@ -14,7 +14,9 @@ version = "0.2.0"
 edition = "2024"
 rust-version = "1.90"
 license = "GPL-3.0-only"
+authors = ["Jerry <support@aiany.cc>"]
 repository = "https://github.com/jerry-token/serialbot"
+homepage = "https://serialbot.aiany.cc"
 publish = false
 
 [workspace.dependencies]

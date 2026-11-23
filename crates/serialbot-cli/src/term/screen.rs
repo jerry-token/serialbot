@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! Drawing the interactive terminal: received lines scroll up like any
 //! program output (they stay in the terminal's own scrollback, can be
 //! copied and remain after quitting), and only the bottom rows (the

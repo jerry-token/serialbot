@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! In-memory transport for tests.
 //!
 //! [`connection`] returns a [`Connection`] that behaves like a serial port,

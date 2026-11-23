@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 // ANSI escape sequences in received text (colored shells and log output).
 //
 // SGR sequences (ESC [ ... m) become styles; every other escape sequence

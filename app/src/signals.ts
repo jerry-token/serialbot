@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 // DTR/RTS sequences typed by the user, e.g. "DTR=0 RTS=1, 100, RTS=0".
 
 /** One step: set the lines given, then wait. Mirrors the Rust `SignalStep`. */

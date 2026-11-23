@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! The AI panel of `tui --mcp`: the MCP server's address and token, the
 //! agent's actions as they are decided, and the one waiting for an answer
 //! (`y` allow, `s` allow for this session, `n` or Esc deny).

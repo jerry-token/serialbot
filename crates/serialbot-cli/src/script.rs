@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! Scripts for `run` and the interactive `/run`: send, wait for replies,
 //! pause, drive the modem lines, in order, stopping at the first failure.
 //!

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! The session manager: the single owner of every open port.
 //!
 //! Windows, the MCP server and the CLI all go through one manager per

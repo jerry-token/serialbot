@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! The full-screen terminal's state: sessions, which of them are shown
 //! (up to [`MAX_SHOWN`] panes), the focus, and the one input box that
 //! sends to the focused session. Every session is a

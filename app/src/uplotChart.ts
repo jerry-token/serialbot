@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 // `Chart` backed by uPlot. Glue only: it needs a canvas, so it is checked in
 // the app rather than in jsdom (like xtermScreen.ts).
 import uPlot from "uplot";

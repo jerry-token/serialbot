@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! The interactive terminals (`serialbot-cli open` and `tui`) in a real pseudo
 //! terminal, against socat virtual ports (Linux only; skipped without
 //! socat unless `SERIALBOT_REQUIRE_SOCAT` is set). The screen is rebuilt

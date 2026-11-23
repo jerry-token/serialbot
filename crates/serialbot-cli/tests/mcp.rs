@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! The real `serialbot-cli` program: `mcp serve` and a client talking to
 //! it through `mcp stdio`, the way Claude Desktop does. Linux only: the
 //! config directory is moved with `XDG_CONFIG_HOME`.

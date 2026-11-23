@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! Network transports: TCP client, TCP server and UDP.
 //!
 //! A network endpoint is written as a URL in the place of a port path, so

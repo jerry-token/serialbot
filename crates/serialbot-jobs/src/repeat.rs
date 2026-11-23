@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! Timed sending: write the same bytes to a session every N milliseconds,
 //! a fixed number of times or until stopped.
 //!

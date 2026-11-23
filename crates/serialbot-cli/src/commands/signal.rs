@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! `signal`: set DTR/RTS, send a BREAK or run a reset sequence, then show
 //! the line levels.
 //!

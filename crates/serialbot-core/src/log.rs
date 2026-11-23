@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! Timestamped, bounded log of everything that crossed a transport.
 //!
 //! Every received chunk, every sent chunk and every marker becomes an

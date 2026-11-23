@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! `cargo xtask`: the project's quality gates as one command.
 //!
 //! - `cargo xtask check` runs every check CLAUDE.md lists, in CI's order,
@@ -49,6 +51,10 @@ const CHECKS: &[(&str, &str)] = &[
         "rules-doc",
         "CLAUDE.md and `cargo xtask check` list the same checks",
     ),
+    (
+        "copyright-headers",
+        "every source file starts with the license and copyright lines",
+    ),
     ("fmt", "cargo fmt --all --check"),
     (
         "clippy",
@@ -71,7 +77,7 @@ const CHECKS: &[(&str, &str)] = &[
 ];
 
 /// The first checks are the repository rules (`cargo xtask policy`).
-const POLICY_CHECKS: usize = 7;
+const POLICY_CHECKS: usize = 8;
 
 /// Checks the pre-commit hook skips.
 const SLOW: &[&str] = &["docs", "coverage", "frontend", "deny"];
@@ -306,6 +312,16 @@ fn run_one(id: &str, root: &Path, options: &Options, changes: &Changes) -> Outco
                 &crate_dirs,
                 &read(root, "CLAUDE.md"),
             ))
+        }
+        "copyright-headers" => {
+            let files = git(root, &["ls-files"]).unwrap_or_default();
+            outcome(
+                files
+                    .lines()
+                    .filter(|f| policy::needs_header(f))
+                    .filter_map(|f| policy::header_problem(f, &read(root, f)))
+                    .collect(),
+            )
         }
         "rules-doc" => {
             let ids: Vec<&str> = CHECKS.iter().map(|(id, _)| *id).collect();

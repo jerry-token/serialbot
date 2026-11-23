@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 // UI text. Chinese and English ship first; the language follows the system.
 
 export type Lang = "zh" | "en";
@@ -225,6 +227,8 @@ const en = {
       ["↑", "Recall what you sent before"],
       ["Ctrl+F / ⌘F", "Search the log"],
     ] as [string, string][],
+    copyright:
+      "Copyright © 2026 Jerry · GPL-3.0-only · official releases only from github.com/jerry-token/serialbot and serialbot.aiany.cc",
     linksTitle: "Links",
     links: {
       website: "Website",
@@ -511,6 +515,8 @@ const zh: Strings = {
       ["↑", "调出之前发送的内容"],
       ["Ctrl+F / ⌘F", "搜索日志"],
     ],
+    copyright:
+      "版权所有 © 2026 Jerry · GPL-3.0-only · 正式版本只从 github.com/jerry-token/serialbot 和 serialbot.aiany.cc 发布",
     linksTitle: "链接",
     links: {
       website: "官网",

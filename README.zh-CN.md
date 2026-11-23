@@ -233,3 +233,8 @@ cargo run -p serialbot-cli -- mcp serve   # 不带界面，单独运行 MCP 服�
 ## 📄 许可证
 
 核心代码使用 [GPL-3.0-only](LICENSE)。插件 SDK 和设备端库将使用 MIT 许可。
+
+版权所有 © 2026 Jerry（[support@aiany.cc](mailto:support@aiany.cc)、[strongwong003@gmail.com](mailto:strongwong003@gmail.com)）。
+官方仓库是 [jerry-token/serialbot](https://github.com/jerry-token/serialbot)，官网是 [serialbot.aiany.cc](https://serialbot.aiany.cc)；正式版本只从这两处发布。
+
+复制或修改后再发布，必须保留版权声明并写明改动（[NOTICE](NOTICE)）。名称和 logo 不在 GPL 授权范围内：欢迎 fork，但请用自己的名字，并注明基于 SerialBot（[TRADEMARKS.md](TRADEMARKS.md)）。
