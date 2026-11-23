@@ -155,8 +155,8 @@ fn interactive(
     else {
         return Ok(Flow::Quit);
     };
-    app.feed.display.hex = args.hex;
-    app.feed.display.stamps = if args.time { Stamps::Time } else { Stamps::Off };
+    app.console.feed.display.hex = args.hex;
+    app.console.feed.display.stamps = if args.time { Stamps::Time } else { Stamps::Off };
     if let Some(path) = &args.log {
         // Same as typing `/log <file>`.
         let log = Slash::Log(Some(path.display().to_string()));

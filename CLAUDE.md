@@ -72,7 +72,8 @@ Not automated, still required:
   - `src/script.rs` — `run` / `/run` scripts: text steps or the app's command export
   - `src/term/` — the interactive terminal: `keys.rs` (minicom keys, pure), `editor.rs`
     (input box), `feed.rs` (entries to lines), `screen.rs` (redraws only the bottom rows),
-    `app.rs` (one session; tested with mock devices and the `vt100` emulator)
+    `console.rs` (one session: lines, commands, jobs, reconnecting; shared with `tui`),
+    `app.rs` (`open`: a console above the input box; tested with the `vt100` emulator)
   - `src/i18n.rs` — every message and help text in English and Chinese
   - `tests/e2e.rs` — the real binary against socat virtual ports (Linux only)
   - `tests/interactive.rs` — `open` in a real pseudo terminal (`expectrl`) against socat
