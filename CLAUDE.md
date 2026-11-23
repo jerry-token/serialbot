@@ -66,7 +66,9 @@ Not automated, still required:
   stops them when a session closes
 - `crates/serialbot-cli` — `serialbot-cli`, the terminal front end
   - `src/lib.rs` — `run(args, Context)`: commands get output, language and devices passed in
-  - `src/commands/` — one file per subcommand (`ports`, `send`, `monitor`, `signal`, `open`, `run`)
+  - `src/commands/` — one file per subcommand (`ports`, `send`, `monitor`, `signal`, `open`, `run`,
+    `mcp`: `mcp serve` asks in the terminal, `mcp stdio` bridges to it or the app)
+  - `src/config.rs` — `cli.json` (MCP token and port) next to the app's settings
   - `src/script.rs` — `run` / `/run` scripts: text steps or the app's command export
   - `src/term/` — the interactive terminal: `keys.rs` (minicom keys, pure), `editor.rs`
     (input box), `feed.rs` (entries to lines), `screen.rs` (redraws only the bottom rows),
@@ -74,12 +76,12 @@ Not automated, still required:
   - `src/i18n.rs` — every message and help text in English and Chinese
   - `tests/e2e.rs` — the real binary against socat virtual ports (Linux only)
   - `tests/interactive.rs` — `open` in a real pseudo terminal (`expectrl`) against socat
+  - `tests/mcp.rs` — the real binary: `mcp serve` reached through `mcp stdio` (Linux only)
 - `crates/serialbot-mcp` — MCP server (rmcp, Streamable HTTP at `/mcp`)
   - `src/tools.rs` — the curated tools; all device work goes through `SessionManager`
   - `src/lib.rs` — `router`/`serve`: bearer token, Host allowlist, Origin rejected
   - `src/server.rs` — `RunningServer`: bind local or LAN, port fallback, stop
   - `src/approval.rs` — `Approvals`: the queue of agent actions waiting for the user
-  - `src/main.rs` — `serialbot-mcp` binary on 127.0.0.1 for trying it before the app exists
   - `tests/http.rs` — real MCP client over HTTP against mock devices
 - `app/` — desktop app (Tauri 2 + React/TypeScript, Vite, Vitest)
   - `src-tauri/src/commands.rs` — everything the UI can ask for, tested with mock devices;

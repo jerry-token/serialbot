@@ -15,6 +15,9 @@ path = "src/main.rs"
 [dependencies]
 serialbot-core.workspace = true
 serialbot-jobs.workspace = true
+serialbot-mcp.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time"] }
+dirs = "7"
 serde.workspace = true
 serde_json.workspace = true
 regex.workspace = true
@@ -27,6 +30,7 @@ encoding_rs.workspace = true
 jiff = "0.2"
 
 [dev-dependencies]
+rmcp = { workspace = true, features = ["client", "transport-streamable-http-client-reqwest"] }
 bytes.workspace = true
 vt100 = "0.16"
 expectrl = "0.8"

@@ -8,6 +8,7 @@
 
 pub mod args;
 pub mod commands;
+pub mod config;
 pub mod exit;
 pub mod i18n;
 pub mod output;
@@ -58,6 +59,8 @@ pub struct Context<'a> {
     /// Whether standard input and output are both terminals (`open` is
     /// interactive only then).
     pub interactive: bool,
+    /// Where `cli.json` lives; `None` without a config directory.
+    pub config_dir: Option<std::path::PathBuf>,
 }
 
 impl std::fmt::Debug for Context<'_> {
@@ -112,6 +115,22 @@ where
         Command::Ports(a) => commands::ports::run(a, &*ctx.list_ports, &mut out),
         Command::Send(a) => commands::send::run(a, &ctx.manager, &mut out),
         Command::Signal(a) => commands::signal::run(a, &ctx.manager, &mut out),
+        Command::Mcp(m) => match &m.command {
+            args::McpCommand::Serve(a) => {
+                let env = commands::mcp::Serve {
+                    manager: Arc::clone(&ctx.manager),
+                    list_ports: Arc::clone(&ctx.list_ports),
+                    interrupted: Arc::clone(&ctx.interrupted),
+                    stdin: stdin.unwrap_or_else(|| Box::new(std::io::empty())),
+                    interactive: ctx.interactive,
+                    config_dir: ctx.config_dir.clone(),
+                };
+                commands::mcp::serve(a, env, &mut out)
+            }
+            args::McpCommand::Stdio => {
+                commands::mcp::stdio(ctx.config_dir.as_deref(), &ctx.interrupted, &mut out)
+            }
+        },
         Command::Run(a) => commands::run::run(a, &ctx.manager, &ctx.interrupted, &mut out),
         Command::Open(a) => {
             let io = commands::open::Io {
@@ -201,6 +220,10 @@ pub(crate) mod testing {
         pub(crate) stdin: Vec<u8>,
         /// Standard input ends only after this long (a slow pipe).
         pub(crate) stdin_delay: Option<Duration>,
+        /// Whether the run has a terminal.
+        pub(crate) interactive: bool,
+        /// Where `cli.json` is kept (a fresh temporary directory).
+        pub(crate) config_dir: std::path::PathBuf,
     }
 
     /// Standard input that ends after a delay.
@@ -258,6 +281,14 @@ pub(crate) mod testing {
                 interrupted: Arc::default(),
                 stdin: Vec::new(),
                 stdin_delay: None,
+                interactive: false,
+                config_dir: {
+                    static NEXT: std::sync::atomic::AtomicUsize =
+                        std::sync::atomic::AtomicUsize::new(0);
+                    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    std::env::temp_dir()
+                        .join(format!("serialbot-cli-fixture-{}-{n}", std::process::id()))
+                },
             }
         }
 
@@ -280,7 +311,8 @@ pub(crate) mod testing {
                     self.stdin_delay.unwrap_or_default(),
                     std::io::Cursor::new(self.stdin.clone()),
                 ))),
-                interactive: false,
+                interactive: self.interactive,
+                config_dir: Some(self.config_dir.clone()),
             };
             let code = run(
                 std::iter::once("serialbot-cli").chain(args.iter().copied()),
