@@ -55,6 +55,10 @@ const CHECKS: &[(&str, &str)] = &[
         "copyright-headers",
         "every source file starts with the license and copyright lines",
     ),
+    (
+        "release-scripts",
+        "the release scripts' tests pass (python3 -m unittest)",
+    ),
     ("fmt", "cargo fmt --all --check"),
     (
         "clippy",
@@ -77,7 +81,7 @@ const CHECKS: &[(&str, &str)] = &[
 ];
 
 /// The first checks are the repository rules (`cargo xtask policy`).
-const POLICY_CHECKS: usize = 8;
+const POLICY_CHECKS: usize = 9;
 
 /// Checks the pre-commit hook skips.
 const SLOW: &[&str] = &["docs", "coverage", "frontend", "deny"];
@@ -322,6 +326,20 @@ fn run_one(id: &str, root: &Path, options: &Options, changes: &Changes) -> Outco
                     .filter_map(|f| policy::header_problem(f, &read(root, f)))
                     .collect(),
             )
+        }
+        "release-scripts" => {
+            let Ok(out) = Command::new("python3")
+                .args(["-m", "unittest", "discover", "-s", ".github/scripts"])
+                .current_dir(root)
+                .output()
+            else {
+                return Outcome::Skip("python3 is not installed".into());
+            };
+            if out.status.success() {
+                Outcome::Pass
+            } else {
+                Outcome::Fail(vec![String::from_utf8_lossy(&out.stderr).into_owned()])
+            }
         }
         "rules-doc" => {
             let ids: Vec<&str> = CHECKS.iter().map(|(id, _)| *id).collect();

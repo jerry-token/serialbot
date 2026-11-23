@@ -127,7 +127,12 @@ pub(crate) fn is_code(path: &str) -> bool {
 /// Rust file (`#[test]`, `mod tests`, assertions).
 pub(crate) fn touches_tests(diff: &FileDiff) -> bool {
     let p = &diff.path;
-    if p.contains("/tests/") || p.contains(".test.ts") {
+    let name = p.rsplit('/').next().unwrap_or(p);
+    if p.contains("/tests/")
+        || p.contains(".test.ts")
+        || p.contains(".test.mjs")
+        || (name.starts_with("test_") && has_ext(p, "py"))
+    {
         return true;
     }
     has_ext(p, "rs")
@@ -346,6 +351,21 @@ mod tests {
         assert_eq!(subject_type("feat(cli)!: x"), Some("feat"));
         assert_eq!(subject_type("docs: x"), Some("docs"));
         assert_eq!(subject_type("nothing"), None);
+    }
+
+    #[test]
+    fn script_tests_count_as_tests() {
+        for path in [
+            ".github/scripts/test_package_cli.py",
+            "site/test_build.py",
+            "site/download.test.mjs",
+        ] {
+            assert!(touches_tests(&diff(path, &["x"])), "{path}");
+        }
+        assert!(!touches_tests(&diff(
+            ".github/scripts/package_cli.py",
+            &["x"]
+        )));
     }
 
     #[test]

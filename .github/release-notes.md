@@ -16,6 +16,15 @@ Exact file sizes are listed at the end. 各文件的实际大小见文末。
 | Linux arm64 | `SerialBot_*_aarch64.AppImage` | Raspberry Pi 4/5 (64-bit OS) and other ARM boards. 树莓派 4/5（64 位系统）等 ARM 设备 |
 | Debian / Ubuntu arm64 | `SerialBot_*_arm64.deb` | `sudo apt install ./SerialBot_*_arm64.deb` |
 
+**Command line / 命令行版 (`serialbot-cli`)**: a separate download, not included in the app's installers. 单独下载，App 安装包里不含。
+
+| System | File | Notes |
+|---|---|---|
+| Windows 10/11 x64 | `serialbot-cli-*-windows-x64.zip` | Unzip, put `serialbot-cli.exe` on your PATH. 解压后把 `serialbot-cli.exe` 放进 PATH |
+| macOS 11+ (Apple Silicon & Intel) | `serialbot-cli-*-macos-universal.tar.gz` | `tar xzf …`, then `xattr -d com.apple.quarantine serialbot-cli` once. 解压后执行一次去隔离 |
+| Linux x64 / arm64 | `serialbot-cli-*-linux-x64.tar.gz` / `…-linux-arm64.tar.gz` | Any distribution. 任意发行版 |
+| Debian / Ubuntu x64 / arm64 | `serialbot-cli-*-linux-amd64.deb` / `…-linux-arm64.deb` | `sudo apt install ./serialbot-cli-*.deb`, with shell completions. 含命令补全 |
+
 **macOS:** the app is not notarized yet. If macOS says the app "is damaged" or "cannot be opened", run once:
 macOS 版暂未公证，若提示「已损坏」或「无法打开」，在终端执行一次：
 

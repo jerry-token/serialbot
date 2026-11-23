@@ -10,12 +10,14 @@ megabytes with one decimal, as GitHub shows them on the release page.
 >>> print(section({"assets": [
 ...     {"name": "serialbot_windows_x64.exe", "size": 17664512},
 ...     {"name": "SerialBot_0.1.0_x64-setup.exe", "size": 3857299},
+...     {"name": "serialbot-cli-0.3.0-windows-x64.zip", "size": 2097152},
 ...     {"name": "latest.json", "size": 900},
 ... ]}))
 ### Sizes / 大小
 <BLANKLINE>
 | File | Size |
 |---|---|
+| `serialbot-cli-0.3.0-windows-x64.zip` | 2.0 MB |
 | `SerialBot_0.1.0_x64-setup.exe` | 3.7 MB |
 | `serialbot_windows_x64.exe` | 16.8 MB |
 >>> section({"assets": []})
@@ -26,7 +28,7 @@ import json
 import sys
 
 # Files people download; signatures and updater manifests are left out.
-SUFFIXES = (".exe", ".dmg", ".app.tar.gz", ".AppImage", ".deb", ".rpm", ".msi")
+SUFFIXES = (".exe", ".dmg", ".tar.gz", ".zip", ".AppImage", ".deb", ".rpm", ".msi")
 
 
 def megabytes(size: int) -> str:
