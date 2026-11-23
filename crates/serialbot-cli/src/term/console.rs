@@ -348,7 +348,12 @@ impl Console {
             Slash::Clear => return Some(Effect::Clear),
             Slash::Help => return self.local(Local::Help, notes),
             Slash::Quit => return Some(Effect::Quit),
-            Slash::Open { .. } | Slash::Close | Slash::Plot(_) => {
+            Slash::Open { .. }
+            | Slash::Close
+            | Slash::Plot(_)
+            | Slash::Groups(_)
+            | Slash::Group(_)
+            | Slash::Cmd(_) => {
                 notes.push(t.tui_only.to_owned());
             }
             Slash::Invalid(text) => notes.push(format!("/{text}: {}", t.unknown_command)),
@@ -455,13 +460,20 @@ impl Console {
         } else {
             script::parse_text(&text, self.settings.ending, &self.settings.encoding)
         };
-        let items = match items {
-            Ok(items) => items,
-            Err(e) => {
-                notes.push(format!("{}: {e}", t.failed));
-                return;
-            }
-        };
+        match items {
+            Ok(items) => self.run_items(items, path, notes),
+            Err(e) => notes.push(format!("{}: {e}", t.failed)),
+        }
+    }
+
+    /// Runs script steps on their own thread (`/run`, a command group);
+    /// `name` says which in the notes.
+    pub fn run_items(&mut self, items: Vec<script::Item>, name: &str, notes: &mut Vec<String>) {
+        let t = self.term();
+        if self.script.is_some() {
+            notes.push(t.script_busy.to_owned());
+            return;
+        }
         let (tx, events) = mpsc::channel();
         let stop = Arc::new(AtomicBool::new(false));
         let session = Arc::clone(&self.session);
@@ -472,7 +484,7 @@ impl Console {
             });
             let _ = tx.send(ScriptEvent::Done(result));
         });
-        notes.push(format!("{} {path}", t.script_start));
+        notes.push(format!("{} {name}", t.script_start));
         self.script = Some(Running { stop, events });
     }
 

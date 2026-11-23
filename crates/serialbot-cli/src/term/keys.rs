@@ -147,6 +147,14 @@ pub enum Slash {
     /// `/plot [pattern | auto | clear | color <curve> <color>]`: the
     /// waveform on/off, or how it finds numbers (`tui`).
     Plot(Option<String>),
+    /// `/groups [file]`: load the app's command export, or show/hide it
+    /// (`tui`).
+    Groups(Option<String>),
+    /// `/group <name or number>`: the group shown (`tui`).
+    Group(String),
+    /// `/cmd <number>` sends that command of the group; `/cmd all` runs the
+    /// group in order (`tui`).
+    Cmd(String),
     /// Anything else, or missing/invalid arguments: the text after `/`.
     Invalid(String),
 }
@@ -164,6 +172,9 @@ pub const SLASH_COMMANDS: &[(&str, &str)] = &[
     ("log", "[file]"),
     ("open", "<port> [baud]"),
     ("plot", "[pattern|auto|clear|color <curve> <color>]"),
+    ("groups", "[file]"),
+    ("group", "<name>"),
+    ("cmd", "<number|all>"),
     ("quit", ""),
     ("raw", ""),
     ("reset", ""),
@@ -204,6 +215,9 @@ impl Slash {
             ("help", None) => Self::Help,
             ("quit" | "exit", None) => Self::Quit,
             ("close", None) => Self::Close,
+            ("groups", a) => Self::Groups(a),
+            ("group", Some(a)) => Self::Group(a),
+            ("cmd", Some(a)) => Self::Cmd(a),
             // The pattern as typed: spaces in a regex matter.
             ("plot", a) => Self::Plot(a.map(|_| {
                 let typed = text.trim_start();
@@ -720,6 +734,14 @@ mod tests {
             ("quit", Slash::Quit),
             ("exit", Slash::Quit),
             ("close", Slash::Close),
+            ("groups", Slash::Groups(None)),
+            (
+                "groups my cmds.json",
+                Slash::Groups(Some("my cmds.json".into())),
+            ),
+            ("group boot", Slash::Group("boot".into())),
+            ("cmd 2", Slash::Cmd("2".into())),
+            ("cmd", Slash::Invalid("cmd".into())),
             ("plot", Slash::Plot(None)),
             ("plot t=(\\d+)", Slash::Plot(Some("t=(\\d+)".into()))),
             ("plot a  b=(\\d) ", Slash::Plot(Some("a  b=(\\d)".into()))),

@@ -646,3 +646,122 @@ fn tui_with_mcp_shows_the_sessions_agents_open() {
     tui.close_all();
     assert!(f.manager.list().is_empty());
 }
+
+const EXPORT: &str = r#"[
+  {"name": "boot", "commands": [
+    {"name": "hello", "text": "AT", "ending": "crlf", "delayMs": 0},
+    {"text": "AT+GMR", "ending": "lf", "delayMs": 20}
+  ]},
+  {"name": "raw", "commands": [{"name": "ping", "text": "01 02", "hex": true}]}
+]"#;
+
+fn export_file(f: &Fixture) -> String {
+    std::fs::create_dir_all(&f.config_dir).unwrap();
+    let path = f.config_dir.join("commands.json");
+    std::fs::write(&path, EXPORT).unwrap();
+    path.display().to_string()
+}
+
+#[test]
+fn command_groups_send_by_click_or_command() {
+    let mut r = Rig::new(&["mock0"], 120, 30);
+    r.type_line("/cmd 1");
+    assert!(
+        r.logged(0, "no command groups"),
+        "{:?}",
+        r.tui.panes[0].lines
+    );
+    r.type_line("/groups");
+    r.type_line("/group x");
+    assert!(r.logged(0, "/groups <file>"));
+    r.type_line("/groups /nonexistent.json");
+    assert!(r.logged(0, "/nonexistent.json:"));
+    let file = export_file(&r.f);
+    r.type_line(&format!("/groups {file}"));
+    assert!(r.screen().contains("Commands"), "{}", r.screen());
+    assert!(r.screen().contains("boot ‹1/2›"), "{}", r.screen());
+    assert!(r.screen().contains("1 hello") && r.screen().contains("2 AT+GMR"));
+
+    let device = r.device("mock0");
+    r.type_line("/cmd 1");
+    assert_eq!(device.take_written(), b"AT\r\n");
+    r.type_line("/cmd 9");
+    assert!(r.logged(0, "/cmd 9: 1-2 or all"));
+    // A click on a command sends it to the focused session.
+    let area = r.tui.regions.groups;
+    r.click(area.x + 2, area.y + 3);
+    assert_eq!(device.take_written(), b"AT+GMR\n");
+    // A click on the header goes to the next group.
+    r.click(area.x + 2, area.y + 1);
+    assert!(r.screen().contains("raw ‹2/2›"), "{}", r.screen());
+    r.type_line("/cmd all");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !r.logged(0, "script finished") {
+        assert!(Instant::now() < deadline, "{:?}", r.tui.panes[0].lines);
+        r.tui.tick();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(device.take_written(), [0x01, 0x02]);
+    r.type_line("/group BOOT");
+    assert_eq!(r.tui.groups.as_ref().unwrap().current, 0);
+    r.type_line("/group 2");
+    assert_eq!(r.tui.groups.as_ref().unwrap().current, 1);
+    r.type_line("/group nope");
+    assert!(r.logged(0, "/group nope: boot, raw"));
+    r.type_line("/groups");
+    assert_eq!(r.tui.regions.groups, Rect::default(), "hidden");
+}
+
+#[test]
+fn groups_from_the_command_line() {
+    let f = Fixture::new();
+    let file = export_file(&f);
+    let tui = start(&f, &["--groups", &file, "mock0"], false, Lang::En);
+    assert_eq!(tui.groups.as_ref().unwrap().groups.len(), 2);
+    let line = vec!["serialbot-cli", "tui", "--groups", "/nonexistent.json"];
+    let Command::Tui(args) = Cli::try_parse_from(line).unwrap().command else {
+        panic!("not tui");
+    };
+    let e = prepare(&args, &f.manager, &env(&f, false, Lang::En)).unwrap_err();
+    assert_eq!(e.exit, crate::exit::Exit::Usage);
+}
+
+#[test]
+fn dragging_a_border_resizes_the_panes() {
+    let mut r = Rig::new(&["mock0", "mock1"], 120, 30);
+    let (_, left) = r.tui.regions.panes[0];
+    let border = left.right() - 1;
+    r.mouse(MouseEventKind::Down(MouseButton::Left), border, 5);
+    r.mouse(MouseEventKind::Drag(MouseButton::Left), border + 20, 5);
+    r.mouse(MouseEventKind::Up(MouseButton::Left), border + 20, 5);
+    let (_, wider) = r.tui.regions.panes[0];
+    assert_eq!(wider.width, left.width + 20);
+    assert_eq!(r.tui.focus, 0, "dragging is not a click");
+    // Panes keep a minimum size.
+    r.mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        wider.right() - 1,
+        5,
+    );
+    r.mouse(MouseEventKind::Drag(MouseButton::Left), 200, 5);
+    let (_, right) = r.tui.regions.panes[1];
+    assert!(right.width >= 8, "{right:?}");
+    // Stacked panes resize by rows.
+    r.prefix(KeyCode::Char('-'));
+    let (_, top) = r.tui.regions.panes[0];
+    r.mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        top.x + 5,
+        top.bottom() - 1,
+    );
+    r.mouse(
+        MouseEventKind::Drag(MouseButton::Left),
+        top.x + 5,
+        top.bottom() + 3,
+    );
+    let (_, taller) = r.tui.regions.panes[0];
+    assert_eq!(taller.height, top.height + 4);
+    // A new pane brings back equal sizes.
+    r.type_line("/open mock2");
+    assert_eq!(r.tui.weights(), [1, 1, 1]);
+}
