@@ -12,6 +12,7 @@ use serialbot_core::SessionManager;
 fn main() {
     let stdout = std::io::stdout();
     let out_is_terminal = stdout.is_terminal();
+    let interactive = out_is_terminal && std::io::stdin().is_terminal();
     let mut out = stdout.lock();
     let mut err = std::io::stderr().lock();
     let manager = Arc::new(SessionManager::with_serial_ports());
@@ -34,6 +35,8 @@ fn main() {
         list_ports: Arc::new(serialbot_core::transport::serial::list_ports),
         interrupted,
         utc_offset_min: jiff::Zoned::now().offset().seconds() / 60,
+        stdin: Some(Box::new(std::io::stdin())),
+        interactive,
     };
     let code = run(std::env::args_os(), &mut ctx);
     manager.close_all();

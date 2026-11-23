@@ -86,6 +86,8 @@ pub struct Strings {
     pub cannot_read: &'static str,
     /// The data to send is empty.
     pub empty_data: &'static str,
+    /// Interactive terminal texts.
+    pub term: &'static Term,
     /// The usage line prefix.
     pub usage: &'static str,
     /// Heading of the subcommand list.
@@ -97,12 +99,129 @@ pub struct Strings {
     pub help: &'static [(&'static str, &'static str)],
 }
 
+/// Texts of the interactive terminal (`open`).
+#[derive(Debug)]
+pub struct Term {
+    /// Key help, one line per entry (`Ctrl+A Z`, `/help`).
+    pub help: &'static [&'static str],
+    /// Status bar hint.
+    pub help_hint: &'static str,
+    /// A minicom modem key; followed by nothing.
+    pub unsupported: &'static str,
+    /// A key with no command after the prefix.
+    pub unknown_key: &'static str,
+    /// An unknown `/` command.
+    pub unknown_command: &'static str,
+    /// Saving started; followed by the file.
+    pub capture_on: &'static str,
+    /// Saving stopped; followed by the file.
+    pub capture_off: &'static str,
+    /// Entering raw mode.
+    pub raw_on: &'static str,
+    /// Leaving raw mode.
+    pub raw_off: &'static str,
+    /// Something planned for a later version.
+    pub later: &'static str,
+    /// Where scrollback is (`Ctrl+A B`).
+    pub scrollback: &'static str,
+    /// The device went away.
+    pub lost: &'static str,
+    /// The device is back.
+    pub back: &'static str,
+    /// The baud rate changed; followed by the rate.
+    pub baud: &'static str,
+    /// A file is being sent; followed by its name.
+    pub sending: &'static str,
+    /// A file was sent; followed by its name.
+    pub sent: &'static str,
+    /// Something failed; followed by the reason.
+    pub failed: &'static str,
+    /// Label of the display settings note (`Ctrl+A T`).
+    pub display: &'static str,
+    /// "on".
+    pub on: &'static str,
+    /// "off".
+    pub off: &'static str,
+    /// Status bar: data shown as hex.
+    pub hex: &'static str,
+    /// Status bar: raw mode.
+    pub raw: &'static str,
+    /// Status bar: waiting for the device.
+    pub waiting: &'static str,
+}
+
 impl Strings {
     /// The help text for `key` (see [`Strings::help`]).
     pub fn help_text(&self, key: &str) -> Option<&'static str> {
         self.help.iter().find(|(k, _)| *k == key).map(|(_, v)| *v)
     }
 }
+
+static EN_TERM: Term = Term {
+    help: &[
+        "Ctrl+A then: Z help · X quit · Q quit without reset · C clear · E echo · N timestamps",
+        "F break · H hang up (DTR) · 1 DTR · 2 RTS · 3 reset sequence · L save to file",
+        "S send a file · P baud rate · A add LF to CR · W wrap · T display · J shell",
+        "Ctrl+A Ctrl+A sends Ctrl+A · Ctrl+A / opens commands (also leaves raw mode)",
+        "Input box: Enter sends · Shift+Enter new line · ↑↓ history · Ctrl+R search · Ctrl+C clears (or sends ETX)",
+        "Commands: /baud /hex /time /echo /log /send-file /dtr /rts /break /reset /raw /clear /quit · // sends a /",
+    ],
+    help_hint: "Ctrl+A Z help",
+    unsupported: "is a modem key minicom has; SerialBot does not offer it",
+    unknown_key: "has no command; Ctrl+A Z lists them",
+    unknown_command: "unknown command; /help lists them",
+    capture_on: "saving to",
+    capture_off: "saved",
+    raw_on: "raw mode: every key goes to the device; Ctrl+A / returns to the input box",
+    raw_off: "back to the input box",
+    later: "comes in a later version",
+    scrollback: "everything received stays in your terminal: scroll back with Shift+PgUp or the mouse wheel",
+    lost: "device disconnected; waiting for it to come back (Ctrl+A X quits)",
+    back: "reconnected",
+    baud: "baud rate",
+    sending: "sending",
+    sent: "sent",
+    failed: "failed",
+    display: "display",
+    on: "on",
+    off: "off",
+    hex: "HEX",
+    raw: "RAW",
+    waiting: "waiting for the device",
+};
+
+static ZH_TERM: Term = Term {
+    help: &[
+        "先按 Ctrl+A 再按：Z 帮助 · X 退出 · Q 退出不复位 · C 清屏 · E 回显 · N 时间戳",
+        "F BREAK · H 挂断（DTR）· 1 DTR · 2 RTS · 3 复位时序 · L 保存到文件",
+        "S 发送文件 · P 波特率 · A 回车补换行 · W 自动换行 · T 显示设置 · J 临时进入 shell",
+        "Ctrl+A Ctrl+A 发送 Ctrl+A 本身 · Ctrl+A / 打开命令（也用于退出原始模式）",
+        "输入框：Enter 发送 · Shift+Enter 换行 · ↑↓ 历史 · Ctrl+R 搜索 · Ctrl+C 清空（空时发送 ETX）",
+        "命令：/baud /hex /time /echo /log /send-file /dtr /rts /break /reset /raw /clear /quit · // 发送 /",
+    ],
+    help_hint: "Ctrl+A Z 帮助",
+    unsupported: "是 minicom 的调制解调器按键，SerialBot 不提供",
+    unknown_key: "没有对应的命令，Ctrl+A Z 查看全部",
+    unknown_command: "未知命令，/help 查看全部",
+    capture_on: "正在保存到",
+    capture_off: "已保存",
+    raw_on: "原始模式：所有按键直接发给设备；Ctrl+A / 回到输入框",
+    raw_off: "已回到输入框",
+    later: "将在后续版本提供",
+    scrollback: "收到的内容都留在终端里：用 Shift+PgUp 或鼠标滚轮回看",
+    lost: "设备已断开，正在等待它回来（Ctrl+A X 退出）",
+    back: "已重新连接",
+    baud: "波特率",
+    sending: "正在发送",
+    sent: "已发送",
+    failed: "失败",
+    display: "显示",
+    on: "开",
+    off: "关",
+    hex: "HEX",
+    raw: "原始",
+    waiting: "等待设备",
+};
 
 static EN: Strings = Strings {
     error: "error",
@@ -119,6 +238,7 @@ static EN: Strings = Strings {
     no_match: "no reply matched within the timeout",
     cannot_read: "cannot read",
     empty_data: "nothing to send",
+    term: &EN_TERM,
     usage: "Usage",
     commands: "Commands",
     options: "Options",
@@ -222,6 +342,45 @@ static EN: Strings = Strings {
             "The same steps in one quoted string, run after the others",
         ),
         ("signal.break", "Send a BREAK of this length last"),
+        (
+            "open",
+            "Interactive terminal: received data scrolls above an input box; Ctrl+A Z lists the keys (minicom-compatible)",
+        ),
+        (
+            "open.port",
+            "Serial port (/dev/ttyUSB0, COM3) or network address; minicom's -D works too",
+        ),
+        ("open.baud", "Baud rate"),
+        ("open.data", "Data bits (5-8)"),
+        ("open.parity", "Parity"),
+        ("open.stop", "Stop bits (1 or 2)"),
+        ("open.flow", "Flow control"),
+        (
+            "open.dtr",
+            "DTR level right after opening (0 keeps boards like the ESP32 out of reset)",
+        ),
+        ("open.rts", "RTS level right after opening"),
+        (
+            "open.escape",
+            "Prefix key: Ctrl plus this letter (default a; e.g. t if the device shell uses Ctrl+A)",
+        ),
+        (
+            "open.raw",
+            "Start in raw mode: every key goes to the device (shells, vim, top)",
+        ),
+        ("open.ending", "Line ending after each sent line"),
+        ("open.encoding", "Text encoding (utf-8, gbk, ...)"),
+        (
+            "open.no_reconnect",
+            "Quit with exit code 4 when the device goes away, instead of waiting for it",
+        ),
+        ("open.reset_sequence", "What Ctrl+A 3 and /reset do"),
+        (
+            "open.log",
+            "Save everything to this file from the start (minicom -C)",
+        ),
+        ("open.hex", "Show received data as hex"),
+        ("open.time", "Start each line with the local time"),
     ],
 };
 
@@ -240,6 +399,7 @@ static ZH: Strings = Strings {
     no_match: "超时内没有收到匹配的回复",
     cannot_read: "无法读取",
     empty_data: "没有要发送的数据",
+    term: &ZH_TERM,
     usage: "用法",
     commands: "命令",
     options: "选项",
@@ -334,6 +494,45 @@ static ZH: Strings = Strings {
             "写在一个带引号字符串里的同样步骤，在前面的步骤之后执行",
         ),
         ("signal.break", "最后发送这么长的 BREAK"),
+        (
+            "open",
+            "交互终端：收到的数据在输入框上方滚动；Ctrl+A Z 查看按键（兼容 minicom）",
+        ),
+        (
+            "open.port",
+            "串口（/dev/ttyUSB0、COM3）或网络地址；也支持 minicom 的 -D",
+        ),
+        ("open.baud", "波特率"),
+        ("open.data", "数据位（5-8）"),
+        ("open.parity", "校验位"),
+        ("open.stop", "停止位（1 或 2）"),
+        ("open.flow", "流控"),
+        (
+            "open.dtr",
+            "打开后立即设置的 DTR 电平（设为 0 可避免 ESP32 等板子复位）",
+        ),
+        ("open.rts", "打开后立即设置的 RTS 电平"),
+        (
+            "open.escape",
+            "前缀键：Ctrl 加这个字母（默认 a；设备 shell 用 Ctrl+A 时可改为 t）",
+        ),
+        (
+            "open.raw",
+            "以原始模式启动：所有按键直接发给设备（shell、vim、top）",
+        ),
+        ("open.ending", "每行发送后追加的行尾"),
+        ("open.encoding", "文本编码（utf-8、gbk……）"),
+        (
+            "open.no_reconnect",
+            "设备断开时以退出码 4 退出，而不是等待它回来",
+        ),
+        ("open.reset_sequence", "Ctrl+A 3 和 /reset 执行的时序"),
+        (
+            "open.log",
+            "从一开始就把全部内容保存到这个文件（minicom -C）",
+        ),
+        ("open.hex", "以 HEX 显示收到的数据"),
+        ("open.time", "每行开头加上本地时间"),
     ],
 };
 
