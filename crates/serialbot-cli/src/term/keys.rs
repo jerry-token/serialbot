@@ -144,6 +144,9 @@ pub enum Slash {
     },
     /// `/close`: close the focused session's port; its log stays (`tui`).
     Close,
+    /// `/plot [pattern | auto | clear | color <curve> <color>]`: the
+    /// waveform on/off, or how it finds numbers (`tui`).
+    Plot(Option<String>),
     /// Anything else, or missing/invalid arguments: the text after `/`.
     Invalid(String),
 }
@@ -160,6 +163,7 @@ pub const SLASH_COMMANDS: &[(&str, &str)] = &[
     ("hex", ""),
     ("log", "[file]"),
     ("open", "<port> [baud]"),
+    ("plot", "[pattern|auto|clear|color <curve> <color>]"),
     ("quit", ""),
     ("raw", ""),
     ("reset", ""),
@@ -200,6 +204,13 @@ impl Slash {
             ("help", None) => Self::Help,
             ("quit" | "exit", None) => Self::Quit,
             ("close", None) => Self::Close,
+            // The pattern as typed: spaces in a regex matter.
+            ("plot", a) => Self::Plot(a.map(|_| {
+                let typed = text.trim_start();
+                typed[typed.find(char::is_whitespace).unwrap_or(typed.len())..]
+                    .trim()
+                    .to_owned()
+            })),
             ("open", Some(_)) => match rest.as_slice() {
                 [port] => Self::Open {
                     port: (*port).to_owned(),
@@ -709,6 +720,9 @@ mod tests {
             ("quit", Slash::Quit),
             ("exit", Slash::Quit),
             ("close", Slash::Close),
+            ("plot", Slash::Plot(None)),
+            ("plot t=(\\d+)", Slash::Plot(Some("t=(\\d+)".into()))),
+            ("plot a  b=(\\d) ", Slash::Plot(Some("a  b=(\\d)".into()))),
             (
                 "open /dev/ttyUSB1",
                 Slash::Open {

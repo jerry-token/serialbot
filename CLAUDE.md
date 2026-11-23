@@ -76,7 +76,8 @@ Not automated, still required:
     `app.rs` (`open`: a console above the input box; tested with the `vt100` emulator)
   - `src/tui/` — the full-screen terminal: `app.rs` (sessions, up to four panes, focus, one
     input box; tested with mock devices and ratatui's `TestBackend`), `view.rs` (drawing),
-    `sgr.rs` (color sequences to styles, wrapping)
+    `sgr.rs` (color sequences to styles, wrapping), `plot.rs` (waveform: numbers from lines,
+    six curves told apart by color and point shape)
   - `src/i18n.rs` — every message and help text in English and Chinese
   - `tests/e2e.rs` — the real binary against socat virtual ports (Linux only)
   - `tests/interactive.rs` — `open` in a real pseudo terminal (`expectrl`) against socat

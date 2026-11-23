@@ -13,6 +13,7 @@ use ratatui::layout::{Position, Rect};
 use serialbot_core::SessionManager;
 use serialbot_core::session::SessionState;
 
+use super::plot::{Pattern, Plot};
 use crate::args::PortArgs;
 use crate::i18n::{Lang, TuiTexts};
 use crate::term::console::{Console, Effect, Flow, Settings};
@@ -44,6 +45,10 @@ pub struct Pane {
     pub scroll: usize,
     /// Data arrived while it was not focused.
     pub unread: bool,
+    /// Numbers taken from what it received.
+    pub plot: Plot,
+    /// The waveform is shown (`Ctrl+A V`).
+    pub plot_shown: bool,
 }
 
 impl Pane {
@@ -79,6 +84,9 @@ pub struct Options {
     pub hex: bool,
     /// Start with timestamps.
     pub time: bool,
+    /// How the waveform finds numbers (empty: as the App does); given
+    /// patterns also show it from the start.
+    pub plot: Vec<Pattern>,
 }
 
 /// Where the last frame put things, for the mouse.
@@ -200,6 +208,8 @@ impl Tui {
             lines: VecDeque::new(),
             scroll: 0,
             unread: false,
+            plot: Plot::new(self.options.plot.clone()),
+            plot_shown: !self.options.plot.is_empty(),
         });
         self.select(self.panes.len() - 1);
         Ok(())
@@ -290,6 +300,7 @@ impl Tui {
                 // Stay on what is being read while new lines come in.
                 pane.scroll += tick.lines.len();
             }
+            pane.plot.push(&tick.received);
             pane.push(tick.lines);
         }
     }
@@ -378,7 +389,7 @@ impl Tui {
                 None
             }
             Local::TogglePlot => {
-                notes.push(self.lang().strings().term.later.to_owned());
+                self.plot(None, notes);
                 None
             }
             other => self.with_console(notes, |c, n| c.local(other, n)).flatten(),
@@ -401,6 +412,10 @@ impl Tui {
                 } else {
                     notes.push(self.texts().no_session.to_owned());
                 }
+                None
+            }
+            Slash::Plot(arg) => {
+                self.plot(arg.as_deref(), notes);
                 None
             }
             Slash::Quit => Some(Effect::Quit),
@@ -430,6 +445,37 @@ impl Tui {
             Effect::Prefill(text) => self.prefill(text),
         }
         Flow::Continue
+    }
+
+    /// `/plot`: on/off; `auto`; `clear`; `color <curve> <color>`; or a
+    /// pattern (which also shows it).
+    fn plot(&mut self, arg: Option<&str>, notes: &mut Vec<String>) {
+        let t = self.texts();
+        let Some(pane) = self.panes.get_mut(self.focus) else {
+            notes.push(t.no_session.to_owned());
+            return;
+        };
+        let words: Vec<&str> = arg.unwrap_or_default().split_whitespace().collect();
+        match words.as_slice() {
+            [] => pane.plot_shown = !pane.plot_shown,
+            ["auto"] => {
+                pane.plot = Plot::default();
+                pane.plot_shown = true;
+            }
+            ["clear"] => pane.plot.clear(),
+            ["color", curve, color] => {
+                if let Err(e) = pane.plot.set_color(curve, color) {
+                    notes.push(format!("{}: {e}", t.plot_unknown));
+                }
+            }
+            _ => match Pattern::parse(arg.unwrap_or_default()) {
+                Ok(pattern) => {
+                    pane.plot = Plot::new(vec![pattern]);
+                    pane.plot_shown = true;
+                }
+                Err(e) => notes.push(e),
+            },
+        }
     }
 
     fn help(&self, notes: &mut Vec<String>) {

@@ -372,6 +372,9 @@ pub struct TuiArgs {
     /// Start each line with the time.
     #[arg(long)]
     pub time: bool,
+    /// Waveform patterns.
+    #[arg(long, value_name = "[NAME=]REGEX")]
+    pub plot: Vec<String>,
 }
 
 impl TuiArgs {

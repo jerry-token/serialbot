@@ -51,6 +51,7 @@ fn ticks_give_lines_or_raw_bytes_and_count_what_arrived() {
     let tick = tick_until(&mut c, false);
     assert_eq!(tick.lines, vec!["hello".to_owned()]);
     assert_eq!(tick.rx, 7);
+    assert_eq!(tick.received, b"hello\r\n");
     assert!(tick.raw.is_empty());
     device.send(b"\x1b[2Jraw");
     let tick = tick_until(&mut c, true);

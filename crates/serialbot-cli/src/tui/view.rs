@@ -68,7 +68,7 @@ pub fn render(tui: &mut Tui, frame: &mut Frame<'_>) {
             .split(panes_area);
         for (i, area) in shown.iter().zip(areas.iter()) {
             let focused = *i == tui.focus;
-            draw_pane(&tui.panes[*i], focused, tui.color(), frame, *area);
+            draw_pane(&tui.panes[*i], focused, tui, frame, *area);
             regions.panes.push((*i, *area));
         }
     }
@@ -153,9 +153,25 @@ pub fn pane_rows(
     (visible, scroll)
 }
 
-fn draw_pane(pane: &Pane, focused: bool, color: bool, frame: &mut Frame<'_>, area: Rect) {
-    let inner_width = usize::from(area.width.saturating_sub(2));
-    let inner_height = usize::from(area.height.saturating_sub(2));
+/// Rows the waveform gets under a pane's lines: half, at least
+/// [`PLOT_MIN`] when the pane is tall enough.
+const PLOT_MIN: u16 = 6;
+
+fn draw_pane(pane: &Pane, focused: bool, tui: &Tui, frame: &mut Frame<'_>, area: Rect) {
+    let color = tui.color();
+    let inner = area.inner(ratatui::layout::Margin::new(1, 1));
+    let (text_area, plot_area) = if pane.plot_shown && inner.height > PLOT_MIN {
+        let plot_rows = (inner.height / 2).max(PLOT_MIN);
+        let split = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(1), Constraint::Length(plot_rows)])
+            .split(inner);
+        (split[0], Some(split[1]))
+    } else {
+        (inner, None)
+    };
+    let inner_width = usize::from(text_area.width);
+    let inner_height = usize::from(text_area.height);
     let (rows, scroll) = pane_rows(pane, inner_width, inner_height, color);
     let mark = if focused { "▸ " } else { "" };
     let back = if scroll > 0 {
@@ -178,7 +194,30 @@ fn draw_pane(pane: &Pane, focused: bool, color: bool, frame: &mut Frame<'_>, are
         .borders(Borders::ALL)
         .border_style(border)
         .title(Span::styled(title, border));
-    frame.render_widget(Paragraph::new(rows).block(block), area);
+    frame.render_widget(block, area);
+    frame.render_widget(Paragraph::new(rows), text_area);
+    if let Some(plot_area) = plot_area {
+        let rule = "─".repeat(usize::from(plot_area.width));
+        frame
+            .buffer_mut()
+            .set_string(plot_area.x, plot_area.y, rule, dim());
+        let chart = Rect {
+            y: plot_area.y + 1,
+            height: plot_area.height - 1,
+            ..plot_area
+        };
+        if pane.plot.series.is_empty() {
+            frame.buffer_mut().set_stringn(
+                chart.x,
+                chart.y,
+                tui.texts().plot_empty,
+                usize::from(chart.width),
+                dim(),
+            );
+        } else {
+            super::plot::render(&pane.plot, chart, frame.buffer_mut(), color);
+        }
+    }
 }
 
 fn draw_input(
