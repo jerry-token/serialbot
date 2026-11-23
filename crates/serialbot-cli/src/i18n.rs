@@ -126,6 +126,10 @@ pub struct TuiTexts {
     pub plot_unknown: &'static str,
     /// The waveform has no numbers yet.
     pub plot_empty: &'static str,
+    /// Title of the AI panel.
+    pub ai: &'static str,
+    /// The AI panel before any action.
+    pub ai_idle: &'static str,
 }
 
 /// Texts of `mcp serve` and `mcp stdio`.
@@ -301,6 +305,7 @@ static EN_TUI: TuiTexts = TuiTexts {
     help: &[
         "tui: Ctrl+A ←/→ focus · Ctrl+A | side by side · Ctrl+A - stacked · PgUp/PgDn or the wheel scroll back",
         "/open <port> [baud] adds a session · /close closes the focused port (its log stays) · click to focus",
+        "With --mcp, the AI panel asks about an agent's changes: y allow · s allow for the session · n or Esc deny",
         "Ctrl+A V waveform · /plot <regex> picks the numbers (name=regex names them) · /plot auto · /plot clear · /plot color <curve> <color>",
     ],
     start: "No session yet: type /open <port> [baud] (serialbot-cli ports lists them) · Ctrl+A X quits",
@@ -312,12 +317,15 @@ static EN_TUI: TuiTexts = TuiTexts {
     needs_terminal: "tui needs a terminal; for pipes use open, monitor or send",
     plot_unknown: "unknown; choose one of",
     plot_empty: "waiting for numbers (name=value, or a line of numbers; /plot <regex> to pick them)",
+    ai: "AI",
+    ai_idle: "no agent action yet; connect a client to the address above",
 };
 
 static ZH_TUI: TuiTexts = TuiTexts {
     help: &[
         "tui：Ctrl+A ←/→ 切换焦点 · Ctrl+A | 左右分屏 · Ctrl+A - 上下分屏 · PgUp/PgDn 或滚轮回看",
         "/open <端口> [波特率] 新开会话 · /close 关闭焦点会话的端口（日志保留）· 鼠标点击切换焦点",
+        "用 --mcp 启动时，AI 面板询问智能体的修改操作：y 允许 · s 本会话内都允许 · n 或 Esc 拒绝",
         "Ctrl+A V 波形图 · /plot <正则> 指定取哪些数（name=正则 给曲线命名）· /plot auto · /plot clear · /plot color <曲线> <颜色>",
     ],
     start: "还没有会话：输入 /open <端口> [波特率]（serialbot-cli ports 可列出端口）· Ctrl+A X 退出",
@@ -329,6 +337,8 @@ static ZH_TUI: TuiTexts = TuiTexts {
     needs_terminal: "tui 需要在终端里运行；管道请用 open、monitor 或 send",
     plot_unknown: "不认识；可选",
     plot_empty: "等待数值（name=value 或整行数字；用 /plot <正则> 指定）",
+    ai: "AI",
+    ai_idle: "智能体还没有操作；用上面的地址连接客户端",
 };
 
 static EN_MCP: McpTexts = McpTexts {
@@ -544,6 +554,18 @@ static EN: Strings = Strings {
         ("tui.reset_sequence", "What Ctrl+A 3 and /reset do"),
         ("tui.hex", "Show received data as hex"),
         ("tui.time", "Start each line with the local time"),
+        (
+            "tui.mcp",
+            "Also run the MCP server (this computer only); the AI panel shows what agents do and asks about their changes",
+        ),
+        (
+            "tui.mcp_port",
+            "The MCP server's preferred port; the next free one of the following nine is used if it is taken",
+        ),
+        (
+            "tui.approve",
+            "Agents' changes: ask (in the AI panel, default), all (allow) or deny",
+        ),
         (
             "tui.plot",
             "Show the waveform from the start, taking numbers with this regex (name=regex; repeat for more curves, up to 6)",
@@ -787,6 +809,18 @@ static ZH: Strings = Strings {
         ("tui.reset_sequence", "Ctrl+A 3 和 /reset 执行的时序"),
         ("tui.hex", "以 HEX 显示收到的数据"),
         ("tui.time", "每行开头加上本地时间"),
+        (
+            "tui.mcp",
+            "同时启动 MCP 服务（仅本机）；AI 面板显示智能体的每一步，并询问它的修改操作",
+        ),
+        (
+            "tui.mcp_port",
+            "MCP 服务的首选端口；被占用时依次尝试后面九个",
+        ),
+        (
+            "tui.approve",
+            "智能体的修改操作：ask（在 AI 面板询问，默认）、all（全部允许）或 deny（全部拒绝）",
+        ),
         (
             "tui.plot",
             "启动时就显示波形图，用这个正则取数（name=正则；可写多次，最多 6 条曲线）",

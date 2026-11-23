@@ -327,6 +327,7 @@ pub struct OpenArgs {
 
 /// Options of `tui`: every port opens with the same settings.
 #[derive(Debug, Args)]
+#[allow(clippy::struct_excessive_bools, reason = "command-line flags")]
 pub struct TuiArgs {
     /// Ports to open at the start (more with `/open`).
     pub ports: Vec<String>,
@@ -375,6 +376,15 @@ pub struct TuiArgs {
     /// Waveform patterns.
     #[arg(long, value_name = "[NAME=]REGEX")]
     pub plot: Vec<String>,
+    /// Also run the MCP server, with the AI panel.
+    #[arg(long)]
+    pub mcp: bool,
+    /// The MCP server's preferred port.
+    #[arg(long, default_value_t = serialbot_mcp::DEFAULT_PORT, requires = "mcp")]
+    pub mcp_port: u16,
+    /// Agents' changes: ask (in the AI panel), all or deny.
+    #[arg(long, value_enum, default_value_t = Approve::Ask, requires = "mcp")]
+    pub approve: Approve,
 }
 
 impl TuiArgs {

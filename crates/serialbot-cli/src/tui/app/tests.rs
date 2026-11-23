@@ -10,15 +10,19 @@ use super::*;
 use crate::args::{Cli, Command};
 use crate::commands::tui::{Env, prepare};
 use crate::testing::Fixture;
+use crate::tui::ai::Ai;
 use crate::tui::view;
 
-fn env(color: bool, lang: Lang) -> Env {
+fn env(f: &Fixture, color: bool, lang: Lang) -> Env {
+    let ports = f.ports.clone();
     Env {
         terminal: true,
         interrupted: Arc::default(),
         utc_offset_min: 0,
         color,
         lang,
+        list_ports: Arc::new(move || Ok(ports.clone())),
+        config_dir: Some(f.config_dir.clone()),
     }
 }
 
@@ -29,7 +33,7 @@ fn start(f: &Fixture, args: &[&str], color: bool, lang: Lang) -> Tui {
     let Command::Tui(args) = Cli::try_parse_from(line).unwrap().command else {
         panic!("not tui");
     };
-    prepare(&args, &f.manager, &env(color, lang)).unwrap()
+    prepare(&args, &f.manager, &env(f, color, lang)).unwrap()
 }
 
 struct Rig {
@@ -390,7 +394,7 @@ fn bad_options_and_ports_fail_before_the_screen() {
             _ => panic!("not tui"),
         }
     };
-    let e = env(false, Lang::En);
+    let e = env(&f, false, Lang::En);
     let fail = |extra: &[&str]| prepare(&parse(extra), &f.manager, &e).unwrap_err();
     assert_eq!(fail(&["--encoding", "nope"]).exit, crate::exit::Exit::Usage);
     assert_eq!(
@@ -474,9 +478,171 @@ fn plot_patterns_from_the_command_line() {
     let Command::Tui(args) = Cli::try_parse_from(line).unwrap().command else {
         panic!("not tui");
     };
-    let e = prepare(&args, &f.manager, &env(false, Lang::En)).unwrap_err();
+    let e = prepare(&args, &f.manager, &env(&f, false, Lang::En)).unwrap_err();
     assert_eq!(e.exit, crate::exit::Exit::Usage);
     let mut empty = Rig::new(&[], 120, 30);
     empty.type_line("/plot");
     assert!(empty.screen().contains("no session is open"));
+}
+
+fn action(tool: &str, port: &str, detail: &str) -> serialbot_mcp::guard::Action {
+    serialbot_mcp::guard::Action {
+        tool: tool.into(),
+        session: None,
+        port: port.into(),
+        detail: detail.into(),
+    }
+}
+
+#[test]
+fn the_ai_panel_asks_and_lists_what_the_agent_did() {
+    use crate::commands::mcp::{Event, Events, send};
+    use serialbot_mcp::approval::Approvals;
+    use serialbot_mcp::guard::Guard;
+    use std::sync::Mutex;
+
+    let mut r = Rig::new(&["mock0"], 140, 30);
+    let (tx, rx) = std::sync::mpsc::channel();
+    let events: Events = Arc::new(Mutex::new(tx));
+    let notify = Arc::clone(&events);
+    let approvals = Arc::new(Approvals::new(
+        Duration::from_secs(30),
+        Box::new(move |queue| send(&notify, Event::Queue(queue))),
+    ));
+    r.tui.ai = Some(Ai::from_parts(
+        "http://127.0.0.1:7777/mcp".into(),
+        "secret-token".into(),
+        Some(Arc::clone(&approvals)),
+        rx,
+    ));
+    r.tui.tick();
+    r.draw();
+    assert!(
+        r.screen().contains("http://127.0.0.1:7777/mcp"),
+        "{}",
+        r.screen()
+    );
+    assert!(r.screen().contains("token: secret-token"));
+    assert!(r.screen().contains("no agent action yet"));
+
+    // An agent wants to write: the panel and the input row ask.
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let asked = Arc::clone(&approvals);
+    let first = runtime.spawn(async move {
+        asked
+            .approve(action("io.write", "mock0", "\"AT\\r\\n\""))
+            .await
+    });
+    r.until_shows("AI wants io.write mock0 \"AT\\r\\n\"  y allow");
+    assert!(
+        r.screen().contains("? AI wants io.write mock0"),
+        "{}",
+        r.screen()
+    );
+    // Typing does not reach the input box meanwhile.
+    r.keys(&[press(KeyCode::Char('h'))]);
+    assert!(r.tui.keys.editor.is_empty());
+    r.keys(&[press(KeyCode::Char('y'))]);
+    assert_eq!(runtime.block_on(first).unwrap(), Ok(()));
+    send(
+        &events,
+        Event::Done(action("io.write", "mock0", "\"AT\\r\\n\""), Ok(())),
+    );
+    r.until_shows("✓ io.write mock0");
+
+    let asked = Arc::clone(&approvals);
+    let second =
+        runtime.spawn(async move { asked.approve(action("signal.reset", "mock0", "")).await });
+    r.until_shows("AI wants signal.reset mock0");
+    r.keys(&[press(KeyCode::Esc)]);
+    assert!(runtime.block_on(second).unwrap().is_err());
+    send(
+        &events,
+        Event::Done(
+            action("signal.reset", "mock0", ""),
+            Err("refused by the user".into()),
+        ),
+    );
+    r.until_shows("✗ signal.reset mock0 — refused");
+    // Typing works again.
+    r.keys(&[press(KeyCode::Char('h'))]);
+    assert_eq!(r.tui.keys.editor.text(), "h");
+    let mut ai = r.tui.ai.take().unwrap();
+    assert!(!ai.answer(Decision::Once), "nothing is waiting");
+    ai.stop();
+}
+
+#[test]
+fn tui_with_mcp_shows_the_sessions_agents_open() {
+    use rmcp::ServiceExt;
+    use rmcp::model::{CallToolRequestParams, ClientConfig};
+    use rmcp::transport::StreamableHttpClientTransport;
+    use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
+
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let port_arg = port.to_string();
+    let f = Fixture::new();
+    let mut tui = start(
+        &f,
+        &[
+            "--mcp",
+            "--approve",
+            "all",
+            "--mcp-port",
+            &port_arg,
+            "mock0",
+        ],
+        false,
+        Lang::En,
+    );
+    let token = tui.ai.as_ref().unwrap().token.clone();
+    assert!(tui.ai.as_ref().unwrap().url.contains(&port_arg));
+    let saved = crate::config::CliConfig::load(&f.config_dir).unwrap();
+    assert_eq!(saved.mcp_token.as_deref(), Some(token.as_str()));
+
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(async {
+        let transport = StreamableHttpClientTransport::from_config(
+            StreamableHttpClientTransportConfig::with_uri(format!("http://127.0.0.1:{port}/mcp"))
+                .auth_header(token),
+        );
+        let client = ClientConfig::default().serve(transport).await.unwrap();
+        let serde_json::Value::Object(args) =
+            serde_json::json!({"port": "mock1", "baud_rate": 9600})
+        else {
+            unreachable!()
+        };
+        let opened = client
+            .call_tool(CallToolRequestParams::new("session.open").with_arguments(args))
+            .await
+            .unwrap();
+        assert_ne!(opened.is_error, Some(true), "{opened:?}");
+        client.cancel().await.unwrap();
+    });
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while tui.panes.len() < 2 || tui.ai.as_ref().unwrap().steps.is_empty() {
+        assert!(Instant::now() < deadline, "{tui:?}");
+        tui.tick();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(tui.panes[1].name, "mock1");
+    assert_eq!(tui.shown, [0, 1]);
+    assert!(tui.panes[1].unread);
+    assert_eq!(tui.focus, 0, "the user's focus stays");
+    assert!(
+        tui.ai.as_ref().unwrap().steps[0]
+            .text
+            .starts_with("session.open mock1")
+    );
+    let status = tui.panes[1].console.status_parts();
+    assert!(
+        status[1].starts_with("RX "),
+        "no speed is known for it: {status:?}"
+    );
+    tui.close_all();
+    assert!(f.manager.list().is_empty());
 }

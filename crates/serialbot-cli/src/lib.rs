@@ -151,6 +151,8 @@ where
                 utc_offset_min: ctx.utc_offset_min,
                 color,
                 lang: ctx.lang,
+                list_ports: Arc::clone(&ctx.list_ports),
+                config_dir: ctx.config_dir.clone(),
             };
             commands::tui::run(a, &ctx.manager, &env, &mut out)
         }

@@ -16,6 +16,9 @@ use crate::term::screen::truncate;
 /// Width of the session list.
 const LIST_WIDTH: u16 = 24;
 
+/// Width of the AI panel.
+const AI_WIDTH: u16 = 40;
+
 /// At most this many input rows are shown.
 const INPUT_ROWS: usize = 3;
 
@@ -36,6 +39,16 @@ pub fn render(tui: &mut Tui, frame: &mut Frame<'_>) {
 
     tui.wide = area.width >= WIDE;
     let mut regions = Regions::default();
+    let main = if tui.wide && tui.ai.is_some() {
+        let cols = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(1), Constraint::Length(AI_WIDTH)])
+            .split(main);
+        draw_ai(tui, frame, cols[1]);
+        cols[0]
+    } else {
+        main
+    };
     let panes_area = if tui.wide && !tui.panes.is_empty() {
         let cols = Layout::default()
             .direction(Direction::Horizontal)
@@ -220,6 +233,56 @@ fn draw_pane(pane: &Pane, focused: bool, tui: &Tui, frame: &mut Frame<'_>, area:
     }
 }
 
+fn draw_ai(tui: &Tui, frame: &mut Frame<'_>, area: Rect) {
+    let Some(ai) = &tui.ai else { return };
+    let t = tui.texts();
+    let width = usize::from(area.width.saturating_sub(2));
+    let height = usize::from(area.height.saturating_sub(2));
+    let mut head = vec![
+        Line::from(ai.url.clone()),
+        Line::from(Span::styled(format!("token: {}", ai.token), dim())),
+        Line::from(""),
+    ];
+    let mut body: Vec<Line<'static>> = Vec::new();
+    for step in &ai.steps {
+        let (mark, style) = match (step.allowed, tui.color()) {
+            (true, _) => ("✓", Style::default()),
+            (false, true) => ("✗", Style::default().fg(Color::Red)),
+            (false, false) => ("✗", Style::default().add_modifier(Modifier::BOLD)),
+        };
+        let line = Line::from(vec![
+            Span::styled(format!("{mark} "), style),
+            Span::raw(step.text.clone()),
+        ]);
+        body.extend(sgr::wrap(&line, width));
+    }
+    if let Some(ask) = ai.asking() {
+        let m = tui.lang().strings().mcp;
+        let line = Line::from(Span::styled(
+            format!("? {} {} {}", m.ask, ask.tool, ask.port),
+            Style::default().add_modifier(Modifier::BOLD | Modifier::REVERSED),
+        ));
+        body.extend(sgr::wrap(&line, width));
+        if !ask.detail.is_empty() {
+            body.extend(sgr::wrap(&Line::from(ask.detail.clone()), width));
+        }
+    }
+    if body.is_empty() {
+        body.extend(sgr::wrap(
+            &Line::from(Span::styled(t.ai_idle, dim())),
+            width,
+        ));
+    }
+    // The newest at the bottom.
+    let room = height.saturating_sub(head.len());
+    let skip = body.len().saturating_sub(room);
+    head.extend(body.into_iter().skip(skip));
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(format!(" {} ", t.ai));
+    frame.render_widget(Paragraph::new(head).block(block), area);
+}
+
 fn draw_input(
     tui: &Tui,
     frame: &mut Frame<'_>,
@@ -227,6 +290,23 @@ fn draw_input(
     input: &[String],
     cursor: (usize, usize),
 ) {
+    if let Some(ask) = tui.ai.as_ref().and_then(|ai| ai.asking()) {
+        let m = tui.lang().strings().mcp;
+        let detail = if ask.detail.is_empty() {
+            String::new()
+        } else {
+            format!(" {}", ask.detail)
+        };
+        let lines = vec![Line::from(vec![
+            Span::styled(
+                format!("{} {} {}{detail}", m.ask, ask.tool, ask.port),
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(m.choices),
+        ])];
+        frame.render_widget(Paragraph::new(lines), area);
+        return;
+    }
     let prompt = if tui.keys.search.is_some() {
         "(search) "
     } else {

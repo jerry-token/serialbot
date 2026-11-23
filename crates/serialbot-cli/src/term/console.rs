@@ -589,6 +589,10 @@ impl Console {
             format!("RX {} TX {}", human_bytes(self.rx), human_bytes(self.tx)),
             format!("DTR{} RTS{}", level(signals.dtr), level(signals.rts)),
         ];
+        // Sessions an agent opened in `tui --mcp` have no known speed.
+        if self.settings.baud == 0 {
+            parts.remove(1);
+        }
         if self.lost {
             parts.push(t.waiting.to_owned());
         }
