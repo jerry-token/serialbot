@@ -6,19 +6,35 @@ ports. Plan of record: the "AI 串口助手 · 开工前计划" doc.
 
 ## Quality bar (non-negotiable)
 
-- Every change ships with tests written in the same change. Bug fixes start
-  with a failing test.
-- Before every commit, all of these must pass locally:
-  `cargo fmt --all --check`,
-  `cargo clippy --workspace --all-targets -- -D warnings`,
-  `cargo test --workspace`, and for frontend changes the frontend gate
-  below.
-- Line coverage of the workspace must stay at or above 85% (CI enforces it
-  with `cargo llvm-cov`).
-- No `unwrap()`/`expect()` outside tests; no `unsafe` (forbidden workspace-wide).
-- Public items carry doc comments that state behaviour and edge cases.
-- One focused change per pull request; CI must be green and the change
-  reviewed before it is merged into `main`.
+`cargo xtask check` runs every check below, in CI's order, and prints a
+summary; CI runs the same checks. Run `cargo xtask hooks` once per clone:
+the pre-commit hook runs `cargo xtask check --fast` (everything but the slow
+checks marked *slow*), the commit-msg hook checks the message.
+
+| Rule | Enforced by |
+|---|---|
+| Every change ships with tests written in the same change (docs/ci/chore/style/build/revert commits excepted). Bug fixes start with a failing test. | `check:tests-with-change` |
+| Code is formatted. | `check:fmt` |
+| No warnings: clippy with `-D warnings`. This also enforces no `unwrap()`/`expect()` outside tests, no `print!` outside the CLI's output module, doc comments on public items (`missing_docs`) and no `unsafe` (forbidden). | `check:clippy` |
+| Those lints stay switched on, and every crate inherits them. | `check:lint-config`, `check:crate-lints` |
+| All tests pass. | `check:test` |
+| Docs build without warnings (broken links fail). *slow* | `check:docs` |
+| Rust line coverage stays at or above 85% (`cargo llvm-cov`). *slow* | `check:coverage` |
+| Frontend: typecheck, line coverage at or above 85%, build. *slow* | `check:frontend` |
+| Licenses and security advisories are clean (`cargo deny`). *slow* | `check:deny` |
+| Commit subjects (and PR titles, which become the squashed subject) are Conventional Commits of at most 72 characters. | `check:conventional-commits` |
+| No session links or session trailers in commits. | `check:no-session-links` |
+| The layout below names every crate. | `check:layout-doc` |
+| This table and `cargo xtask check` list the same checks. | `check:rules-doc` |
+
+Not automated, still required:
+
+- Public doc comments state behaviour and edge cases (the lint only checks
+  that they exist).
+- One focused change per pull request; CI green and the change reviewed
+  before it is merged into `main`. A red `main` is fixed first.
+- Changes to shared crates are also tried in the packaged app (`cd app &&
+  npm run tauri build -- --bundles deb`) before merging.
 
 ## Commits and pull requests
 
@@ -48,6 +64,11 @@ ports. Plan of record: the "AI 串口助手 · 开工前计划" doc.
 - `crates/serialbot-jobs` — background jobs per session, shared by the app and the CLI:
   `filesend.rs` / `repeat.rs` / `export.rs` (file send, timed send, save/capture); the app
   stops them when a session closes
+- `crates/serialbot-cli` — `serialbot-cli`, the terminal front end
+  - `src/lib.rs` — `run(args, Context)`: commands get output, language and devices passed in
+  - `src/commands/` — one file per subcommand (`ports`, `send`, `monitor`, `signal`)
+  - `src/i18n.rs` — every message and help text in English and Chinese
+  - `tests/e2e.rs` — the real binary against socat virtual ports (Linux only)
 - `crates/serialbot-mcp` — MCP server (rmcp, Streamable HTTP at `/mcp`)
   - `src/tools.rs` — the curated tools; all device work goes through `SessionManager`
   - `src/lib.rs` — `router`/`serve`: bearer token, Host allowlist, Origin rejected
@@ -66,6 +87,7 @@ ports. Plan of record: the "AI 串口助手 · 开工前计划" doc.
   - `src/commands.ts` — saved command groups (local storage) and the in-order runner
   - `src/App.tsx` + `src/components/` — UI; tests use a fake `Backend`
   - Frontend gate: `npm run typecheck`, `npm run coverage` (≥ 85% lines), `npm run build`
+- `xtask` — `cargo xtask check|policy|commit-msg|hooks`: the quality gates above
 - `.github/workflows/ci.yml` — fmt, clippy, tests, MSRV, docs, coverage gate,
   license/advisory checks. PRs run on Linux x64; the Windows/macOS/Linux x64
   and arm64 matrix runs on `main`, weekly and on demand (Actions minutes for

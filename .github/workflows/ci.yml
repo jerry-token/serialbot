@@ -8,6 +8,8 @@ on:
   push:
     branches: [main]
   pull_request:
+    # `edited`: a changed PR title is checked again (it becomes the commit).
+    types: [opened, synchronize, reopened, edited]
   schedule:
     - cron: "17 3 * * 1"
   workflow_dispatch:
@@ -25,6 +27,27 @@ env:
   # The toolchain comes from rust-toolchain.toml (rustup installs it on first use).
 
 jobs:
+  policy:
+    name: Policy (cargo xtask policy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: Swatinem/rust-cache@v2
+      - name: Repository rules (CLAUDE.md)
+        env:
+          # Passed through the environment, never pasted into the script.
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ -n "$BASE_REF" ]; then
+            cargo xtask policy --base "origin/$BASE_REF" --title "$PR_TITLE"
+          else
+            cargo xtask policy --base HEAD~1
+          fi
+
   fmt:
     name: Format
     runs-on: ubuntu-latest
@@ -104,7 +127,7 @@ jobs:
       - run: rustup component add llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@cargo-llvm-cov
-      - run: cargo llvm-cov --workspace --locked --fail-under-lines 85 --summary-only
+      - run: cargo llvm-cov --workspace --exclude xtask --locked --fail-under-lines 85 --summary-only
 
   frontend:
     name: Frontend
