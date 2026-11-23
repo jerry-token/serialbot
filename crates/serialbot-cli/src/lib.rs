@@ -116,6 +116,17 @@ where
     );
     let result = match &cli.command {
         Command::Ports(a) => commands::ports::run(a, &*ctx.list_ports, &mut out),
+        Command::Completions(a) => {
+            let mut script = Vec::new();
+            clap_complete::generate(
+                a.shell,
+                &mut args::command(ctx.lang),
+                "serialbot-cli",
+                &mut script,
+            );
+            out.bytes(&script);
+            Ok(())
+        }
         Command::Send(a) => commands::send::run(a, &ctx.manager, &mut out),
         Command::Signal(a) => commands::signal::run(a, &ctx.manager, &mut out),
         Command::Mcp(m) => match &m.command {
@@ -362,6 +373,18 @@ mod tests {
             "{}",
             version.out
         );
+        for shell in ["bash", "zsh", "fish", "powershell", "elvish"] {
+            let ran = f.run(&["completions", shell]);
+            assert_eq!(ran.code, 0, "{shell}");
+            assert!(ran.out.contains("serialbot-cli"), "{shell}");
+            assert!(ran.out.contains("tui"), "{shell}: every subcommand");
+        }
+        assert!(
+            f.run(&["completions", "bash"])
+                .out
+                .contains("--reset-sequence")
+        );
+        assert_eq!(f.run(&["completions", "tcsh"]).code, 2);
         let bad = f.run(&["ports", "--nope"]);
         assert_eq!(bad.code, Exit::Usage as u8);
         assert!(bad.err.contains("--nope"), "{}", bad.err);

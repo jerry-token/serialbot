@@ -72,6 +72,16 @@ pub enum Command {
     Run(RunArgs),
     /// MCP server for AI agents.
     Mcp(McpArgs),
+    /// Print a shell completion script.
+    Completions(CompletionsArgs),
+}
+
+/// Options of `completions`.
+#[derive(Debug, Args)]
+pub struct CompletionsArgs {
+    /// The shell.
+    #[arg(value_enum)]
+    pub shell: clap_complete::Shell,
 }
 
 /// `mcp serve` or `mcp stdio`.
