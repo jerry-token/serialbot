@@ -76,25 +76,32 @@ pub struct Strings {
     pub other: &'static str,
     /// Listing the ports failed; followed by the reason.
     pub cannot_list: &'static str,
-    // Help texts.
-    /// What the program is.
-    pub about: &'static str,
-    /// Usage line prefix and section headings.
+    /// Opening the port failed; followed by the reason.
+    pub cannot_open: &'static str,
+    /// The device went away; followed by the port.
+    pub disconnected: &'static str,
+    /// No reply matched in time; followed by the pattern.
+    pub no_match: &'static str,
+    /// Reading the file to send failed; followed by the reason.
+    pub cannot_read: &'static str,
+    /// The data to send is empty.
+    pub empty_data: &'static str,
+    /// The usage line prefix.
     pub usage: &'static str,
     /// Heading of the subcommand list.
     pub commands: &'static str,
     /// Heading of the option list.
     pub options: &'static str,
-    /// Help of `--help`.
-    pub help_flag: &'static str,
-    /// Help of `--version`.
-    pub version_flag: &'static str,
-    /// Help of `--color`.
-    pub color_flag: &'static str,
-    /// What `ports` does.
-    pub ports_about: &'static str,
-    /// Help of `--json`.
-    pub json_flag: &'static str,
+    /// Help texts by key: `about`, global options by name, subcommands by
+    /// name, their options as `subcommand.option`.
+    pub help: &'static [(&'static str, &'static str)],
+}
+
+impl Strings {
+    /// The help text for `key` (see [`Strings::help`]).
+    pub fn help_text(&self, key: &str) -> Option<&'static str> {
+        self.help.iter().find(|(k, _)| *k == key).map(|(_, v)| *v)
+    }
 }
 
 static EN: Strings = Strings {
@@ -107,15 +114,58 @@ static EN: Strings = Strings {
     pci: "on-board / PCI",
     other: "other",
     cannot_list: "cannot list the serial ports",
-    about: "SerialBot in the terminal: list ports, send, monitor.",
+    cannot_open: "cannot open",
+    disconnected: "the device went away",
+    no_match: "no reply matched within the timeout",
+    cannot_read: "cannot read",
+    empty_data: "nothing to send",
     usage: "Usage",
     commands: "Commands",
     options: "Options",
-    help_flag: "Print help",
-    version_flag: "Print version",
-    color_flag: "When to use colors: auto, always or never",
-    ports_about: "List the serial ports (name, chip, VID/PID, serial number)",
-    json_flag: "One JSON object per line",
+    help: &[
+        (
+            "about",
+            "SerialBot in the terminal: list ports, send, monitor.",
+        ),
+        ("color", "When to use colors: auto, always or never"),
+        ("help", "Print help"),
+        ("version", "Print version"),
+        (
+            "ports",
+            "List the serial ports (name, chip, VID/PID, serial number)",
+        ),
+        ("ports.json", "One JSON object per line"),
+        (
+            "send",
+            "Send data once; optionally wait for a reply and exit 0 when it matches, 1 on timeout",
+        ),
+        (
+            "send.port",
+            "Serial port (/dev/ttyUSB0, COM3) or network address (tcp://host:port, tcp-server://:9000, udp://host:port)",
+        ),
+        ("send.baud", "Baud rate"),
+        ("send.data", "Data bits (5-8)"),
+        ("send.parity", "Parity"),
+        ("send.stop", "Stop bits (1 or 2)"),
+        ("send.flow", "Flow control"),
+        (
+            "send.dtr",
+            "DTR level right after opening (0 keeps boards like the ESP32 out of reset)",
+        ),
+        ("send.rts", "RTS level right after opening"),
+        ("send.text", "Text to send"),
+        ("send.hex", "Bytes to send as hex, e.g. \"01 03 00 00\""),
+        ("send.file", "A file to send as it is"),
+        ("send.ending", "Line ending after text"),
+        ("send.encoding", "Text encoding (utf-8, gbk, ...)"),
+        ("send.checksum", "Checksum appended to the data"),
+        (
+            "send.expect",
+            "Wait for a reply matching this regular expression",
+        ),
+        ("send.timeout", "How long to wait (500ms, 5s, 1m)"),
+        ("send.print", "Print what is received while waiting"),
+    ],
 };
 
 static ZH: Strings = Strings {
@@ -128,15 +178,52 @@ static ZH: Strings = Strings {
     pci: "板载 / PCI",
     other: "其他",
     cannot_list: "无法列出串口",
-    about: "终端里的 SerialBot：列出串口、发送、监视。",
+    cannot_open: "无法打开",
+    disconnected: "设备已断开",
+    no_match: "超时内没有收到匹配的回复",
+    cannot_read: "无法读取",
+    empty_data: "没有要发送的数据",
     usage: "用法",
     commands: "命令",
     options: "选项",
-    help_flag: "显示帮助",
-    version_flag: "显示版本",
-    color_flag: "何时使用颜色：auto（默认）、always 或 never",
-    ports_about: "列出串口（名称、芯片、VID/PID、序列号）",
-    json_flag: "每行输出一个 JSON 对象",
+    help: &[
+        ("about", "终端里的 SerialBot：列出串口、发送、监视。"),
+        ("color", "何时使用颜色：auto（默认）、always 或 never"),
+        ("help", "显示帮助"),
+        ("version", "显示版本"),
+        ("ports", "列出串口（名称、芯片、VID/PID、序列号）"),
+        ("ports.json", "每行输出一个 JSON 对象"),
+        (
+            "send",
+            "发送一次数据；可等待回复，匹配到时以 0 退出，超时以 1 退出",
+        ),
+        (
+            "send.port",
+            "串口（/dev/ttyUSB0、COM3）或网络地址（tcp://主机:端口、tcp-server://:9000、udp://主机:端口）",
+        ),
+        ("send.baud", "波特率"),
+        ("send.data", "数据位（5-8）"),
+        ("send.parity", "校验位"),
+        ("send.stop", "停止位（1 或 2）"),
+        ("send.flow", "流控"),
+        (
+            "send.dtr",
+            "打开后立即设置的 DTR 电平（设为 0 可避免 ESP32 等板子复位）",
+        ),
+        ("send.rts", "打开后立即设置的 RTS 电平"),
+        ("send.text", "要发送的文本"),
+        (
+            "send.hex",
+            "以 HEX 表示的要发送的字节，例如 \"01 03 00 00\"",
+        ),
+        ("send.file", "原样发送一个文件"),
+        ("send.ending", "文本后追加的行尾"),
+        ("send.encoding", "文本编码（utf-8、gbk……）"),
+        ("send.checksum", "追加在数据后的校验"),
+        ("send.expect", "等待匹配这个正则表达式的回复"),
+        ("send.timeout", "等待多久（500ms、5s、1m）"),
+        ("send.print", "等待期间输出收到的内容"),
+    ],
 };
 
 #[cfg(test)]
@@ -183,7 +270,11 @@ mod tests {
                 "an empty text in {lang:?}: {text}"
             );
         }
-        assert_ne!(Lang::Zh.strings().about, Lang::En.strings().about);
+        assert_ne!(
+            Lang::Zh.strings().help_text("about"),
+            Lang::En.strings().help_text("about")
+        );
+        assert_eq!(Lang::En.strings().help_text("nope"), None);
         // Runs against the real environment; any answer is valid.
         let _ = Lang::from_env();
     }

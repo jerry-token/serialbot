@@ -77,6 +77,12 @@ impl<'a> Output<'a> {
         let _ = writeln!(self.out, "{text}");
     }
 
+    /// Writes received bytes unchanged.
+    pub fn bytes(&mut self, data: &[u8]) {
+        let _ = self.out.write_all(data);
+        let _ = self.out.flush();
+    }
+
     /// Writes one JSON value on its own line.
     pub fn json(&mut self, value: &serde_json::Value) {
         self.line(&value.to_string());
@@ -104,10 +110,11 @@ mod tests {
         let (mut out, mut err) = (Vec::new(), Vec::new());
         let mut o = Output::new(&mut out, &mut err, Lang::Zh, false);
         o.line("a");
+        o.bytes(b"b\n");
         o.json(&serde_json::json!({"k": 1}));
         o.error("坏了");
         assert!(format!("{o:?}").contains("Zh"));
-        assert_eq!(String::from_utf8(out).unwrap(), "a\n{\"k\":1}\n");
+        assert_eq!(String::from_utf8(out).unwrap(), "a\nb\n{\"k\":1}\n");
         assert_eq!(String::from_utf8(err).unwrap(), "错误: 坏了\n");
     }
 

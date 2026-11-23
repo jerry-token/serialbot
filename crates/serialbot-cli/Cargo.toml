@@ -16,6 +16,7 @@ path = "src/main.rs"
 serialbot-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+regex.workspace = true
 clap = { version = "4.5", features = ["derive", "env"] }
 sys-locale = "0.3"
 
