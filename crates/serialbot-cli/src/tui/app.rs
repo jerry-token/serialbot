@@ -93,13 +93,59 @@ pub struct Options {
     pub plot: Vec<Pattern>,
 }
 
+impl Tui {
+    /// The size weights of the shown panes: equal until a border was
+    /// dragged.
+    pub fn weights(&self) -> Vec<u16> {
+        if self.sizes.len() == self.shown.len() {
+            self.sizes.clone()
+        } else {
+            vec![1; self.shown.len()]
+        }
+    }
+}
+
 /// Where the last frame put things, for the mouse.
 #[derive(Debug, Default, Clone)]
 pub struct Regions {
     /// The session list (empty when hidden).
     pub list: Rect,
+    /// The command groups (empty when hidden).
+    pub groups: Rect,
     /// Each shown pane: the session's index and its area.
     pub panes: Vec<(usize, Rect)>,
+}
+
+/// The app's command groups (`/groups <file>`, `--groups`).
+#[derive(Debug, Clone)]
+pub struct Groups {
+    /// Where they came from.
+    pub file: String,
+    /// The groups.
+    pub groups: Vec<crate::script::Group>,
+    /// The group shown.
+    pub current: usize,
+    /// The panel is shown.
+    pub shown: bool,
+}
+
+impl Groups {
+    /// Reads a command export.
+    pub fn load(file: &str) -> Result<Self, String> {
+        let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
+        let groups = crate::script::load_groups(&text).map_err(|e| format!("{file}: {e}"))?;
+        Ok(Self {
+            file: file.to_owned(),
+            groups,
+            current: 0,
+            shown: true,
+        })
+    }
+
+    /// The group shown, if there is any.
+    pub fn group(&self) -> Option<&crate::script::Group> {
+        self.groups.get(self.current)
+    }
 }
 
 /// The full-screen terminal.
@@ -122,6 +168,12 @@ pub struct Tui {
     pub wide: bool,
     /// The AI panel (`--mcp`).
     pub ai: Option<Ai>,
+    /// The command groups.
+    pub groups: Option<Groups>,
+    /// Relative sizes of the shown panes (dragging a border changes them).
+    pub sizes: Vec<u16>,
+    /// The border being dragged: the pane before it.
+    dragging: Option<usize>,
     manager: Arc<SessionManager>,
     options: Options,
 }
@@ -149,6 +201,9 @@ impl Tui {
             regions: Regions::default(),
             wide: true,
             ai: None,
+            groups: None,
+            sizes: Vec::new(),
+            dragging: None,
             manager,
             options,
         }
@@ -329,10 +384,32 @@ impl Tui {
         self.act(actions)
     }
 
-    /// Mouse: a click focuses a pane or picks a session from the list,
-    /// the wheel scrolls the pane under it.
+    /// Mouse: a click focuses a pane, picks a session from the list or
+    /// sends a command of the group; the wheel scrolls the pane under it;
+    /// dragging the border between two panes resizes them.
     pub fn mouse(&mut self, event: MouseEvent) {
         let at = Position::new(event.column, event.row);
+        match event.kind {
+            MouseEventKind::Down(MouseButton::Left) => {
+                self.dragging = self.border_at(at);
+                if self.dragging.is_some() {
+                    return;
+                }
+            }
+            MouseEventKind::Drag(MouseButton::Left) => {
+                if let Some(i) = self.dragging {
+                    self.drag(i, at);
+                }
+                return;
+            }
+            MouseEventKind::Up(_) => self.dragging = None,
+            _ => {}
+        }
+        if event.kind == MouseEventKind::Down(MouseButton::Left) && self.regions.groups.contains(at)
+        {
+            self.click_group(event.row.saturating_sub(self.regions.groups.y + 1));
+            return;
+        }
         let over = self
             .regions
             .panes
@@ -359,6 +436,121 @@ impl Tui {
                 }
             }
             _ => {}
+        }
+    }
+
+    /// The border under `at`: the index (into the shown panes) of the pane
+    /// before it.
+    fn border_at(&self, at: Position) -> Option<usize> {
+        let panes = &self.regions.panes;
+        (0..panes.len().saturating_sub(1)).find(|&i| {
+            let (a, b) = (panes[i].1, panes[i + 1].1);
+            if self.side_by_side {
+                (at.x == a.right().saturating_sub(1) || at.x == b.x)
+                    && a.y <= at.y
+                    && at.y < a.bottom()
+            } else {
+                (at.y == a.bottom().saturating_sub(1) || at.y == b.y)
+                    && a.x <= at.x
+                    && at.x < a.right()
+            }
+        })
+    }
+
+    /// Moves the border after shown pane `i` to `at`; each pane keeps at
+    /// least a few rows or columns.
+    fn drag(&mut self, i: usize, at: Position) {
+        const MIN: u16 = 8;
+        let areas: Vec<Rect> = self.regions.panes.iter().map(|(_, a)| *a).collect();
+        let (Some(a), Some(b)) = (areas.get(i), areas.get(i + 1)) else {
+            return;
+        };
+        let length = |r: &Rect| if self.side_by_side { r.width } else { r.height };
+        let (start, mouse) = if self.side_by_side {
+            (a.x, at.x)
+        } else {
+            (a.y, at.y)
+        };
+        let both = length(a) + length(b);
+        let first = (mouse + 1)
+            .saturating_sub(start)
+            .clamp(MIN.min(both / 2), both.saturating_sub(MIN).max(both / 2));
+        self.sizes = areas.iter().map(length).collect();
+        self.sizes[i] = first;
+        self.sizes[i + 1] = both - first;
+    }
+
+    /// A click in the groups panel: the first row switches to the next
+    /// group, the others send their command.
+    fn click_group(&mut self, row: u16) {
+        let Some(groups) = &mut self.groups else {
+            return;
+        };
+        if row == 0 {
+            if !groups.groups.is_empty() {
+                groups.current = (groups.current + 1) % groups.groups.len();
+            }
+            return;
+        }
+        let n = usize::from(row);
+        let mut notes = Vec::new();
+        self.send_command(&n.to_string(), &mut notes);
+        self.note(&notes);
+        self.tick();
+    }
+
+    /// `/cmd <number>` or `/cmd all` on the focused session.
+    fn send_command(&mut self, which: &str, notes: &mut Vec<String>) {
+        let t = self.texts();
+        let Some(group) = self.groups.as_ref().and_then(Groups::group).cloned() else {
+            notes.push(t.no_groups.to_owned());
+            return;
+        };
+        if which.eq_ignore_ascii_case("all") {
+            let items = group.items();
+            self.with_console(notes, |c, n| c.run_items(items, &group.name, n));
+            return;
+        }
+        let command = which
+            .parse::<usize>()
+            .ok()
+            .and_then(|n| n.checked_sub(1))
+            .and_then(|i| group.commands.get(i));
+        match command {
+            Some(command) => {
+                let bytes = command.bytes.clone();
+                self.with_console(notes, |c, n| c.send(&bytes, n));
+            }
+            None => notes.push(format!(
+                "/cmd {which}: 1-{} {}",
+                group.commands.len(),
+                t.or_all
+            )),
+        }
+    }
+
+    /// `/group <name or number>`.
+    fn choose_group(&mut self, which: &str, notes: &mut Vec<String>) {
+        let t = self.texts();
+        let Some(groups) = &mut self.groups else {
+            notes.push(t.no_groups.to_owned());
+            return;
+        };
+        let by_number = which
+            .parse::<usize>()
+            .ok()
+            .and_then(|n| n.checked_sub(1))
+            .filter(|i| *i < groups.groups.len());
+        let by_name = groups
+            .groups
+            .iter()
+            .position(|g| g.name.eq_ignore_ascii_case(which));
+        if let Some(i) = by_number.or(by_name) {
+            groups.current = i;
+            groups.shown = true;
+        } else {
+            let names: Vec<&str> = groups.groups.iter().map(|g| g.name.as_str()).collect();
+            notes.push(format!("/group {which}: {}", names.join(", ")));
         }
     }
 
@@ -465,7 +657,12 @@ impl Tui {
                 None
             }
             Local::SplitSide | Local::SplitStack => {
-                self.side_by_side = local == Local::SplitSide;
+                let side = local == Local::SplitSide;
+                if side != self.side_by_side {
+                    // Sizes were widths, or heights: start equal again.
+                    self.sizes.clear();
+                }
+                self.side_by_side = side;
                 self.show_another();
                 None
             }
@@ -497,6 +694,28 @@ impl Tui {
             }
             Slash::Plot(arg) => {
                 self.plot(arg.as_deref(), notes);
+                None
+            }
+            Slash::Groups(Some(file)) => {
+                match Groups::load(&file) {
+                    Ok(groups) => self.groups = Some(groups),
+                    Err(e) => notes.push(e),
+                }
+                None
+            }
+            Slash::Groups(None) => {
+                match &mut self.groups {
+                    Some(groups) => groups.shown = !groups.shown,
+                    None => notes.push(self.texts().no_groups.to_owned()),
+                }
+                None
+            }
+            Slash::Group(which) => {
+                self.choose_group(&which, notes);
+                None
+            }
+            Slash::Cmd(which) => {
+                self.send_command(&which, notes);
                 None
             }
             Slash::Quit => Some(Effect::Quit),

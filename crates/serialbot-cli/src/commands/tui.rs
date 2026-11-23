@@ -26,7 +26,7 @@ use crate::i18n::Lang;
 use crate::output::Output;
 use crate::term::console::{Flow, Settings};
 use crate::tui::ai::Ai;
-use crate::tui::app::{Options, Tui};
+use crate::tui::app::{Groups, Options, Tui};
 use crate::tui::plot::Pattern;
 use crate::tui::view;
 use crate::{Failure, PortLister};
@@ -103,6 +103,9 @@ pub fn prepare(args: &TuiArgs, manager: &Arc<SessionManager>, env: &Env) -> Resu
         plot,
     };
     let mut tui = Tui::new(Arc::clone(manager), options);
+    if let Some(file) = &args.groups {
+        tui.groups = Some(Groups::load(file).map_err(|e| Failure::new(Exit::Usage, e))?);
+    }
     for port in &args.ports {
         if let Err(message) = tui.open(port, None) {
             tui.close_all();

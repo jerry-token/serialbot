@@ -192,27 +192,86 @@ fn unescape(text: &str) -> Result<String, String> {
 /// With `group`, only that group (by name, case-insensitive); otherwise
 /// the only group, or an error naming the groups to choose from.
 pub fn parse_groups(json: &str, group: Option<&str>) -> Result<Vec<Item>, String> {
+    let groups = load_groups(json)?;
+    let names = || {
+        groups
+            .iter()
+            .map(|g| g.name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let chosen = match group {
+        Some(want) => groups
+            .iter()
+            .find(|g| g.name.eq_ignore_ascii_case(want))
+            .ok_or_else(|| format!("no group {want:?}; groups: {}", names()))?,
+        None if groups.len() == 1 => &groups[0],
+        None => return Err(format!("choose a group with --group: {}", names())),
+    };
+    Ok(chosen.items())
+}
+
+/// One group of a desktop-app command export.
+#[derive(Debug, Clone)]
+pub struct Group {
+    /// Its name.
+    pub name: String,
+    /// Its commands, in order.
+    pub commands: Vec<Command>,
+}
+
+/// One command of a group.
+#[derive(Debug, Clone)]
+pub struct Command {
+    /// Its name, or its text.
+    pub label: String,
+    /// What it sends (with its line ending).
+    pub bytes: Vec<u8>,
+    /// The pause after it when the group runs in order.
+    pub delay: Duration,
+}
+
+impl Group {
+    /// The group as script steps: each command, then its delay.
+    pub fn items(&self) -> Vec<Item> {
+        let mut items = Vec::new();
+        for (i, c) in self.commands.iter().enumerate() {
+            items.push(Item {
+                line: i + 1,
+                source: c.label.clone(),
+                step: Step::Send(c.bytes.clone()),
+            });
+            if !c.delay.is_zero() {
+                items.push(Item {
+                    line: i + 1,
+                    source: format!("wait {}ms", c.delay.as_millis()),
+                    step: Step::Wait(c.delay),
+                });
+            }
+        }
+        items
+    }
+}
+
+/// Every group of a desktop-app command export.
+pub fn load_groups(json: &str) -> Result<Vec<Group>, String> {
     let value: serde_json::Value =
         serde_json::from_str(json).map_err(|e| format!("not a command export: {e}"))?;
     let groups = value
         .as_array()
         .ok_or("not a command export: expected a list of groups")?;
-    let name_of = |g: &serde_json::Value| g["name"].as_str().unwrap_or_default().to_owned();
-    let chosen = match group {
-        Some(want) => groups
-            .iter()
-            .find(|g| name_of(g).eq_ignore_ascii_case(want))
-            .ok_or_else(|| format!("no group {want:?}; groups: {}", names(groups)))?,
-        None if groups.len() == 1 => &groups[0],
-        None => return Err(format!("choose a group with --group: {}", names(groups))),
-    };
-    let commands = chosen["commands"].as_array().cloned().unwrap_or_default();
-    let mut items = Vec::new();
+    groups.iter().map(group).collect()
+}
+
+fn group(g: &serde_json::Value) -> Result<Group, String> {
+    let name = g["name"].as_str().unwrap_or_default().to_owned();
+    let commands = g["commands"].as_array().cloned().unwrap_or_default();
+    let mut out = Vec::new();
     for (i, c) in commands.iter().enumerate() {
         let text = c["text"].as_str().unwrap_or_default();
         let label = c["name"].as_str().unwrap_or(text);
         let bytes = if c["hex"].as_bool() == Some(true) {
-            hex::parse_hex(text).map_err(|e| format!("command {} ({label}): {e}", i + 1))?
+            hex::parse_hex(text).map_err(|e| format!("{name}: command {} ({label}): {e}", i + 1))?
         } else {
             let ending = match c["ending"].as_str() {
                 Some("cr") => Ending::Cr,
@@ -222,29 +281,16 @@ pub fn parse_groups(json: &str, group: Option<&str>) -> Result<Vec<Item>, String
             };
             [text.as_bytes(), ending.bytes()].concat()
         };
-        items.push(Item {
-            line: i + 1,
-            source: label.to_owned(),
-            step: Step::Send(bytes),
+        out.push(Command {
+            label: label.to_owned(),
+            bytes,
+            delay: Duration::from_millis(c["delayMs"].as_u64().unwrap_or(0)),
         });
-        let delay = c["delayMs"].as_u64().unwrap_or(0);
-        if delay > 0 {
-            items.push(Item {
-                line: i + 1,
-                source: format!("wait {delay}ms"),
-                step: Step::Wait(Duration::from_millis(delay)),
-            });
-        }
     }
-    Ok(items)
-}
-
-fn names(groups: &[serde_json::Value]) -> String {
-    groups
-        .iter()
-        .map(|g| g["name"].as_str().unwrap_or_default())
-        .collect::<Vec<_>>()
-        .join(", ")
+    Ok(Group {
+        name,
+        commands: out,
+    })
 }
 
 /// Why a script stopped early.

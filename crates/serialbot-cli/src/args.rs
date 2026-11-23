@@ -376,6 +376,9 @@ pub struct TuiArgs {
     /// Waveform patterns.
     #[arg(long, value_name = "[NAME=]REGEX")]
     pub plot: Vec<String>,
+    /// The app's command groups to show.
+    #[arg(long, value_name = "FILE")]
+    pub groups: Option<String>,
     /// Also run the MCP server, with the AI panel.
     #[arg(long)]
     pub mcp: bool,

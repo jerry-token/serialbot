@@ -74,8 +74,9 @@ Not automated, still required:
     (input box), `feed.rs` (entries to lines), `screen.rs` (redraws only the bottom rows),
     `console.rs` (one session: lines, commands, jobs, reconnecting; shared with `tui`),
     `app.rs` (`open`: a console above the input box; tested with the `vt100` emulator)
-  - `src/tui/` — the full-screen terminal: `app.rs` (sessions, up to four panes, focus, one
-    input box; tested with mock devices and ratatui's `TestBackend`), `view.rs` (drawing),
+  - `src/tui/` — the full-screen terminal: `app.rs` (sessions, up to four resizable panes,
+    focus, one input box, the app's command groups; tested with mock devices and ratatui's
+    `TestBackend`), `view.rs` (drawing),
     `sgr.rs` (color sequences to styles, wrapping), `plot.rs` (waveform: numbers from lines,
     six curves told apart by color and point shape), `ai.rs` (`--mcp`: the AI panel and its
     y/s/n answers; the server comes from `commands/mcp.rs`)

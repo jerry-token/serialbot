@@ -130,6 +130,12 @@ pub struct TuiTexts {
     pub ai: &'static str,
     /// The AI panel before any action.
     pub ai_idle: &'static str,
+    /// No command groups are loaded.
+    pub no_groups: &'static str,
+    /// After the range of `/cmd` numbers.
+    pub or_all: &'static str,
+    /// Title of the command groups panel.
+    pub commands: &'static str,
 }
 
 /// Texts of `mcp serve` and `mcp stdio`.
@@ -305,6 +311,7 @@ static EN_TUI: TuiTexts = TuiTexts {
     help: &[
         "tui: Ctrl+A ←/→ focus · Ctrl+A | side by side · Ctrl+A - stacked · PgUp/PgDn or the wheel scroll back",
         "/open <port> [baud] adds a session · /close closes the focused port (its log stays) · click to focus",
+        "/groups <file> loads the app's command groups · click a command or /cmd <n> sends it · /cmd all runs the group · /group <name>",
         "With --mcp, the AI panel asks about an agent's changes: y allow · s allow for the session · n or Esc deny",
         "Ctrl+A V waveform · /plot <regex> picks the numbers (name=regex names them) · /plot auto · /plot clear · /plot color <curve> <color>",
     ],
@@ -319,12 +326,16 @@ static EN_TUI: TuiTexts = TuiTexts {
     plot_empty: "waiting for numbers (name=value, or a line of numbers; /plot <regex> to pick them)",
     ai: "AI",
     ai_idle: "no agent action yet; connect a client to the address above",
+    no_groups: "no command groups: /groups <file> loads the app's export (Commands → Export)",
+    or_all: "or all",
+    commands: "Commands",
 };
 
 static ZH_TUI: TuiTexts = TuiTexts {
     help: &[
         "tui：Ctrl+A ←/→ 切换焦点 · Ctrl+A | 左右分屏 · Ctrl+A - 上下分屏 · PgUp/PgDn 或滚轮回看",
         "/open <端口> [波特率] 新开会话 · /close 关闭焦点会话的端口（日志保留）· 鼠标点击切换焦点",
+        "/groups <文件> 读取 App 的命令分组 · 点击命令或 /cmd <序号> 发送 · /cmd all 按顺序执行整组 · /group <名称>",
         "用 --mcp 启动时，AI 面板询问智能体的修改操作：y 允许 · s 本会话内都允许 · n 或 Esc 拒绝",
         "Ctrl+A V 波形图 · /plot <正则> 指定取哪些数（name=正则 给曲线命名）· /plot auto · /plot clear · /plot color <曲线> <颜色>",
     ],
@@ -339,6 +350,9 @@ static ZH_TUI: TuiTexts = TuiTexts {
     plot_empty: "等待数值（name=value 或整行数字；用 /plot <正则> 指定）",
     ai: "AI",
     ai_idle: "智能体还没有操作；用上面的地址连接客户端",
+    no_groups: "没有命令分组：/groups <文件> 读取 App 导出的命令（命令 → 导出）",
+    or_all: "或 all",
+    commands: "命令",
 };
 
 static EN_MCP: McpTexts = McpTexts {
@@ -554,6 +568,10 @@ static EN: Strings = Strings {
         ("tui.reset_sequence", "What Ctrl+A 3 and /reset do"),
         ("tui.hex", "Show received data as hex"),
         ("tui.time", "Start each line with the local time"),
+        (
+            "tui.groups",
+            "Show the app's command groups from this export (Commands → Export); click a command to send it",
+        ),
         (
             "tui.mcp",
             "Also run the MCP server (this computer only); the AI panel shows what agents do and asks about their changes",
@@ -809,6 +827,10 @@ static ZH: Strings = Strings {
         ("tui.reset_sequence", "Ctrl+A 3 和 /reset 执行的时序"),
         ("tui.hex", "以 HEX 显示收到的数据"),
         ("tui.time", "每行开头加上本地时间"),
+        (
+            "tui.groups",
+            "显示这个 App 导出文件里的命令分组（命令 → 导出）；点击命令即发送",
+        ),
         (
             "tui.mcp",
             "同时启动 MCP 服务（仅本机）；AI 面板显示智能体的每一步，并询问它的修改操作",

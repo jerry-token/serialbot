@@ -54,8 +54,25 @@ pub fn render(tui: &mut Tui, frame: &mut Frame<'_>) {
             .direction(Direction::Horizontal)
             .constraints([Constraint::Length(LIST_WIDTH), Constraint::Min(1)])
             .split(main);
-        draw_list(tui, frame, cols[0]);
-        regions.list = cols[0];
+        let left = cols[0];
+        let groups_shown = tui.groups.as_ref().is_some_and(|g| g.shown);
+        if groups_shown {
+            let list_rows = u16::try_from(tui.panes.len() + 2).unwrap_or(u16::MAX);
+            let split = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(list_rows.min(left.height / 2).max(3)),
+                    Constraint::Min(3),
+                ])
+                .split(left);
+            draw_list(tui, frame, split[0]);
+            draw_groups(tui, frame, split[1]);
+            regions.list = split[0];
+            regions.groups = split[1];
+        } else {
+            draw_list(tui, frame, left);
+            regions.list = left;
+        }
         cols[1]
     } else {
         main
@@ -74,10 +91,10 @@ pub fn render(tui: &mut Tui, frame: &mut Frame<'_>) {
         } else {
             Direction::Vertical
         };
-        let count = u32::try_from(shown.len()).unwrap_or(1);
+        let weights = if tui.wide { tui.weights() } else { vec![1] };
         let areas = Layout::default()
             .direction(direction)
-            .constraints(shown.iter().map(|_| Constraint::Ratio(1, count)))
+            .constraints(weights.iter().map(|w| Constraint::Fill(*w)))
             .split(panes_area);
         for (i, area) in shown.iter().zip(areas.iter()) {
             let focused = *i == tui.focus;
@@ -100,6 +117,34 @@ fn draw_start(tui: &Tui, frame: &mut Frame<'_>, area: Rect) {
             .map(|m| Line::from(Span::styled(format!("· {m}"), dim()))),
     );
     let block = Block::default().borders(Borders::ALL).title(" SerialBot ");
+    frame.render_widget(Paragraph::new(lines).block(block), area);
+}
+
+fn draw_groups(tui: &Tui, frame: &mut Frame<'_>, area: Rect) {
+    let Some(groups) = &tui.groups else { return };
+    let width = usize::from(area.width.saturating_sub(2));
+    let mut lines = Vec::new();
+    if let Some(group) = groups.group() {
+        let header = format!(
+            "{} ‹{}/{}›",
+            group.name,
+            groups.current + 1,
+            groups.groups.len()
+        );
+        lines.push(Line::from(Span::styled(
+            truncate(&header, width),
+            Style::default().add_modifier(Modifier::BOLD),
+        )));
+        for (i, command) in group.commands.iter().enumerate() {
+            lines.push(Line::from(truncate(
+                &format!("{} {}", i + 1, command.label),
+                width,
+            )));
+        }
+    }
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(format!(" {} ", tui.texts().commands));
     frame.render_widget(Paragraph::new(lines).block(block), area);
 }
 
