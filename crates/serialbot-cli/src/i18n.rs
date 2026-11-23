@@ -122,6 +122,10 @@ pub struct TuiTexts {
     pub no_raw: &'static str,
     /// `tui` without a terminal.
     pub needs_terminal: &'static str,
+    /// `/plot color` with an unknown curve or color.
+    pub plot_unknown: &'static str,
+    /// The waveform has no numbers yet.
+    pub plot_empty: &'static str,
 }
 
 /// Texts of `mcp serve` and `mcp stdio`.
@@ -297,6 +301,7 @@ static EN_TUI: TuiTexts = TuiTexts {
     help: &[
         "tui: Ctrl+A ←/→ focus · Ctrl+A | side by side · Ctrl+A - stacked · PgUp/PgDn or the wheel scroll back",
         "/open <port> [baud] adds a session · /close closes the focused port (its log stays) · click to focus",
+        "Ctrl+A V waveform · /plot <regex> picks the numbers (name=regex names them) · /plot auto · /plot clear · /plot color <curve> <color>",
     ],
     start: "No session yet: type /open <port> [baud] (serialbot-cli ports lists them) · Ctrl+A X quits",
     no_session: "no session is open: /open <port> [baud]",
@@ -305,12 +310,15 @@ static EN_TUI: TuiTexts = TuiTexts {
     no_shell: "Ctrl+A J works in serialbot-cli open; quit tui first",
     no_raw: "raw mode works in serialbot-cli open (a full-screen program needs the whole terminal)",
     needs_terminal: "tui needs a terminal; for pipes use open, monitor or send",
+    plot_unknown: "unknown; choose one of",
+    plot_empty: "waiting for numbers (name=value, or a line of numbers; /plot <regex> to pick them)",
 };
 
 static ZH_TUI: TuiTexts = TuiTexts {
     help: &[
         "tui：Ctrl+A ←/→ 切换焦点 · Ctrl+A | 左右分屏 · Ctrl+A - 上下分屏 · PgUp/PgDn 或滚轮回看",
         "/open <端口> [波特率] 新开会话 · /close 关闭焦点会话的端口（日志保留）· 鼠标点击切换焦点",
+        "Ctrl+A V 波形图 · /plot <正则> 指定取哪些数（name=正则 给曲线命名）· /plot auto · /plot clear · /plot color <曲线> <颜色>",
     ],
     start: "还没有会话：输入 /open <端口> [波特率]（serialbot-cli ports 可列出端口）· Ctrl+A X 退出",
     no_session: "没有打开的会话：/open <端口> [波特率]",
@@ -319,6 +327,8 @@ static ZH_TUI: TuiTexts = TuiTexts {
     no_shell: "Ctrl+A J 在 serialbot-cli open 里可用；请先退出 tui",
     no_raw: "原始模式在 serialbot-cli open 里可用（全屏程序需要整个终端）",
     needs_terminal: "tui 需要在终端里运行；管道请用 open、monitor 或 send",
+    plot_unknown: "不认识；可选",
+    plot_empty: "等待数值（name=value 或整行数字；用 /plot <正则> 指定）",
 };
 
 static EN_MCP: McpTexts = McpTexts {
@@ -534,6 +544,10 @@ static EN: Strings = Strings {
         ("tui.reset_sequence", "What Ctrl+A 3 and /reset do"),
         ("tui.hex", "Show received data as hex"),
         ("tui.time", "Start each line with the local time"),
+        (
+            "tui.plot",
+            "Show the waveform from the start, taking numbers with this regex (name=regex; repeat for more curves, up to 6)",
+        ),
         (
             "run",
             "Run a script (send, expect, wait, dtr, rts, break, mark, timeout, ending) or an app command export; stops at the first failure",
@@ -773,6 +787,10 @@ static ZH: Strings = Strings {
         ("tui.reset_sequence", "Ctrl+A 3 和 /reset 执行的时序"),
         ("tui.hex", "以 HEX 显示收到的数据"),
         ("tui.time", "每行开头加上本地时间"),
+        (
+            "tui.plot",
+            "启动时就显示波形图，用这个正则取数（name=正则；可写多次，最多 6 条曲线）",
+        ),
         (
             "run",
             "运行脚本（send、expect、wait、dtr、rts、break、mark、timeout、ending）或 App 导出的命令分组；遇到失败即停止",

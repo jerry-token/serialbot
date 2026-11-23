@@ -113,6 +113,8 @@ pub struct Tick {
     pub lines: Vec<String>,
     /// Bytes received this tick.
     pub rx: u64,
+    /// What was received, as it came (line mode).
+    pub received: Vec<u8>,
 }
 
 /// One session's console.
@@ -211,6 +213,13 @@ impl Console {
                     }
                 }
                 if !raw {
+                    if let EntryKind::Data {
+                        direction: Direction::Rx,
+                        bytes,
+                    } = &entry.kind
+                    {
+                        tick.received.extend_from_slice(bytes);
+                    }
                     tick.lines.extend(self.feed.entry(entry));
                 }
             }
@@ -339,7 +348,9 @@ impl Console {
             Slash::Clear => return Some(Effect::Clear),
             Slash::Help => return self.local(Local::Help, notes),
             Slash::Quit => return Some(Effect::Quit),
-            Slash::Open { .. } | Slash::Close => notes.push(t.tui_only.to_owned()),
+            Slash::Open { .. } | Slash::Close | Slash::Plot(_) => {
+                notes.push(t.tui_only.to_owned());
+            }
             Slash::Invalid(text) => notes.push(format!("/{text}: {}", t.unknown_command)),
         }
         None

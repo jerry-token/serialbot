@@ -26,6 +26,7 @@ use crate::i18n::Lang;
 use crate::output::Output;
 use crate::term::console::{Flow, Settings};
 use crate::tui::app::{Options, Tui};
+use crate::tui::plot::Pattern;
 use crate::tui::view;
 
 /// How often the screen is updated.
@@ -61,6 +62,12 @@ pub fn prepare(args: &TuiArgs, manager: &Arc<SessionManager>, env: &Env) -> Resu
         ParityArg::Odd => 'O',
         ParityArg::Even => 'E',
     };
+    let plot = args
+        .plot
+        .iter()
+        .map(|spec| Pattern::parse(spec))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| Failure::new(Exit::Usage, e))?;
     let options = Options {
         port: args.port(""),
         console: Settings {
@@ -79,6 +86,7 @@ pub fn prepare(args: &TuiArgs, manager: &Arc<SessionManager>, env: &Env) -> Resu
         },
         hex: args.hex,
         time: args.time,
+        plot,
     };
     let mut tui = Tui::new(Arc::clone(manager), options);
     for port in &args.ports {

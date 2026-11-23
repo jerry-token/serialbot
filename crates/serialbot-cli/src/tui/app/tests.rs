@@ -323,8 +323,6 @@ fn console_commands_reach_the_focused_session() {
     assert!(r.logged(1, "raw mode works in serialbot-cli open"));
     r.prefix(KeyCode::Char('j'));
     assert!(r.logged(1, "Ctrl+A J works in serialbot-cli open"));
-    r.prefix(KeyCode::Char('v'));
-    assert!(r.logged(1, "comes in a later version"));
     r.prefix(KeyCode::Char('g'));
     assert_eq!(r.tui.keys.editor.text(), "/run ");
     r.keys(&[press(KeyCode::Esc)]);
@@ -417,4 +415,68 @@ fn bad_options_and_ports_fail_before_the_screen() {
     assert!(pane.console.feed.display.hex);
     assert_eq!(pane.console.feed.display.stamps, Stamps::Time);
     assert_eq!(pane.console.settings().baud, 9600);
+}
+
+#[test]
+fn the_waveform_per_session() {
+    let mut r = Rig::new(&["mock0", "mock1"], 120, 30);
+    r.prefix(KeyCode::Char('v'));
+    assert!(r.tui.panes[0].plot_shown && !r.tui.panes[1].plot_shown);
+    assert!(r.screen().contains("waiting for numbers"), "{}", r.screen());
+    r.device("mock0").send(b"temp=20 hum=40\ntemp=21 hum=41\n");
+    r.until_shows("• temp 21");
+    assert!(r.screen().contains("× hum 41"), "{}", r.screen());
+    // The lines still show above it.
+    assert!(r.screen().contains("temp=21 hum=41"));
+
+    r.type_line("/plot color hum green");
+    assert_eq!(
+        r.tui.panes[0].plot.series[1].color,
+        ratatui::style::Color::Green
+    );
+    r.type_line("/plot color hum pink");
+    assert!(
+        r.logged(0, "unknown; choose one of: pink: cyan"),
+        "{:?}",
+        r.tui.panes[0].lines
+    );
+    r.type_line("/plot t=temp=(\\d+)");
+    assert_eq!(r.tui.panes[0].plot.patterns.len(), 1);
+    r.device("mock0").send(b"temp=30 hum=50\n");
+    r.until_shows("• t 30");
+    assert!(!r.screen().contains("hum 50"));
+    r.type_line("/plot (");
+    assert!(r.logged(0, "--plot \"(\""), "{:?}", r.tui.panes[0].lines);
+    r.type_line("/plot clear");
+    assert!(r.tui.panes[0].plot.series.is_empty());
+    r.type_line("/plot auto");
+    assert!(r.tui.panes[0].plot.patterns.is_empty());
+    r.type_line("/plot");
+    assert!(!r.tui.panes[0].plot_shown);
+    // Numbers are taken while it is hidden, too.
+    r.device("mock0").send(b"1,2\n");
+    r.until_shows("1,2");
+    assert_eq!(r.tui.panes[0].plot.series.len(), 2);
+}
+
+#[test]
+fn plot_patterns_from_the_command_line() {
+    let f = Fixture::new();
+    let tui = start(
+        &f,
+        &["--plot", "t=T(\\d+)", "--plot", "h=H(\\d+)", "mock0"],
+        false,
+        Lang::En,
+    );
+    assert!(tui.panes[0].plot_shown);
+    assert_eq!(tui.panes[0].plot.patterns.len(), 2);
+    let line = vec!["serialbot-cli", "tui", "--plot", "(", "mock1"];
+    let Command::Tui(args) = Cli::try_parse_from(line).unwrap().command else {
+        panic!("not tui");
+    };
+    let e = prepare(&args, &f.manager, &env(false, Lang::En)).unwrap_err();
+    assert_eq!(e.exit, crate::exit::Exit::Usage);
+    let mut empty = Rig::new(&[], 120, 30);
+    empty.type_line("/plot");
+    assert!(empty.screen().contains("no session is open"));
 }

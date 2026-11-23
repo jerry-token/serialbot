@@ -2,5 +2,6 @@
 //! by side, built on the same console, keys and input box as `open`.
 
 pub mod app;
+pub mod plot;
 pub mod sgr;
 pub mod view;
