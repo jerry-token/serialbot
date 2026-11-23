@@ -3,6 +3,7 @@
 
 use std::io::IsTerminal as _;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use serialbot_cli::i18n::Lang;
 use serialbot_cli::{Context, run};
@@ -14,6 +15,15 @@ fn main() {
     let mut out = stdout.lock();
     let mut err = std::io::stderr().lock();
     let manager = Arc::new(SessionManager::with_serial_ports());
+    let interrupted = Arc::new(AtomicBool::new(false));
+    let flag = Arc::clone(&interrupted);
+    // Without a handler Ctrl+C would kill the process before the port is
+    // closed and the log file finished; a second Ctrl+C still kills it.
+    let _ = ctrlc::set_handler(move || {
+        if flag.swap(true, Ordering::Relaxed) {
+            std::process::exit(130);
+        }
+    });
     let mut ctx = Context {
         out: &mut out,
         err: &mut err,
@@ -22,6 +32,8 @@ fn main() {
         lang: Lang::from_env(),
         manager: Arc::clone(&manager),
         list_ports: Arc::new(serialbot_core::transport::serial::list_ports),
+        interrupted,
+        utc_offset_min: jiff::Zoned::now().offset().seconds() / 60,
     };
     let code = run(std::env::args_os(), &mut ctx);
     manager.close_all();

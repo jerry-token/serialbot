@@ -177,3 +177,42 @@ fn help_follows_the_system_language() {
     let piped = cli(&["--color", "auto", "ports"]);
     assert!(!piped.stdout.contains(&0x1b), "no colors into a pipe");
 }
+
+#[test]
+fn monitor_streams_until_a_match_or_ctrl_c() {
+    let Some(pair) = virtual_pair("cli-monitor") else {
+        return;
+    };
+    let a = pair.a.to_str().unwrap().to_owned();
+    let mut device = serial::open(&SerialConfig::new(pair.b.to_str().unwrap(), 115_200)).unwrap();
+    let child = Command::new(env!("CARGO_BIN_EXE_serialbot-cli"))
+        .args(["monitor", &a, "--until", "ready", "--duration", "10s"])
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    std::thread::sleep(Duration::from_millis(500));
+    device.control.write_all(b"boot\nready\n").unwrap();
+    let out = child.wait_with_output().unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    assert_eq!(out.stdout, b"boot\nready\n");
+
+    // Ctrl+C ends it with success and closes the port.
+    let child = Command::new(env!("CARGO_BIN_EXE_serialbot-cli"))
+        .args(["monitor", &a])
+        .stdout(Stdio::null())
+        .spawn()
+        .unwrap();
+    std::thread::sleep(Duration::from_millis(500));
+    let pid = child.id().to_string();
+    assert!(
+        Command::new("kill")
+            .args(["-INT", &pid])
+            .status()
+            .unwrap()
+            .success()
+    );
+    let status = child.wait_with_output().unwrap().status;
+    assert_eq!(status.code(), Some(0));
+    let reopened = cli(&["send", &a, "x"]);
+    assert_eq!(reopened.status.code(), Some(0), "the port was released");
+}
