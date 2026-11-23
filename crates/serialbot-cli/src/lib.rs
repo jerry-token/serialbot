@@ -11,6 +11,7 @@ pub mod commands;
 pub mod exit;
 pub mod i18n;
 pub mod output;
+pub mod term;
 pub mod values;
 
 use std::ffi::OsString;
