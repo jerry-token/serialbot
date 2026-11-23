@@ -3464,9 +3464,9 @@ dependencies = [
 name = "serialbot-cli"
 version = "0.2.0"
 dependencies = [
- "chrono",
  "clap",
  "ctrlc",
+ "jiff",
  "regex",
  "serde",
  "serde_json",

@@ -33,7 +33,7 @@ fn main() {
         manager: Arc::clone(&manager),
         list_ports: Arc::new(serialbot_core::transport::serial::list_ports),
         interrupted,
-        utc_offset_min: chrono::Local::now().offset().local_minus_utc() / 60,
+        utc_offset_min: jiff::Zoned::now().offset().seconds() / 60,
     };
     let code = run(std::env::args_os(), &mut ctx);
     manager.close_all();

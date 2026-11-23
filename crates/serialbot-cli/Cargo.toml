@@ -21,7 +21,7 @@ regex.workspace = true
 clap = { version = "4.5", features = ["derive", "env"] }
 sys-locale = "0.3"
 ctrlc = "3.4"
-chrono = { version = "0.4", default-features = false, features = ["clock"] }
+jiff = "0.2"
 
 [lints]
 workspace = true
