@@ -38,7 +38,11 @@ pub(crate) fn subject_problem(subject: &str) -> Option<String> {
             TYPES.join(", ")
         ));
     }
-    let length = subject.chars().count();
+    // A squash merge adds ` (#123)` to the PR title, which was checked.
+    let own = Regex::new(r" \(#\d+\)$").ok().map_or(subject, |pr| {
+        pr.find(subject).map_or(subject, |m| &subject[..m.start()])
+    });
+    let length = own.chars().count();
     if length > MAX_SUBJECT {
         return Some(format!(
             "{subject:?} is {length} characters; keep subjects at most {MAX_SUBJECT}"
@@ -299,6 +303,11 @@ mod tests {
                 .unwrap()
                 .contains("at most 72")
         );
+        // The ` (#N)` a squash merge adds to a checked PR title is not counted.
+        let title = format!("feat: {}", "x".repeat(66));
+        assert_eq!(subject_problem(&format!("{title} (#100)")), None);
+        assert!(subject_problem(&format!("{title}x (#100)")).is_some());
+        assert!(subject_problem(&format!("feat: {} (#1", "x".repeat(66))).is_some());
         assert_eq!(subject_type("feat(cli)!: x"), Some("feat"));
         assert_eq!(subject_type("docs: x"), Some("docs"));
         assert_eq!(subject_type("nothing"), None);
