@@ -6,6 +6,9 @@ use serialbot_core::transport::mock::MockDevice;
 use serialbot_core::transport::serial::SerialConfig;
 
 use super::*;
+use crate::args::Ending;
+use crate::i18n::Lang;
+use crate::term::console::{default_capture_name, human_bytes, short_port};
 use crate::testing::Fixture;
 
 /// An interactive session on `mock0`, a 60×12 terminal emulator, and the
@@ -234,7 +237,7 @@ fn sending_a_file() {
     let path = dir.join("fw.bin");
     std::fs::write(&path, vec![7u8; 3000]).unwrap();
     let mut r = Rig::new();
-    r.app.feed.display.echo = false;
+    r.app.console.feed.display.echo = false;
     r.type_line(&format!("/send-file {}", path.display()));
     r.until(|r| r.shows("sent fw.bin (3000 B)"));
     assert_eq!(r.device.take_written().len(), 3000);
