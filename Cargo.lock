@@ -3320,6 +3320,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serialbot-core",
+ "serialbot-jobs",
  "serialbot-mcp",
  "tauri",
  "tauri-build",
@@ -3338,6 +3339,14 @@ dependencies = [
  "regex",
  "serialport",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "serialbot-jobs"
+version = "0.2.0"
+dependencies = [
+ "serde",
+ "serialbot-core",
 ]
 
 [[package]]
