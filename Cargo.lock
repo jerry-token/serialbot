@@ -3800,7 +3800,7 @@ dependencies = [
 
 [[package]]
 name = "serialbot-app"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "dirs",
  "open",
@@ -3819,7 +3819,7 @@ dependencies = [
 
 [[package]]
 name = "serialbot-cli"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bytes",
  "clap",
@@ -3846,7 +3846,7 @@ dependencies = [
 
 [[package]]
 name = "serialbot-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bytes",
  "encoding_rs",
@@ -3858,7 +3858,7 @@ dependencies = [
 
 [[package]]
 name = "serialbot-jobs"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serialbot-core",
@@ -3866,7 +3866,7 @@ dependencies = [
 
 [[package]]
 name = "serialbot-mcp"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "axum",
  "getrandom 0.4.3",
@@ -5798,7 +5798,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "regex",
 ]
