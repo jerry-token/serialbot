@@ -1,4 +1,4 @@
-//! The interactive terminal (`serialbot-cli open`) in a real pseudo
+//! The interactive terminals (`serialbot-cli open` and `tui`) in a real pseudo
 //! terminal, against socat virtual ports (Linux only; skipped without
 //! socat unless `SERIALBOT_REQUIRE_SOCAT` is set). The screen is rebuilt
 //! with a terminal emulator, so the tests check what a person would see.
@@ -100,17 +100,24 @@ struct Term {
 
 impl Term {
     fn open(args: &[&str]) -> Self {
+        Self::spawn("open", args, 80, 24)
+    }
+
+    fn spawn(subcommand: &str, args: &[&str], cols: u16, rows: u16) -> Self {
         let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_serialbot-cli"));
         command
-            .arg("open")
+            .arg(subcommand)
             .args(args)
             .env("LANG", "en_US.UTF-8")
             .env("TERM", "xterm-256color");
         let mut session = expectrl::session::OsSession::spawn(command).unwrap();
-        session.get_process_mut().set_window_size(80, 24).unwrap();
+        session
+            .get_process_mut()
+            .set_window_size(cols, rows)
+            .unwrap();
         Self {
             session,
-            screen: vt100::Parser::new(24, 80, 0),
+            screen: vt100::Parser::new(rows, cols, 0),
         }
     }
 
@@ -250,4 +257,45 @@ fn a_lost_device_ends_the_session_with_4_when_asked() {
     t.wait_for("Ctrl+A Z help");
     drop(pair);
     assert_eq!(t.exit_code(), 4);
+}
+
+#[test]
+fn tui_in_a_real_terminal() {
+    let Some(pair) = virtual_pair("tui-term") else {
+        return;
+    };
+    let mut dev = device(&pair.b);
+    let mut t = Term::spawn("tui", &[pair.a.to_str().unwrap()], 120, 30);
+    t.wait_for("Sessions");
+    assert!(t.screen.screen().alternate_screen(), "full screen");
+    t.send(b"AT\r");
+    receive(&mut dev, b"AT\r\n");
+    dev.control.write_all(b"OK from the device\r\n").unwrap();
+    t.wait_for("OK from the device");
+    // A second session from the input box, then quitting.
+    t.send(b"/open /nonexistent/port\r");
+    t.wait_for("cannot open /nonexistent/port");
+    t.send(b"\x01x");
+    assert_eq!(t.exit_code(), 0);
+    assert!(
+        !t.screen.screen().alternate_screen(),
+        "the screen is put back"
+    );
+    drop(device(&pair.a));
+}
+
+#[test]
+fn tui_ends_cleanly_on_sigterm() {
+    let Some(pair) = virtual_pair("tui-term") else {
+        return;
+    };
+    let mut t = Term::spawn("tui", &[pair.a.to_str().unwrap()], 120, 30);
+    t.wait_for("Sessions");
+    t.session
+        .get_process_mut()
+        .signal(expectrl::process::unix::Signal::SIGTERM)
+        .unwrap();
+    assert_eq!(t.exit_code(), 0);
+    assert!(!t.screen.screen().alternate_screen());
+    drop(device(&pair.a));
 }

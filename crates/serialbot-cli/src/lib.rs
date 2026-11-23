@@ -14,6 +14,7 @@ pub mod i18n;
 pub mod output;
 pub mod script;
 pub mod term;
+pub mod tui;
 pub mod values;
 
 use std::ffi::OsString;
@@ -142,6 +143,16 @@ where
                 lang: ctx.lang,
             };
             commands::open::run(a, &ctx.manager, io, &mut out)
+        }
+        Command::Tui(a) => {
+            let env = commands::tui::Env {
+                terminal: ctx.interactive,
+                interrupted: Arc::clone(&ctx.interrupted),
+                utc_offset_min: ctx.utc_offset_min,
+                color,
+                lang: ctx.lang,
+            };
+            commands::tui::run(a, &ctx.manager, &env, &mut out)
         }
         Command::Monitor(a) => commands::monitor::run(
             a,

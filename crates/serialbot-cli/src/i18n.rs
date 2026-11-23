@@ -90,6 +90,8 @@ pub struct Strings {
     pub term: &'static Term,
     /// MCP server texts.
     pub mcp: &'static McpTexts,
+    /// Full-screen terminal texts.
+    pub tui: &'static TuiTexts,
     /// The usage line prefix.
     pub usage: &'static str,
     /// Heading of the subcommand list.
@@ -99,6 +101,27 @@ pub struct Strings {
     /// Help texts by key: `about`, global options by name, subcommands by
     /// name, their options as `subcommand.option`.
     pub help: &'static [(&'static str, &'static str)],
+}
+
+/// Texts of the full-screen terminal (`tui`).
+#[derive(Debug)]
+pub struct TuiTexts {
+    /// Its own keys, before the `open` key help.
+    pub help: &'static [&'static str],
+    /// On the start screen, before any session is open.
+    pub start: &'static str,
+    /// Something needs a session and none is open.
+    pub no_session: &'static str,
+    /// Title of the session list.
+    pub sessions: &'static str,
+    /// A port was closed; followed by its name.
+    pub closed: &'static str,
+    /// `Ctrl+A J` is not offered here.
+    pub no_shell: &'static str,
+    /// Raw mode is not offered here.
+    pub no_raw: &'static str,
+    /// `tui` without a terminal.
+    pub needs_terminal: &'static str,
 }
 
 /// Texts of `mcp serve` and `mcp stdio`.
@@ -181,6 +204,8 @@ pub struct Term {
     pub script_stopped: &'static str,
     /// A script is already running.
     pub script_busy: &'static str,
+    /// A key or command only the full-screen `tui` has.
+    pub tui_only: &'static str,
 }
 
 impl Strings {
@@ -226,6 +251,7 @@ static EN_TERM: Term = Term {
     script_timeout: "script stopped: no reply matched within the timeout",
     script_stopped: "script stopped",
     script_busy: "a script is already running; /stop ends it",
+    tui_only: "works in serialbot-cli tui (the full-screen terminal)",
 };
 
 static ZH_TERM: Term = Term {
@@ -264,6 +290,35 @@ static ZH_TERM: Term = Term {
     script_timeout: "脚本已停止：超时内没有收到匹配的回复",
     script_stopped: "脚本已停止",
     script_busy: "已有脚本在运行；/stop 可停止它",
+    tui_only: "在 serialbot-cli tui（全屏界面）里可用",
+};
+
+static EN_TUI: TuiTexts = TuiTexts {
+    help: &[
+        "tui: Ctrl+A ←/→ focus · Ctrl+A | side by side · Ctrl+A - stacked · PgUp/PgDn or the wheel scroll back",
+        "/open <port> [baud] adds a session · /close closes the focused port (its log stays) · click to focus",
+    ],
+    start: "No session yet: type /open <port> [baud] (serialbot-cli ports lists them) · Ctrl+A X quits",
+    no_session: "no session is open: /open <port> [baud]",
+    sessions: "Sessions",
+    closed: "closed",
+    no_shell: "Ctrl+A J works in serialbot-cli open; quit tui first",
+    no_raw: "raw mode works in serialbot-cli open (a full-screen program needs the whole terminal)",
+    needs_terminal: "tui needs a terminal; for pipes use open, monitor or send",
+};
+
+static ZH_TUI: TuiTexts = TuiTexts {
+    help: &[
+        "tui：Ctrl+A ←/→ 切换焦点 · Ctrl+A | 左右分屏 · Ctrl+A - 上下分屏 · PgUp/PgDn 或滚轮回看",
+        "/open <端口> [波特率] 新开会话 · /close 关闭焦点会话的端口（日志保留）· 鼠标点击切换焦点",
+    ],
+    start: "还没有会话：输入 /open <端口> [波特率]（serialbot-cli ports 可列出端口）· Ctrl+A X 退出",
+    no_session: "没有打开的会话：/open <端口> [波特率]",
+    sessions: "会话",
+    closed: "已关闭",
+    no_shell: "Ctrl+A J 在 serialbot-cli open 里可用；请先退出 tui",
+    no_raw: "原始模式在 serialbot-cli open 里可用（全屏程序需要整个终端）",
+    needs_terminal: "tui 需要在终端里运行；管道请用 open、monitor 或 send",
 };
 
 static EN_MCP: McpTexts = McpTexts {
@@ -305,6 +360,7 @@ static EN: Strings = Strings {
     empty_data: "nothing to send",
     term: &EN_TERM,
     mcp: &EN_MCP,
+    tui: &EN_TUI,
     usage: "Usage",
     commands: "Commands",
     options: "Options",
@@ -448,6 +504,37 @@ static EN: Strings = Strings {
         ("open.hex", "Show received data as hex"),
         ("open.time", "Start each line with the local time"),
         (
+            "tui",
+            "Full-screen terminal: several sessions side by side, a session list and scrollback; Ctrl+A Z lists the keys",
+        ),
+        ("tui.ports", "Ports to open at the start; /open adds more"),
+        (
+            "tui.baud",
+            "Baud rate of every port (/open <port> <baud> for another)",
+        ),
+        ("tui.data", "Data bits (5-8)"),
+        ("tui.parity", "Parity"),
+        ("tui.stop", "Stop bits (1 or 2)"),
+        ("tui.flow", "Flow control"),
+        (
+            "tui.dtr",
+            "DTR level right after opening (0 keeps boards like the ESP32 out of reset)",
+        ),
+        ("tui.rts", "RTS level right after opening"),
+        (
+            "tui.escape",
+            "Prefix key: Ctrl plus this letter (default a)",
+        ),
+        ("tui.ending", "Line ending after each sent line"),
+        ("tui.encoding", "Text encoding (utf-8, gbk, ...)"),
+        (
+            "tui.no_reconnect",
+            "Do not wait for a device that went away; its session stays closed",
+        ),
+        ("tui.reset_sequence", "What Ctrl+A 3 and /reset do"),
+        ("tui.hex", "Show received data as hex"),
+        ("tui.time", "Start each line with the local time"),
+        (
             "run",
             "Run a script (send, expect, wait, dtr, rts, break, mark, timeout, ending) or an app command export; stops at the first failure",
         ),
@@ -524,6 +611,7 @@ static ZH: Strings = Strings {
     empty_data: "没有要发送的数据",
     term: &ZH_TERM,
     mcp: &ZH_MCP,
+    tui: &ZH_TUI,
     usage: "用法",
     commands: "命令",
     options: "选项",
@@ -660,6 +748,31 @@ static ZH: Strings = Strings {
         ),
         ("open.hex", "以 HEX 显示收到的数据"),
         ("open.time", "每行开头加上本地时间"),
+        (
+            "tui",
+            "全屏界面：多个会话分屏显示，带会话列表和回看；Ctrl+A Z 查看按键",
+        ),
+        ("tui.ports", "启动时打开的端口；之后可用 /open 再开"),
+        (
+            "tui.baud",
+            "所有端口的波特率（其他波特率用 /open <端口> <波特率>）",
+        ),
+        ("tui.data", "数据位（5-8）"),
+        ("tui.parity", "校验位"),
+        ("tui.stop", "停止位（1 或 2）"),
+        ("tui.flow", "流控"),
+        (
+            "tui.dtr",
+            "打开后立即设置的 DTR 电平（设为 0 可避免 ESP32 等板子复位）",
+        ),
+        ("tui.rts", "打开后立即设置的 RTS 电平"),
+        ("tui.escape", "前缀键：Ctrl 加这个字母（默认 a）"),
+        ("tui.ending", "每行发送后追加的行尾"),
+        ("tui.encoding", "文本编码（utf-8、gbk……）"),
+        ("tui.no_reconnect", "设备断开后不再等待，会话保持关闭"),
+        ("tui.reset_sequence", "Ctrl+A 3 和 /reset 执行的时序"),
+        ("tui.hex", "以 HEX 显示收到的数据"),
+        ("tui.time", "每行开头加上本地时间"),
         (
             "run",
             "运行脚本（send、expect、wait、dtr、rts、break、mark、timeout、ending）或 App 导出的命令分组；遇到失败即停止",

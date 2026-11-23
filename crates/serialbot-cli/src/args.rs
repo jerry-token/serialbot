@@ -59,6 +59,8 @@ pub enum Command {
     Signal(SignalArgs),
     /// The interactive terminal.
     Open(OpenArgs),
+    /// The full-screen terminal: several sessions side by side.
+    Tui(TuiArgs),
     /// Run a script.
     Run(RunArgs),
     /// MCP server for AI agents.
@@ -321,6 +323,71 @@ pub struct OpenArgs {
     /// Start each line with the time.
     #[arg(long)]
     pub time: bool,
+}
+
+/// Options of `tui`: every port opens with the same settings.
+#[derive(Debug, Args)]
+pub struct TuiArgs {
+    /// Ports to open at the start (more with `/open`).
+    pub ports: Vec<String>,
+    /// Baud rate.
+    #[arg(short, long, default_value_t = 115_200, value_parser = clap::value_parser!(u32).range(1..))]
+    pub baud: u32,
+    /// Data bits.
+    #[arg(long, default_value_t = 8, value_parser = clap::value_parser!(u8).range(5..=8))]
+    pub data: u8,
+    /// Parity.
+    #[arg(long, value_enum, default_value_t = ParityArg::None)]
+    pub parity: ParityArg,
+    /// Stop bits.
+    #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u8).range(1..=2))]
+    pub stop: u8,
+    /// Flow control.
+    #[arg(long, value_enum, default_value_t = FlowArg::None)]
+    pub flow: FlowArg,
+    /// DTR level right after opening.
+    #[arg(long, value_parser = parse_level, value_name = "0|1")]
+    pub dtr: Option<bool>,
+    /// RTS level right after opening.
+    #[arg(long, value_parser = parse_level, value_name = "0|1")]
+    pub rts: Option<bool>,
+    /// Prefix key: Ctrl plus this letter.
+    #[arg(long, default_value_t = 'a', value_parser = parse_escape)]
+    pub escape: char,
+    /// Line ending after each sent line.
+    #[arg(long, value_enum, default_value_t = Ending::Crlf)]
+    pub ending: Ending,
+    /// Text encoding.
+    #[arg(long, default_value = "utf-8")]
+    pub encoding: String,
+    /// Do not wait for a device that went away.
+    #[arg(long)]
+    pub no_reconnect: bool,
+    /// What Ctrl+A 3 and /reset do.
+    #[arg(long, default_value = "dtr=0 rts=1 100ms rts=0", value_name = "STEPS")]
+    pub reset_sequence: String,
+    /// Show received data as hex.
+    #[arg(long)]
+    pub hex: bool,
+    /// Start each line with the time.
+    #[arg(long)]
+    pub time: bool,
+}
+
+impl TuiArgs {
+    /// The settings `port` opens with.
+    pub fn port(&self, port: &str) -> PortArgs {
+        PortArgs {
+            port: port.to_owned(),
+            baud: self.baud,
+            data: self.data,
+            parity: self.parity,
+            stop: self.stop,
+            flow: self.flow,
+            dtr: self.dtr,
+            rts: self.rts,
+        }
+    }
 }
 
 fn parse_escape(text: &str) -> Result<char, String> {

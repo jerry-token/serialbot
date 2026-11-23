@@ -152,8 +152,10 @@ fn help_quit_and_unknown_keys() {
     let mut r = Rig::new();
     r.prefix('z');
     assert!(r.shows("Ctrl+A then: Z help"), "{}", r.screen());
+    r.prefix('`');
+    assert!(r.shows("Ctrl+A ` has no command"), "{}", r.screen());
     r.prefix('v');
-    assert!(r.shows("Ctrl+A V has no command"), "{}", r.screen());
+    assert!(r.shows("works in serialbot-cli tui"), "{}", r.screen());
     r.prefix('d');
     assert!(r.shows("Ctrl+A D is a modem key"), "{}", r.screen());
     r.keys(&[ctrl('a')]);

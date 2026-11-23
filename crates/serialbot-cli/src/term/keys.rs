@@ -76,11 +76,28 @@ pub enum Local {
     Reset,
     /// `/`: open the command palette.
     Palette,
+    /// `Ctrl+A` + an arrow: focus the pane that way (`tui`).
+    Focus(Towards),
+    /// `|`: panes side by side (`tui`).
+    SplitSide,
+    /// `-`: panes one above the other (`tui`).
+    SplitStack,
+    /// `V`: the plot on/off (`tui`).
+    TogglePlot,
     /// A minicom key for modems that SerialBot does not offer
     /// (`D` dial, `M` init string, `K` kermit, `R` receive, `I` cursor keys).
     Unsupported(char),
     /// A key with no meaning after the prefix.
     Unknown(char),
+}
+
+/// A direction of focus.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Towards {
+    /// ← or ↑: the previous pane.
+    Previous,
+    /// → or ↓: the next pane.
+    Next,
 }
 
 /// A command typed in the input box after `/`.
@@ -118,6 +135,15 @@ pub enum Slash {
     Help,
     /// `/quit`.
     Quit,
+    /// `/open <port> [baud]`: another session (`tui`).
+    Open {
+        /// Port name or network address.
+        port: String,
+        /// Baud rate; the one `tui` started with if left out.
+        baud: Option<u32>,
+    },
+    /// `/close`: close the focused session's port; its log stays (`tui`).
+    Close,
     /// Anything else, or missing/invalid arguments: the text after `/`.
     Invalid(String),
 }
@@ -127,11 +153,13 @@ pub const SLASH_COMMANDS: &[(&str, &str)] = &[
     ("baud", "<rate>"),
     ("break", ""),
     ("clear", ""),
+    ("close", ""),
     ("dtr", ""),
     ("echo", ""),
     ("help", ""),
     ("hex", ""),
     ("log", "[file]"),
+    ("open", "<port> [baud]"),
     ("quit", ""),
     ("raw", ""),
     ("reset", ""),
@@ -171,6 +199,22 @@ impl Slash {
             ("clear", None) => Self::Clear,
             ("help", None) => Self::Help,
             ("quit" | "exit", None) => Self::Quit,
+            ("close", None) => Self::Close,
+            ("open", Some(_)) => match rest.as_slice() {
+                [port] => Self::Open {
+                    port: (*port).to_owned(),
+                    baud: None,
+                },
+                [port, baud] => baud
+                    .parse()
+                    .ok()
+                    .filter(|b| *b > 0)
+                    .map_or_else(invalid, |b| Self::Open {
+                        port: (*port).to_owned(),
+                        baud: Some(b),
+                    }),
+                _ => invalid(),
+            },
             _ => invalid(),
         }
     }
@@ -265,9 +309,16 @@ impl Keys {
     }
 
     fn after_prefix(&mut self, key: KeyEvent, ctrl: bool) -> Vec<Action> {
-        let KeyCode::Char(c) = key.code else {
+        let c = match key.code {
+            KeyCode::Char(c) => c,
+            KeyCode::Left | KeyCode::Up => {
+                return vec![Action::Local(Local::Focus(Towards::Previous))];
+            }
+            KeyCode::Right | KeyCode::Down => {
+                return vec![Action::Local(Local::Focus(Towards::Next))];
+            }
             // Esc or any other key cancels the prefix.
-            return Vec::new();
+            _ => return Vec::new(),
         };
         if ctrl && c.to_ascii_lowercase() == self.escape {
             return vec![Action::Send(vec![ctrl_byte(self.escape)])];
@@ -297,6 +348,9 @@ impl Keys {
             '2' => Local::ToggleRts,
             '3' => Local::Reset,
             '/' => Local::Palette,
+            '|' | '\\' => Local::SplitSide,
+            '-' => Local::SplitStack,
+            'v' => Local::TogglePlot,
             other @ ('d' | 'm' | 'k' | 'r' | 'i') => Local::Unsupported(other),
             other => Local::Unknown(other),
         };
@@ -531,7 +585,11 @@ mod tests {
             ('k', Local::Unsupported('k')),
             ('r', Local::Unsupported('r')),
             ('i', Local::Unsupported('i')),
-            ('v', Local::Unknown('v')),
+            ('v', Local::TogglePlot),
+            ('-', Local::SplitStack),
+            ('|', Local::SplitSide),
+            ('\\', Local::SplitSide),
+            ('`', Local::Unknown('`')),
         ];
         for mode in [Mode::Line, Mode::Raw] {
             for (letter, local) in table {
@@ -610,6 +668,26 @@ mod tests {
     }
 
     #[test]
+    fn arrows_after_the_prefix_move_the_focus() {
+        let mut keys = line();
+        for (code, towards) in [
+            (KeyCode::Left, Towards::Previous),
+            (KeyCode::Up, Towards::Previous),
+            (KeyCode::Right, Towards::Next),
+            (KeyCode::Down, Towards::Next),
+        ] {
+            keys.key(ctrl('a'));
+            assert_eq!(
+                keys.key(press(code)),
+                [Action::Local(Local::Focus(towards))]
+            );
+        }
+        keys.key(ctrl('a'));
+        assert!(keys.key(press(KeyCode::Esc)).is_empty());
+        assert!(!keys.prefix_pending());
+    }
+
+    #[test]
     fn slash_commands_parse_their_arguments() {
         let cases = [
             ("baud 115200", Slash::Baud(115_200)),
@@ -630,6 +708,23 @@ mod tests {
             ("HELP", Slash::Help),
             ("quit", Slash::Quit),
             ("exit", Slash::Quit),
+            ("close", Slash::Close),
+            (
+                "open /dev/ttyUSB1",
+                Slash::Open {
+                    port: "/dev/ttyUSB1".into(),
+                    baud: None,
+                },
+            ),
+            (
+                "open COM3 9600",
+                Slash::Open {
+                    port: "COM3".into(),
+                    baud: Some(9600),
+                },
+            ),
+            ("open COM3 fast", Slash::Invalid("open COM3 fast".into())),
+            ("open a b c", Slash::Invalid("open a b c".into())),
             ("baud", Slash::Invalid("baud".into())),
             ("baud fast", Slash::Invalid("baud fast".into())),
             ("baud 0", Slash::Invalid("baud 0".into())),

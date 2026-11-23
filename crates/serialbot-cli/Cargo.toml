@@ -25,6 +25,7 @@ clap = { version = "4.5", features = ["derive", "env"] }
 sys-locale = "0.3"
 ctrlc = { version = "3.4", features = ["termination"] }
 crossterm = "0.29"
+ratatui = { version = "0.30", default-features = false, features = ["crossterm_0_29", "layout-cache"] }
 unicode-width = "0.2"
 encoding_rs.workspace = true
 jiff = "0.2"

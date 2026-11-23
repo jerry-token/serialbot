@@ -296,6 +296,9 @@ impl Console {
             }
             Local::Reset => self.reset(notes),
             Local::Palette => return Some(Effect::Palette),
+            Local::Focus(_) | Local::SplitSide | Local::SplitStack | Local::TogglePlot => {
+                notes.push(t.tui_only.to_owned());
+            }
             Local::Unsupported(c) => notes.push(format!(
                 "Ctrl+A {} {}",
                 c.to_ascii_uppercase(),
@@ -336,6 +339,7 @@ impl Console {
             Slash::Clear => return Some(Effect::Clear),
             Slash::Help => return self.local(Local::Help, notes),
             Slash::Quit => return Some(Effect::Quit),
+            Slash::Open { .. } | Slash::Close => notes.push(t.tui_only.to_owned()),
             Slash::Invalid(text) => notes.push(format!("/{text}: {}", t.unknown_command)),
         }
         None
@@ -512,7 +516,13 @@ impl Console {
     }
 
     fn follow_connection(&mut self, lines: &mut Vec<String>) -> Flow {
-        let open = self.session.state() == SessionState::Open;
+        let state = self.session.state();
+        if state == SessionState::Closed {
+            // Closed on purpose (`/close` in tui): nothing to wait for.
+            self.lost = false;
+            return Flow::Continue;
+        }
+        let open = state == SessionState::Open;
         let t = self.term();
         if open {
             if self.lost {
