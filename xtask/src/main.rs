@@ -340,6 +340,12 @@ fn run_tool(id: &str, root: &Path) -> Outcome {
             if !tool_present(root, &["llvm-cov", "--version"]) {
                 return Outcome::Skip("cargo-llvm-cov is not installed; CI runs it".into());
             }
+            if !llvm_tools_installed(root) {
+                return Outcome::Skip(
+                    "llvm-tools are missing (rustup component add llvm-tools-preview); CI runs it"
+                        .into(),
+                );
+            }
             cargo(
                 root,
                 &[
@@ -362,6 +368,16 @@ fn run_tool(id: &str, root: &Path) -> Outcome {
         }
         _ => Outcome::Fail(vec![format!("no such check {id}")]),
     }
+}
+
+/// Whether the active toolchain has `llvm-tools` (coverage needs them; a
+/// machine without network access cannot add them on the fly).
+fn llvm_tools_installed(root: &Path) -> bool {
+    Command::new("rustup")
+        .args(["component", "list", "--installed"])
+        .current_dir(root)
+        .output()
+        .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).contains("llvm-tools"))
 }
 
 fn tool_present(root: &Path, args: &[&str]) -> bool {
