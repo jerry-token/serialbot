@@ -93,6 +93,17 @@
   <p>{{mcp_then}}</p>
 </section>
 
+<section id="cli" class="mcp cli">
+  <h2>{{cli_title}}</h2>
+  <p>{{cli_intro}}</p>
+  <pre><code>serialbot-cli ports
+serialbot-cli send /dev/ttyUSB0 AT --expect OK
+serialbot-cli open /dev/ttyUSB0 -b 921600       # Ctrl+A Z: keys, as in minicom
+serialbot-cli tui /dev/ttyUSB0 /dev/ttyUSB1 --plot 'temp=([0-9.]+)' --mcp
+serialbot-cli run /dev/ttyUSB0 boot.txt          # send, expect, wait, dtr, rts …</code></pre>
+  <p>{{cli_then}}</p>
+</section>
+
 <section id="download" class="download">
   <h2>{{download_title}}</h2>
   <p class="release" data-release-label="{{download_release}}">{{download_loading}}</p>
@@ -106,6 +117,13 @@
       <tr data-asset="_amd64.AppImage"><td>{{dl_appimage}}</td><td><a href="https://github.com/jerry-token/serialbot/releases">SerialBot_amd64.AppImage</a></td><td class="size"></td></tr>
       <tr data-asset="_arm64.deb"><td>{{dl_deb_arm}}</td><td><a href="https://github.com/jerry-token/serialbot/releases">SerialBot_arm64.deb</a></td><td class="size"></td></tr>
       <tr data-asset="_aarch64.AppImage"><td>{{dl_appimage_arm}}</td><td><a href="https://github.com/jerry-token/serialbot/releases">SerialBot_aarch64.AppImage</a></td><td class="size"></td></tr>
+      <tr><th colspan="3">{{dl_cli}}</th></tr>
+      <tr data-asset="-windows-x64.zip"><td>{{dl_cli_win}}</td><td><a href="https://github.com/jerry-token/serialbot/releases">serialbot-cli-windows-x64.zip</a></td><td class="size"></td></tr>
+      <tr data-asset="-macos-universal.tar.gz"><td>{{dl_cli_mac}}</td><td><a href="https://github.com/jerry-token/serialbot/releases">serialbot-cli-macos-universal.tar.gz</a></td><td class="size"></td></tr>
+      <tr data-asset="-linux-amd64.deb"><td>{{dl_cli_deb}}</td><td><a href="https://github.com/jerry-token/serialbot/releases">serialbot-cli-linux-amd64.deb</a></td><td class="size"></td></tr>
+      <tr data-asset="-linux-x64.tar.gz"><td>{{dl_cli_linux}}</td><td><a href="https://github.com/jerry-token/serialbot/releases">serialbot-cli-linux-x64.tar.gz</a></td><td class="size"></td></tr>
+      <tr data-asset="-linux-arm64.deb"><td>{{dl_cli_deb_arm}}</td><td><a href="https://github.com/jerry-token/serialbot/releases">serialbot-cli-linux-arm64.deb</a></td><td class="size"></td></tr>
+      <tr data-asset="-linux-arm64.tar.gz"><td>{{dl_cli_linux_arm}}</td><td><a href="https://github.com/jerry-token/serialbot/releases">serialbot-cli-linux-arm64.tar.gz</a></td><td class="size"></td></tr>
     </tbody>
   </table>
   <p class="small">{{download_note}}</p>
