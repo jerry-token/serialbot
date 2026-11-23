@@ -165,6 +165,42 @@ static EN: Strings = Strings {
         ),
         ("send.timeout", "How long to wait (500ms, 5s, 1m)"),
         ("send.print", "Print what is received while waiting"),
+        (
+            "monitor",
+            "Only receive, streaming to standard output until Ctrl+C, --until or --duration",
+        ),
+        (
+            "monitor.port",
+            "Serial port (/dev/ttyUSB0, COM3) or network address (tcp://host:port, tcp-server://:9000, udp://host:port)",
+        ),
+        ("monitor.baud", "Baud rate"),
+        ("monitor.data", "Data bits (5-8)"),
+        ("monitor.parity", "Parity"),
+        ("monitor.stop", "Stop bits (1 or 2)"),
+        ("monitor.flow", "Flow control"),
+        (
+            "monitor.dtr",
+            "DTR level right after opening (0 keeps boards like the ESP32 out of reset)",
+        ),
+        ("monitor.rts", "RTS level right after opening"),
+        (
+            "monitor.until",
+            "Stop with exit code 0 when received data matches this regular expression",
+        ),
+        (
+            "monitor.duration",
+            "Stop after this long (exit code 1 if --until has not matched)",
+        ),
+        (
+            "monitor.json",
+            "One JSON object per line (seq, timestamp_us, kind, data, ai)",
+        ),
+        ("monitor.hex", "Show bytes as hex"),
+        ("monitor.time", "Start each line with the local time"),
+        (
+            "monitor.log",
+            "Also save everything to this file, with timestamps",
+        ),
     ],
 };
 
@@ -223,6 +259,39 @@ static ZH: Strings = Strings {
         ("send.expect", "等待匹配这个正则表达式的回复"),
         ("send.timeout", "等待多久（500ms、5s、1m）"),
         ("send.print", "等待期间输出收到的内容"),
+        (
+            "monitor",
+            "只收不发，实时输出到标准输出，直到 Ctrl+C、--until 或 --duration",
+        ),
+        (
+            "monitor.port",
+            "串口（/dev/ttyUSB0、COM3）或网络地址（tcp://主机:端口、tcp-server://:9000、udp://主机:端口）",
+        ),
+        ("monitor.baud", "波特率"),
+        ("monitor.data", "数据位（5-8）"),
+        ("monitor.parity", "校验位"),
+        ("monitor.stop", "停止位（1 或 2）"),
+        ("monitor.flow", "流控"),
+        (
+            "monitor.dtr",
+            "打开后立即设置的 DTR 电平（设为 0 可避免 ESP32 等板子复位）",
+        ),
+        ("monitor.rts", "打开后立即设置的 RTS 电平"),
+        (
+            "monitor.until",
+            "收到的数据匹配这个正则表达式时停止，退出码 0",
+        ),
+        (
+            "monitor.duration",
+            "运行这么久后停止（--until 未匹配时退出码 1）",
+        ),
+        (
+            "monitor.json",
+            "每行输出一个 JSON 对象（seq、timestamp_us、kind、data、ai）",
+        ),
+        ("monitor.hex", "以 HEX 显示字节"),
+        ("monitor.time", "每行开头加上本地时间"),
+        ("monitor.log", "同时把全部内容带时间戳保存到这个文件"),
     ],
 };
 

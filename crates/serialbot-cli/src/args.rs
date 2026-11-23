@@ -53,6 +53,8 @@ pub enum Command {
     Ports(PortsArgs),
     /// Send data once, optionally waiting for a reply.
     Send(SendArgs),
+    /// Only receive, streaming to standard output.
+    Monitor(MonitorArgs),
 }
 
 /// Options of `ports`.
@@ -195,6 +197,32 @@ pub struct SendArgs {
     /// Print what is received.
     #[arg(long)]
     pub print: bool,
+}
+
+/// Options of `monitor`.
+#[derive(Debug, Args)]
+pub struct MonitorArgs {
+    /// Port and its settings.
+    #[command(flatten)]
+    pub port: PortArgs,
+    /// Stop when received data matches this regular expression.
+    #[arg(long, value_parser = parse_regex, value_name = "REGEX")]
+    pub until: Option<Regex>,
+    /// Stop after this long.
+    #[arg(long, value_parser = parse_duration)]
+    pub duration: Option<Duration>,
+    /// One JSON object per line.
+    #[arg(long)]
+    pub json: bool,
+    /// Show bytes as hex.
+    #[arg(long)]
+    pub hex: bool,
+    /// Start each line with the time.
+    #[arg(long)]
+    pub time: bool,
+    /// Also save everything to this file.
+    #[arg(long, value_name = "FILE")]
+    pub log: Option<PathBuf>,
 }
 
 fn parse_regex(text: &str) -> Result<Regex, String> {

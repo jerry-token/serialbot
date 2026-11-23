@@ -16,6 +16,7 @@ pub mod values;
 use std::ffi::OsString;
 use std::io::Write;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 use clap::FromArgMatches as _;
 use serialbot_core::SessionManager;
@@ -46,6 +47,10 @@ pub struct Context<'a> {
     pub manager: Arc<SessionManager>,
     /// Lists the ports.
     pub list_ports: Arc<PortLister>,
+    /// Set when the user presses Ctrl+C.
+    pub interrupted: Arc<AtomicBool>,
+    /// The local time zone, minutes east of UTC, for timestamps.
+    pub utc_offset_min: i32,
 }
 
 impl std::fmt::Debug for Context<'_> {
@@ -96,6 +101,13 @@ where
     let result = match &cli.command {
         Command::Ports(a) => commands::ports::run(a, &*ctx.list_ports, &mut out),
         Command::Send(a) => commands::send::run(a, &ctx.manager, &mut out),
+        Command::Monitor(a) => commands::monitor::run(
+            a,
+            &ctx.manager,
+            &ctx.interrupted,
+            ctx.utc_offset_min,
+            &mut out,
+        ),
     };
     match result {
         Ok(()) => Exit::Ok as u8,
@@ -131,6 +143,7 @@ pub(crate) mod testing {
     #![allow(clippy::unwrap_used, reason = "test helpers")]
 
     use std::collections::HashMap;
+    use std::sync::atomic::AtomicBool;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
@@ -160,6 +173,7 @@ pub(crate) mod testing {
         pub(crate) ports: Vec<PortInfo>,
         pub(crate) lang: Lang,
         pub(crate) terminal: bool,
+        pub(crate) interrupted: Arc<AtomicBool>,
     }
 
     impl Fixture {
@@ -201,6 +215,7 @@ pub(crate) mod testing {
                 ports,
                 lang: Lang::En,
                 terminal: false,
+                interrupted: Arc::default(),
             }
         }
 
@@ -217,6 +232,8 @@ pub(crate) mod testing {
                 lang: self.lang,
                 manager: Arc::clone(&self.manager),
                 list_ports: Arc::new(move || Ok(ports.clone())),
+                interrupted: Arc::clone(&self.interrupted),
+                utc_offset_min: 0,
             };
             let code = run(
                 std::iter::once("serialbot-cli").chain(args.iter().copied()),

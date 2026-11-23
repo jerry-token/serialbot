@@ -14,11 +14,14 @@ path = "src/main.rs"
 
 [dependencies]
 serialbot-core.workspace = true
+serialbot-jobs.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 regex.workspace = true
 clap = { version = "4.5", features = ["derive", "env"] }
 sys-locale = "0.3"
+ctrlc = "3.4"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 [lints]
 workspace = true
