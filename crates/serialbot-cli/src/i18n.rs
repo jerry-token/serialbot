@@ -540,6 +540,11 @@ static EN: Strings = Strings {
         ("open.hex", "Show received data as hex"),
         ("open.time", "Start each line with the local time"),
         (
+            "completions",
+            "Print a completion script: serialbot-cli completions bash > /etc/bash_completion.d/serialbot-cli (zsh, fish, powershell, elvish too)",
+        ),
+        ("completions.shell", "bash, zsh, fish, powershell or elvish"),
+        (
             "tui",
             "Full-screen terminal: several sessions side by side, a session list and scrollback; Ctrl+A Z lists the keys",
         ),
@@ -804,6 +809,11 @@ static ZH: Strings = Strings {
         ),
         ("open.hex", "以 HEX 显示收到的数据"),
         ("open.time", "每行开头加上本地时间"),
+        (
+            "completions",
+            "输出命令补全脚本：serialbot-cli completions bash > /etc/bash_completion.d/serialbot-cli（也支持 zsh、fish、powershell、elvish）",
+        ),
+        ("completions.shell", "bash、zsh、fish、powershell 或 elvish"),
         (
             "tui",
             "全屏界面：多个会话分屏显示，带会话列表和回看；Ctrl+A Z 查看按键",
