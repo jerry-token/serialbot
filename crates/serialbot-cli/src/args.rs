@@ -57,6 +57,8 @@ pub enum Command {
     Monitor(MonitorArgs),
     /// Set DTR/RTS, send a BREAK or run a reset sequence.
     Signal(SignalArgs),
+    /// The interactive terminal.
+    Open(OpenArgs),
 }
 
 /// Options of `ports`.
@@ -225,6 +227,81 @@ pub struct MonitorArgs {
     /// Also save everything to this file.
     #[arg(long, value_name = "FILE")]
     pub log: Option<PathBuf>,
+}
+
+/// Options of `open`.
+#[derive(Debug, Args)]
+#[allow(clippy::struct_excessive_bools, reason = "command-line flags")]
+pub struct OpenArgs {
+    /// Port and its settings.
+    #[command(flatten)]
+    pub port: PortArgs,
+    /// Prefix key: Ctrl plus this letter.
+    #[arg(long, default_value_t = 'a', value_parser = parse_escape)]
+    pub escape: char,
+    /// Start in raw mode.
+    #[arg(long)]
+    pub raw: bool,
+    /// Line ending after each sent line.
+    #[arg(long, value_enum, default_value_t = Ending::Crlf)]
+    pub ending: Ending,
+    /// Text encoding.
+    #[arg(long, default_value = "utf-8")]
+    pub encoding: String,
+    /// Quit when the device goes away instead of waiting for it.
+    #[arg(long)]
+    pub no_reconnect: bool,
+    /// What Ctrl+A 3 and /reset do.
+    #[arg(long, default_value = "dtr=0 rts=1 100ms rts=0", value_name = "STEPS")]
+    pub reset_sequence: String,
+    /// Save everything to this file from the start (minicom -C).
+    #[arg(short = 'C', long, value_name = "FILE")]
+    pub log: Option<PathBuf>,
+    /// Show received data as hex.
+    #[arg(long)]
+    pub hex: bool,
+    /// Start each line with the time.
+    #[arg(long)]
+    pub time: bool,
+}
+
+fn parse_escape(text: &str) -> Result<char, String> {
+    let letter = text.trim().to_ascii_lowercase();
+    let letter = letter
+        .strip_prefix("ctrl-")
+        .or_else(|| letter.strip_prefix("ctrl+"))
+        .unwrap_or(&letter);
+    let mut chars = letter.chars();
+    match (chars.next(), chars.next()) {
+        (Some(c), None) if c.is_ascii_lowercase() => Ok(c),
+        _ => Err(format!("{text:?} is not a letter (e.g. a, t, ctrl-t)")),
+    }
+}
+
+/// Lets `open` take minicom's `-D <device>` for the port.
+pub fn minicom_device(args: Vec<std::ffi::OsString>) -> Vec<std::ffi::OsString> {
+    let is_open = args.get(1).is_some_and(|a| a == "open");
+    if !is_open {
+        return args;
+    }
+    let mut out = Vec::with_capacity(args.len());
+    let mut iter = args.into_iter();
+    while let Some(arg) = iter.next() {
+        if arg == "-D" {
+            if let Some(device) = iter.next() {
+                out.push(device);
+            }
+        } else if let Some(device) = arg
+            .to_str()
+            .and_then(|a| a.strip_prefix("-D"))
+            .filter(|d| !d.is_empty())
+        {
+            out.push(device.into());
+        } else {
+            out.push(arg);
+        }
+    }
+    out
 }
 
 /// Options of `signal`.

@@ -66,9 +66,13 @@ Not automated, still required:
   stops them when a session closes
 - `crates/serialbot-cli` — `serialbot-cli`, the terminal front end
   - `src/lib.rs` — `run(args, Context)`: commands get output, language and devices passed in
-  - `src/commands/` — one file per subcommand (`ports`, `send`, `monitor`, `signal`)
+  - `src/commands/` — one file per subcommand (`ports`, `send`, `monitor`, `signal`, `open`)
+  - `src/term/` — the interactive terminal: `keys.rs` (minicom keys, pure), `editor.rs`
+    (input box), `feed.rs` (entries to lines), `screen.rs` (redraws only the bottom rows),
+    `app.rs` (one session; tested with mock devices and the `vt100` emulator)
   - `src/i18n.rs` — every message and help text in English and Chinese
   - `tests/e2e.rs` — the real binary against socat virtual ports (Linux only)
+  - `tests/interactive.rs` — `open` in a real pseudo terminal (`expectrl`) against socat
 - `crates/serialbot-mcp` — MCP server (rmcp, Streamable HTTP at `/mcp`)
   - `src/tools.rs` — the curated tools; all device work goes through `SessionManager`
   - `src/lib.rs` — `router`/`serve`: bearer token, Host allowlist, Origin rejected

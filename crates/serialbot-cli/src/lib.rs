@@ -52,6 +52,11 @@ pub struct Context<'a> {
     pub interrupted: Arc<AtomicBool>,
     /// The local time zone, minutes east of UTC, for timestamps.
     pub utc_offset_min: i32,
+    /// Standard input (`open` reads it when there is no terminal).
+    pub stdin: Option<Box<dyn std::io::Read + Send>>,
+    /// Whether standard input and output are both terminals (`open` is
+    /// interactive only then).
+    pub interactive: bool,
 }
 
 impl std::fmt::Debug for Context<'_> {
@@ -71,6 +76,7 @@ where
     I: IntoIterator<Item = T>,
     T: Into<OsString> + Clone,
 {
+    let args = args::minicom_device(args.into_iter().map(Into::into).collect());
     let cli = match args::command(ctx.lang)
         .try_get_matches_from(args)
         .and_then(|m| Cli::from_arg_matches(&m))
@@ -93,6 +99,8 @@ where
             return code as u8;
         }
     };
+    let color = cli.color.enabled(ctx.out_is_terminal, ctx.no_color);
+    let stdin = ctx.stdin.take();
     let mut out = Output::new(
         ctx.out,
         ctx.err,
@@ -103,6 +111,17 @@ where
         Command::Ports(a) => commands::ports::run(a, &*ctx.list_ports, &mut out),
         Command::Send(a) => commands::send::run(a, &ctx.manager, &mut out),
         Command::Signal(a) => commands::signal::run(a, &ctx.manager, &mut out),
+        Command::Open(a) => {
+            let io = commands::open::Io {
+                stdin: stdin.unwrap_or_else(|| Box::new(std::io::empty())),
+                terminal: ctx.interactive,
+                interrupted: Arc::clone(&ctx.interrupted),
+                utc_offset_min: ctx.utc_offset_min,
+                color,
+                lang: ctx.lang,
+            };
+            commands::open::run(a, &ctx.manager, io, &mut out)
+        }
         Command::Monitor(a) => commands::monitor::run(
             a,
             &ctx.manager,
@@ -176,6 +195,23 @@ pub(crate) mod testing {
         pub(crate) lang: Lang,
         pub(crate) terminal: bool,
         pub(crate) interrupted: Arc<AtomicBool>,
+        /// What `open` reads as standard input.
+        pub(crate) stdin: Vec<u8>,
+        /// Standard input ends only after this long (a slow pipe).
+        pub(crate) stdin_delay: Option<Duration>,
+    }
+
+    /// Standard input that ends after a delay.
+    struct Slow(Duration, std::io::Cursor<Vec<u8>>);
+
+    impl std::io::Read for Slow {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let n = self.1.read(buf)?;
+            if n == 0 {
+                std::thread::sleep(self.0);
+            }
+            Ok(n)
+        }
     }
 
     impl Fixture {
@@ -218,6 +254,8 @@ pub(crate) mod testing {
                 lang: Lang::En,
                 terminal: false,
                 interrupted: Arc::default(),
+                stdin: Vec::new(),
+                stdin_delay: None,
             }
         }
 
@@ -236,6 +274,11 @@ pub(crate) mod testing {
                 list_ports: Arc::new(move || Ok(ports.clone())),
                 interrupted: Arc::clone(&self.interrupted),
                 utc_offset_min: 0,
+                stdin: Some(Box::new(Slow(
+                    self.stdin_delay.unwrap_or_default(),
+                    std::io::Cursor::new(self.stdin.clone()),
+                ))),
+                interactive: false,
             };
             let code = run(
                 std::iter::once("serialbot-cli").chain(args.iter().copied()),
