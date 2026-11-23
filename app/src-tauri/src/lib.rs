@@ -15,13 +15,12 @@
 pub mod approval;
 pub mod cli;
 pub mod commands;
-pub mod export;
-pub mod filesend;
 pub mod links;
 pub mod mcp;
-pub mod repeat;
 pub mod settings;
 pub mod watch;
+
+pub use serialbot_jobs::{export, filesend, repeat};
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};

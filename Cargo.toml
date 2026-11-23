@@ -1,6 +1,11 @@
 [workspace]
 resolver = "3"
-members = ["crates/serialbot-core", "crates/serialbot-mcp", "app/src-tauri"]
+members = [
+    "crates/serialbot-core",
+    "crates/serialbot-jobs",
+    "crates/serialbot-mcp",
+    "app/src-tauri",
+]
 
 [workspace.package]
 version = "0.2.0"
@@ -18,6 +23,7 @@ regex = "1.12"
 serialport = "4.10"
 encoding_rs = "0.8"
 serialbot-core = { path = "crates/serialbot-core" }
+serialbot-jobs = { path = "crates/serialbot-jobs" }
 serialbot-mcp = { path = "crates/serialbot-mcp" }
 rmcp = { version = "3.10", default-features = false }
 axum = { version = "0.8", default-features = false }

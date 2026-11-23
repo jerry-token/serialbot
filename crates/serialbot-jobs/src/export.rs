@@ -362,7 +362,7 @@ mod tests {
     use serialbot_core::{ManualClock, SessionId, SessionOptions};
 
     use super::*;
-    use crate::settings::tests::TempDir;
+    use crate::test_dir::TempDir;
 
     /// 2026-11-18 10:13:38.123456 UTC.
     const T0: u64 = 1_794_996_818_123_456;

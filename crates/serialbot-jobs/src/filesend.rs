@@ -228,7 +228,7 @@ mod tests {
     use serialbot_core::{Cursor, Direction, EntryKind, SessionId, SessionOptions, SystemClock};
 
     use super::*;
-    use crate::settings::tests::TempDir;
+    use crate::test_dir::TempDir;
 
     fn session() -> (Arc<Session>, MockDevice) {
         let (connection, device) = mock::connection("mock0", Duration::from_millis(5));

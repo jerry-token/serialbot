@@ -45,6 +45,9 @@ ports. Plan of record: the "AI 串口助手 · 开工前计划" doc.
   - `src/manager.rs` — owns all sessions; refuses to open a port twice
   - `src/transport/mock.rs` — in-memory device for tests of everything above transports
   - `tests/serial_socat.rs` — real serial code over socat virtual ports (Linux only)
+- `crates/serialbot-jobs` — background jobs per session, shared by the app and the CLI:
+  `filesend.rs` / `repeat.rs` / `export.rs` (file send, timed send, save/capture); the app
+  stops them when a session closes
 - `crates/serialbot-mcp` — MCP server (rmcp, Streamable HTTP at `/mcp`)
   - `src/tools.rs` — the curated tools; all device work goes through `SessionManager`
   - `src/lib.rs` — `router`/`serve`: bearer token, Host allowlist, Origin rejected
@@ -55,8 +58,6 @@ ports. Plan of record: the "AI 串口助手 · 开工前计划" doc.
     `lib.rs` only forwards IPC calls to it
   - `src-tauri/src/mcp.rs` — embedded MCP server on the same `SessionManager`
     (127.0.0.1, port fallback, settings in `mcp.json` via `settings.rs`)
-  - `src-tauri/src/filesend.rs` / `repeat.rs` / `export.rs` — background jobs per session
-    (file send, timed send, save/capture), stopped when the session closes
   - `src-tauri/src/watch.rs` — change detection; the window gets `sessions-changed` /
     `log-changed` events and reads new entries itself (no IPC polling)
   - `src/terminal.ts` — log entries to display lines (text/hex, line breaks, UTF-8)
