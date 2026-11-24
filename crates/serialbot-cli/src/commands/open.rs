@@ -347,7 +347,7 @@ mod tests {
             loop {
                 if let Some(d) = devices.lock().unwrap().get("mock0") {
                     got.extend(d.take_written());
-                    if got.ends_with(b"AT+GMR\r\n") {
+                    if got.ends_with(b"AT+GMR\r") {
                         d.send(b"OK\r\n");
                         return got;
                     }
@@ -357,7 +357,7 @@ mod tests {
             }
         });
         let ran = f.run(&["open", "mock0"]);
-        assert_eq!(device.join().unwrap(), b"AT\r\nAT+GMR\r\n");
+        assert_eq!(device.join().unwrap(), b"AT\rAT+GMR\r");
         assert_eq!((ran.code, ran.out.as_str()), (0, "OK\r\n"), "{}", ran.err);
         assert!(f.manager.list().is_empty());
     }

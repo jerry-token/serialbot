@@ -182,8 +182,10 @@ fn starts_empty_and_opens_sessions_from_the_input_box() {
         r.row(29)
     );
     r.type_line("AT");
-    assert_eq!(r.device("mock0").take_written(), b"AT\r\n");
-    r.until_shows("→ AT\\r\\n");
+    // Enter sends one CR, as a terminal does: shells that take CR and LF
+    // as two Enters would answer twice to CRLF.
+    assert_eq!(r.device("mock0").take_written(), b"AT\r");
+    r.until_shows("→ AT\\r");
     r.device("mock0").send(b"OK\r\n");
     r.until_shows("│OK");
     // Opening it again focuses it instead.
@@ -215,7 +217,7 @@ fn panes_side_by_side_or_stacked_and_the_focus_moves() {
     r.prefix(KeyCode::Left);
     assert_eq!(r.tui.focus, 2, "it wraps around");
     r.type_line("to two");
-    assert_eq!(r.device("mock2").take_written(), b"to two\r\n");
+    assert_eq!(r.device("mock2").take_written(), b"to two\r");
     assert!(r.device("mock0").take_written().is_empty());
 
     r.prefix(KeyCode::Char('-'));
@@ -686,7 +688,11 @@ fn command_groups_send_by_click_or_command() {
 
     let device = r.device("mock0");
     r.type_line("/cmd 1");
-    assert_eq!(device.take_written(), b"AT\r\n");
+    assert_eq!(
+        device.take_written(),
+        b"AT\r\n",
+        "a command keeps its own ending"
+    );
     r.type_line("/cmd 9");
     assert!(r.logged(0, "/cmd 9: 1-2 or all"));
     // A click on a command sends it to the focused session.

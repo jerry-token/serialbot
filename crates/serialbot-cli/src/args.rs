@@ -319,8 +319,8 @@ pub struct OpenArgs {
     /// Start in raw mode.
     #[arg(long)]
     pub raw: bool,
-    /// Line ending after each sent line.
-    #[arg(long, value_enum, default_value_t = Ending::Crlf)]
+    /// Line ending after each sent line: CR, as a terminal's Enter key.
+    #[arg(long, value_enum, default_value_t = Ending::Cr)]
     pub ending: Ending,
     /// Text encoding.
     #[arg(long, default_value = "utf-8")]
@@ -372,8 +372,8 @@ pub struct TuiArgs {
     /// Prefix key: Ctrl plus this letter.
     #[arg(long, default_value_t = 'a', value_parser = parse_escape)]
     pub escape: char,
-    /// Line ending after each sent line.
-    #[arg(long, value_enum, default_value_t = Ending::Crlf)]
+    /// Line ending after each sent line: CR, as a terminal's Enter key.
+    #[arg(long, value_enum, default_value_t = Ending::Cr)]
     pub ending: Ending,
     /// Text encoding.
     #[arg(long, default_value = "utf-8")]
