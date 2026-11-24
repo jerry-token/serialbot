@@ -39,6 +39,8 @@ Windows 可能提示「未知发布者」，点「更多信息」→「仍要运
 
 ### New in this release / 本版新增
 
+- **Fixed in beta.2 / beta.2 修复** (serialbot-cli): Enter in `open` and `tui` sends CR only, as a terminal does, so shells that take CR and LF each as Enter no longer answer twice (#108; `--ending crlf` if a device wants it). Backspace deletes in the input box also in terminals that send ^H (#109). In the app's send box, pick `\r` as the ending for such shells.
+  `open` 和 `tui` 的回车只发 CR，和终端一致，把 CR、LF 各当一次回车的 shell 不再响应两次（#108；设备需要时用 `--ending crlf`）。终端的退格键发 ^H 时，输入框也能删字了（#109）。App 发送框遇到这类 shell 时，行尾选 `\r` 即可。
 - **serialbot-cli, SerialBot in the terminal / 命令行版 serialbot-cli**: a separate download (see the second table). One-shot `ports`, `send --expect`, `monitor`, `signal` and `run` (scripts or the app's command export) for scripts and CI, with exit codes; `open`, an interactive terminal with minicom's `Ctrl+A` keys, an input box with history, `/` commands and raw mode; `mcp serve`, the MCP server without the app, asking in the terminal, and `mcp stdio` for Claude Desktop; completions for bash, zsh, fish and PowerShell.
   单独下载（见第二张表）。一次性命令 `ports`、`send --expect`、`monitor`、`signal`、`run`（脚本或 App 导出的命令分组），带退出码，适合脚本和 CI；`open` 是按键兼容 minicom 的交互终端，带输入框、历史、`/` 命令和原始模式；`mcp serve` 不开 App 也能提供 MCP 服务并在终端里确认，`mcp stdio` 给 Claude Desktop 用；支持 bash、zsh、fish、PowerShell 命令补全。
 - **Full screen: `serialbot-cli tui` / 全屏界面**: up to four ports side by side or stacked (drag the borders), a session list with news dots and scrollback; a waveform of the numbers in the data with up to six curves told apart by color and point shape; `--mcp` adds an AI panel where you allow (`y`/`s`) or refuse (`n`) an agent's changes; the app's command groups, sent with a click.
