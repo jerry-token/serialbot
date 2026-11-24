@@ -526,7 +526,10 @@ static EN: Strings = Strings {
             "open.raw",
             "Start in raw mode: every key goes to the device (shells, vim, top)",
         ),
-        ("open.ending", "Line ending after each sent line"),
+        (
+            "open.ending",
+            "Line ending after each sent line (default cr, as a terminal's Enter; crlf or lf if the device wants them)",
+        ),
         ("open.encoding", "Text encoding (utf-8, gbk, ...)"),
         (
             "open.no_reconnect",
@@ -566,7 +569,10 @@ static EN: Strings = Strings {
             "tui.escape",
             "Prefix key: Ctrl plus this letter (default a)",
         ),
-        ("tui.ending", "Line ending after each sent line"),
+        (
+            "tui.ending",
+            "Line ending after each sent line (default cr, as a terminal's Enter; crlf or lf if the device wants them)",
+        ),
         ("tui.encoding", "Text encoding (utf-8, gbk, ...)"),
         (
             "tui.no_reconnect",
@@ -796,7 +802,10 @@ static ZH: Strings = Strings {
             "open.raw",
             "以原始模式启动：所有按键直接发给设备（shell、vim、top）",
         ),
-        ("open.ending", "每行发送后追加的行尾"),
+        (
+            "open.ending",
+            "每行发送后追加的行尾（默认 cr，和终端的回车键一样；设备需要时改为 crlf 或 lf）",
+        ),
         ("open.encoding", "文本编码（utf-8、gbk……）"),
         (
             "open.no_reconnect",
@@ -833,7 +842,10 @@ static ZH: Strings = Strings {
         ),
         ("tui.rts", "打开后立即设置的 RTS 电平"),
         ("tui.escape", "前缀键：Ctrl 加这个字母（默认 a）"),
-        ("tui.ending", "每行发送后追加的行尾"),
+        (
+            "tui.ending",
+            "每行发送后追加的行尾（默认 cr，和终端的回车键一样；设备需要时改为 crlf 或 lf）",
+        ),
         ("tui.encoding", "文本编码（utf-8、gbk……）"),
         ("tui.no_reconnect", "设备断开后不再等待，会话保持关闭"),
         ("tui.reset_sequence", "Ctrl+A 3 和 /reset 执行的时序"),

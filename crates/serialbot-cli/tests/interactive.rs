@@ -209,7 +209,8 @@ fn a_session_in_a_real_terminal() {
     t.send(b"AT");
     t.wait_for("› AT");
     t.send(b"\r");
-    receive(&mut dev, b"AT\r\n");
+    // One CR per Enter, as minicom sends.
+    receive(&mut dev, b"AT\r");
     dev.control.write_all(b"OK\r\nuart:~$ ").unwrap();
     // The input box is drawn again after the received text: wait for both.
     t.wait_until("uart:~$ and the input box below it", |screen| {
@@ -222,7 +223,7 @@ fn a_session_in_a_real_terminal() {
     let screen = t.screen.screen().contents();
     let lines: Vec<&str> = screen.lines().collect();
     let ok = lines.iter().position(|l| *l == "OK").unwrap();
-    assert_eq!(lines[ok - 1], "→ AT\\r\\n", "{screen}");
+    assert_eq!(lines[ok - 1], "→ AT\\r", "{screen}");
     assert!(lines[ok + 1].starts_with("uart:~$"), "{screen}");
     assert!(lines[ok + 2].starts_with('›'), "{screen}");
 
@@ -283,7 +284,7 @@ fn tui_in_a_real_terminal() {
     t.wait_for("Sessions");
     assert!(t.screen.screen().alternate_screen(), "full screen");
     t.send(b"AT\r");
-    receive(&mut dev, b"AT\r\n");
+    receive(&mut dev, b"AT\r");
     dev.control.write_all(b"OK from the device\r\n").unwrap();
     t.wait_for("OK from the device");
     // A second session from the input box, then quitting.
