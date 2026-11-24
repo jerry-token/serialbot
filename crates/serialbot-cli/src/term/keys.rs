@@ -405,6 +405,8 @@ impl Keys {
             KeyCode::Char('d') if ctrl && e.is_empty() => return vec![Action::Send(vec![0x04])],
             KeyCode::Char('d') if ctrl => e.delete(),
             KeyCode::Char('l') if ctrl => return vec![Action::Local(Local::Clear)],
+            // Terminals whose Backspace sends ^H.
+            KeyCode::Char('h') if ctrl => e.backspace(),
             KeyCode::Char('u') if ctrl => e.delete_to_line_start(),
             KeyCode::Char('w') if ctrl => e.delete_word(),
             KeyCode::Char('a') if ctrl => e.home(),
@@ -483,7 +485,13 @@ impl Keys {
         let Some(search) = self.search.as_mut() else {
             return Vec::new();
         };
+        // Terminals whose Backspace sends ^H.
+        let backspace = key.code == KeyCode::Backspace || (ctrl && key.code == KeyCode::Char('h'));
         match key.code {
+            _ if backspace => {
+                search.needle.pop();
+                search.found = self.editor.search(&search.needle, None).map(|(i, _)| i);
+            }
             KeyCode::Enter => {
                 if let Some(found) = search.found {
                     self.editor.take_from_history(found);
@@ -497,10 +505,6 @@ impl Keys {
                 if let Some((i, _)) = self.editor.search(&search.needle, before) {
                     search.found = Some(i);
                 }
-            }
-            KeyCode::Backspace => {
-                search.needle.pop();
-                search.found = self.editor.search(&search.needle, None).map(|(i, _)| i);
             }
             KeyCode::Char(c) if !ctrl => {
                 search.needle.push(c);
@@ -810,6 +814,23 @@ mod tests {
         typing(&mut keys, "/log x");
         keys.key(press(KeyCode::Tab));
         assert_eq!(keys.editor.text(), "/log x");
+    }
+
+    #[test]
+    fn ctrl_h_is_backspace_for_terminals_that_send_it() {
+        // Issue #109: terminals whose Backspace sends ^H (0x08) arrive as
+        // Ctrl+H; it must delete in the input box and the history search.
+        let mut keys = line();
+        typing(&mut keys, "abc");
+        assert_eq!(keys.key(ctrl('h')), [Action::Edited]);
+        assert_eq!(keys.editor.text(), "ab");
+        keys.key(ctrl('r'));
+        typing(&mut keys, "xy");
+        keys.key(ctrl('h'));
+        assert_eq!(keys.search.as_ref().unwrap().needle, "x");
+        // In raw mode it goes to the device as it is.
+        let mut raw = Keys::new(Mode::Raw, 'a');
+        assert_eq!(raw.key(ctrl('h')), [Action::Send(vec![0x08])]);
     }
 
     #[test]
