@@ -314,3 +314,25 @@ fn tui_ends_cleanly_on_sigterm() {
     assert!(!t.screen.screen().alternate_screen());
     drop(device(&pair.a));
 }
+
+#[test]
+fn backspace_deletes_whether_the_terminal_sends_del_or_bs() {
+    // Issue #109: some terminals' Backspace sends ^H (0x08), most send DEL.
+    let Some(pair) = virtual_pair("backspace") else {
+        return;
+    };
+    for key in [b"\x7f", b"\x08"] {
+        let mut t = Term::open(&[pair.a.to_str().unwrap()]);
+        t.wait_for("Ctrl+A Z help");
+        t.send(b"/sd");
+        t.wait_until("the input box shows /sd", |screen| {
+            screen.lines().any(|l| l.trim_end() == "› /sd")
+        });
+        t.send(key);
+        t.wait_until("the input box shows /s", |screen| {
+            screen.lines().any(|l| l.trim_end() == "› /s")
+        });
+        t.send(b"\x01x");
+        assert_eq!(t.exit_code(), 0);
+    }
+}
