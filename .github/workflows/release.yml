@@ -4,7 +4,8 @@
 #   - Actions → Release → "Run workflow", entering the version; the tag is
 #     then created on the selected commit.
 # The app's installers and serialbot-cli's archives (and .deb) are built in
-# parallel and published together.
+# parallel and published together; the Microsoft Store MSIX is built too and
+# kept in the run's artifacts (store.yml).
 # Versions with a pre-release part (-alpha, -beta, -rc) are marked pre-release.
 name: Release
 
@@ -212,6 +213,13 @@ jobs:
               > /dev/null
             echo "uploaded $name"
           done
+
+  # The Microsoft Store package, kept in the run's artifacts for Partner Center.
+  store:
+    name: Microsoft Store package
+    uses: ./.github/workflows/store.yml
+    with:
+      version: ${{ inputs.tag || github.ref_name }}
 
   publish:
     name: Publish release
