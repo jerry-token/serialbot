@@ -27,7 +27,7 @@ checks marked *slow*), the commit-msg hook checks the message.
 | The layout below names every crate. | `check:layout-doc` |
 | This table and `cargo xtask check` list the same checks. | `check:rules-doc` |
 | Every source file (`.rs`, `.ts`, `.tsx`, `.js`, `.mjs`, `.css`, `.py`) starts with the `SPDX-License-Identifier: GPL-3.0-only` and `Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot` comment lines (see NOTICE and TRADEMARKS.md). | `check:copyright-headers` |
-| The release scripts (`.github/scripts`: CLI packages, download sizes) pass their tests. | `check:release-scripts` |
+| The release scripts (`.github/scripts`: CLI packages, the Store MSIX, download sizes) pass their tests. | `check:release-scripts` |
 
 Not automated, still required:
 
@@ -118,7 +118,11 @@ Not automated, still required:
   Its `cli` job builds `serialbot-cli` separately (the app's installers do not
   include it): `serialbot-cli-<version>-<platform>.tar.gz` / `.zip` with
   completions, plus `serialbot-cli-<version>-linux-<arch>.deb`, packaged by
-  `.github/scripts/package_cli.py`.
+  `.github/scripts/package_cli.py`. Its `store` job (`store.yml`) makes the
+  Microsoft Store MSIX (`.github/scripts/package_msix.py`: the Store identity
+  from Partner Center, the `serialbot.exe` alias), installs a test-signed
+  copy on the runner, and keeps the unsigned MSIX in the run's artifacts for
+  uploading in Partner Center (the Store signs it).
 - Release by pushing a tag from `main` (`git tag v0.1.0-alpha.2 && git push
   origin v0.1.0-alpha.2`) or with Actions → Release → "Run workflow" on
   `main`, entering the tag. Tags with `-alpha`/`-beta`/`-rc` are pre-releases.

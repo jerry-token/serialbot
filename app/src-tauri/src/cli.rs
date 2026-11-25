@@ -50,17 +50,42 @@ pub fn bridge_urls(settings: &McpSettings) -> Vec<String> {
 
 /// The path a stdio MCP client should start, with the argument `mcp`.
 /// Inside an AppImage the running file is a temporary mount, so the
-/// AppImage itself is given.
+/// AppImage itself is given; the Microsoft Store app is started through
+/// its execution alias (see [`launcher_for`]).
 pub fn launcher() -> Option<String> {
-    std::env::var("APPIMAGE")
-        .ok()
-        .filter(|p| !p.is_empty())
-        .or_else(|| {
-            std::env::current_exe()
-                .ok()
-                .map(|p| p.display().to_string())
-        })
+    launcher_for(
+        std::env::current_exe().ok().as_deref(),
+        std::env::var("APPIMAGE").ok().as_deref(),
+        std::env::var("LOCALAPPDATA").ok().as_deref(),
+    )
 }
+
+/// [`launcher`] for a running file `exe`, the `APPIMAGE` and
+/// `LOCALAPPDATA` variables. A file under `WindowsApps` (an installed MSIX
+/// package) cannot be started directly, so the package's alias
+/// `serialbot.exe` is given: in `LOCALAPPDATA\Microsoft\WindowsApps`, or
+/// bare (it is on the PATH) without `LOCALAPPDATA`.
+pub fn launcher_for(
+    exe: Option<&Path>,
+    appimage: Option<&str>,
+    local_app_data: Option<&str>,
+) -> Option<String> {
+    if let Some(image) = appimage.filter(|p| !p.is_empty()) {
+        return Some(image.to_owned());
+    }
+    let exe = exe?.display().to_string();
+    if exe.to_ascii_lowercase().contains(r"\windowsapps\") {
+        return Some(match local_app_data {
+            Some(dir) => format!(r"{dir}\Microsoft\WindowsApps\{STORE_ALIAS}"),
+            None => STORE_ALIAS.to_owned(),
+        });
+    }
+    Some(exe)
+}
+
+/// The execution alias the Microsoft Store package declares
+/// (`.github/scripts/package_msix.py`).
+pub const STORE_ALIAS: &str = "serialbot.exe";
 
 /// Runs the bridge on stdin/stdout until the client closes it.
 pub fn mcp_bridge() -> Result<(), String> {
@@ -130,5 +155,36 @@ mod tests {
     #[test]
     fn the_launcher_is_this_executable() {
         assert!(launcher().is_some());
+        let exe = Path::new("/opt/SerialBot/serialbot");
+        assert_eq!(
+            launcher_for(Some(exe), None, None).as_deref(),
+            Some("/opt/SerialBot/serialbot")
+        );
+        assert_eq!(
+            launcher_for(Some(exe), Some("/home/j/SerialBot.AppImage"), None).as_deref(),
+            Some("/home/j/SerialBot.AppImage")
+        );
+        assert_eq!(
+            launcher_for(Some(exe), Some(""), None).as_deref(),
+            Some("/opt/SerialBot/serialbot")
+        );
+        assert_eq!(launcher_for(None, None, None), None);
+    }
+
+    #[test]
+    fn the_store_app_is_started_through_its_alias() {
+        // Files under WindowsApps cannot be started directly; the package's
+        // execution alias can, from anywhere.
+        let packaged = Path::new(
+            r"C:\Program Files\WindowsApps\Jerry-Token.SerialBot_0.3.22.0_x64__t69qdnpgskq86\serialbot.exe",
+        );
+        assert_eq!(
+            launcher_for(Some(packaged), None, Some(r"C:\Users\j\AppData\Local")).as_deref(),
+            Some(r"C:\Users\j\AppData\Local\Microsoft\WindowsApps\serialbot.exe")
+        );
+        assert_eq!(
+            launcher_for(Some(packaged), None, None).as_deref(),
+            Some("serialbot.exe")
+        );
     }
 }
