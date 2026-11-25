@@ -535,3 +535,24 @@ footer p a + a {
     animation: none;
   }
 }
+
+/* ---- privacy policy ---------------------------------------------------- */
+
+.policy > section {
+  border-top: none;
+  padding-top: 48px;
+}
+
+.policy h2 {
+  margin: 40px 0 8px;
+  font-size: 1.25rem;
+}
+
+.policy p {
+  max-width: var(--measure);
+}
+
+.policy .updated {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}

@@ -88,5 +88,12 @@
  "dl_cli_deb": "Debian / Ubuntu x64，含命令补全",
  "dl_cli_linux": "其他 Linux x64",
  "dl_cli_deb_arm": "Debian / Ubuntu arm64，含命令补全",
- "dl_cli_linux_arm": "其他 Linux arm64"
+ "dl_cli_linux_arm": "其他 Linux arm64",
+ "other_home": "",
+ "privacy_title": "隐私政策",
+ "privacy_intro": "SerialBot 不收集任何个人数据：它收到和保存的一切都留在你的电脑上。",
+ "privacy_updated": "生效日期：2026 年 11 月 25 日",
+ "privacy_body": "<h2>SerialBot 不做什么</h2>\n<p>SerialBot（桌面 App 和 serialbot-cli）没有账号，没有统计分析、遥测、广告，也不上报崩溃信息。你收发的数据和输入的内容不会发给我们或任何第三方，我们也看不到你如何使用它。</p>\n<h2>哪些数据留在你的电脑上</h2>\n<p>收发的数据、日志、命令列表、历史记录和设置（包括 MCP 服务的 token）都保存在你电脑上 App 的数据目录里。只有在你保存或抓取日志时才会写入文件，位置由你选择。卸载 App 或删除该目录即可清除。</p>\n<h2>网络连接</h2>\n<p>SerialBot 只连接你指定的地址：你打开的 TCP 和 UDP 地址。它的 MCP 服务默认只监听本机（127.0.0.1），只有你选择后才对局域网开放；无论哪种情况，客户端都需要 token 才能连接。</p>\n<h2>AI 智能体</h2>\n<p>SerialBot 本身不连接任何 AI 服务。当你把 AI 智能体（例如 Claude Desktop 或 Claude Code）接入它的 MCP 服务并允许其使用某个会话时，智能体从串口读到的内容会交给该智能体，再由它发给你使用的 AI 服务商，适用该服务商的隐私政策。会改变设备状态的操作需要你确认（除非你选择全部允许），你也可以随时关闭 MCP 服务。</p>\n<h2>下载与本网站</h2>\n<p>本网站不使用 Cookie，也不做统计分析；字体由本站提供。下载区会从你的浏览器向 GitHub 查询最新版本。本站托管在 GitHub Pages 上，App 通过 GitHub 和微软应用商店分发；这些服务适用 GitHub 和微软各自的隐私声明。</p>\n<h2>儿童</h2>\n<p>SerialBot 不收集任何人的个人数据，包括儿童。</p>\n<h2>变更与联系</h2>\n<p>本政策如有变更，新版本会连同日期发布在本页。如有问题请联系 Jerry：<a href=\"mailto:support@aiany.cc\">support@aiany.cc</a> 或 <a href=\"mailto:strongwong003@gmail.com\">strongwong003@gmail.com</a>。</p>",
+ "privacy_home": "SerialBot 首页",
+ "footer_privacy": "隐私政策"
 }
