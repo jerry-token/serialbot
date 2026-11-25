@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 """Builds the SerialBot site into a folder: `python3 site/build.py _site`.
 
-One template (`template.html`), one string table per language
+One template (`template.html`, and `privacy.html` for /privacy/), one string table per language
 (`strings/<lang>.json`). English goes to `/`, every other language to
 `/<lang>/`. Screenshots and the app icon are copied from the repository, so
 the site always shows the same images as the README.
@@ -63,11 +63,12 @@ def uart_svg(data: bytes) -> str:
     )
 
 
-def render(template: str, strings: dict, lang: str) -> str:
-    """Fills `{{key}}` placeholders; list values become <li> items."""
+def render(template: str, strings: dict, lang: str, depth: int = 0) -> str:
+    """Fills `{{key}}` placeholders; list values become <li> items. `depth`
+    is how many folders below the language's home the page is."""
     values = dict(strings)
     values["lang"] = lang
-    values["root"] = "./" if lang == "en" else "../"
+    values["root"] = ("./" if lang == "en" else "../") if depth == 0 else "../" * (depth + (lang != "en"))
     values["uart"] = uart_svg(HERO_BYTES)
     out = template.replace("{{uart}}", values["uart"])
 
@@ -93,11 +94,16 @@ def build(out: Path) -> None:
         shutil.rmtree(out)
     (out / "images").mkdir(parents=True)
     template = (SITE / "template.html").read_text(encoding="utf-8")
+    privacy = (SITE / "privacy.html").read_text(encoding="utf-8")
     for lang in LANGS:
         strings = json.loads((SITE / "strings" / f"{lang}.json").read_text(encoding="utf-8"))
         target = out if lang == "en" else out / lang
         target.mkdir(parents=True, exist_ok=True)
         (target / "index.html").write_text(render(template, strings, lang), encoding="utf-8")
+        # The privacy policy the Microsoft Store listing links to.
+        (target / "privacy").mkdir()
+        page = render(privacy, strings, lang, depth=1)
+        (target / "privacy" / "index.html").write_text(page, encoding="utf-8")
     for name in ("style.css", "download.js", "CNAME"):
         shutil.copy(SITE / name, out / name)
     shutil.copytree(SITE / "fonts", out / "fonts")

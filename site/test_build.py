@@ -20,6 +20,7 @@ class BuildTest(unittest.TestCase):
         cls.out = Path(cls.tmp.name) / "site"
         build.build(cls.out)
         cls.pages = {"en": cls.out / "index.html", "zh": cls.out / "zh" / "index.html"}
+        cls.privacy = {"en": cls.out / "privacy" / "index.html", "zh": cls.out / "zh" / "privacy" / "index.html"}
 
     @classmethod
     def tearDownClass(cls):
@@ -44,8 +45,18 @@ class BuildTest(unittest.TestCase):
             self.assertIn("serialbot-cli tui", text)
             self.assertIn('<path class="wire"', text)
 
+    def test_privacy_policy_pages(self):
+        for lang, page in self.privacy.items():
+            text = page.read_text(encoding="utf-8")
+            self.assertNotIn("{{", text, lang)
+            self.assertIn("strongwong003@gmail.com", text)
+            self.assertIn("127.0.0.1", text)
+            self.assertIn('href="../style.css"' if lang == "en" else 'href="../../style.css"', text)
+        for page in self.pages.values():
+            self.assertIn('privacy/"', page.read_text(encoding="utf-8"))
+
     def test_local_links_resolve(self):
-        for lang, page in self.pages.items():
+        for lang, page in [*self.pages.items(), *self.privacy.items()]:
             text = page.read_text(encoding="utf-8")
             for ref in re.findall(r'(?:href|src)="([^"#:]+)"', text):
                 target = (page.parent / ref).resolve()

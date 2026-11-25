@@ -88,5 +88,12 @@
  "dl_cli_deb": "Debian / Ubuntu x64, with completions",
  "dl_cli_linux": "Other Linux x64",
  "dl_cli_deb_arm": "Debian / Ubuntu arm64, with completions",
- "dl_cli_linux_arm": "Other Linux arm64"
+ "dl_cli_linux_arm": "Other Linux arm64",
+ "other_home": "zh/",
+ "privacy_title": "Privacy policy",
+ "privacy_intro": "SerialBot collects no personal data: everything it receives and keeps stays on your computer.",
+ "privacy_updated": "Effective 25 November 2026",
+ "privacy_body": "<h2>What SerialBot does not do</h2>\n<p>SerialBot (the desktop app and serialbot-cli) has no account, no analytics, no telemetry, no ads and no crash reporting. It does not send what you receive or type to us or to anyone else, and we cannot see how you use it.</p>\n<h2>What stays on your computer</h2>\n<p>The data you send and receive, the logs, command lists, history and settings (including the MCP server's token) are kept on your computer, in the app's data folder. Logs are written to a file only when you save or capture them, to the place you choose. Removing the app, or that folder, removes them.</p>\n<h2>Network connections</h2>\n<p>SerialBot connects only where you tell it to: the TCP and UDP addresses you open. Its MCP server listens on this computer only (127.0.0.1) unless you choose to open it to your local network; clients need its token either way.</p>\n<h2>AI agents</h2>\n<p>SerialBot does not talk to any AI service itself. When you connect an AI agent (for example Claude Desktop or Claude Code) to its MCP server and let it use a session, what the agent reads from the port goes to that agent, and through it to the AI provider you use, under that provider's privacy policy. Actions that change a device wait for your approval unless you allow them, and you can switch the server off at any time.</p>\n<h2>Downloads and this website</h2>\n<p>This website sets no cookies and uses no analytics; its fonts are served from this site. The download section asks GitHub for the latest release from your browser. The site is hosted on GitHub Pages, and the app is distributed through GitHub and the Microsoft Store; GitHub's and Microsoft's own privacy statements apply to those services.</p>\n<h2>Children</h2>\n<p>SerialBot collects no personal data from anyone, including children.</p>\n<h2>Changes and contact</h2>\n<p>If this policy changes, the new version is published on this page with its date. Questions: Jerry, <a href=\"mailto:support@aiany.cc\">support@aiany.cc</a> or <a href=\"mailto:strongwong003@gmail.com\">strongwong003@gmail.com</a>.</p>",
+ "privacy_home": "SerialBot home",
+ "footer_privacy": "Privacy"
 }
