@@ -1,7 +1,8 @@
 {
  "html_lang": "en",
- "title": "SerialBot — the verification loop for embedded hardware",
- "description": "Coding agents earn trust by verifying their own work. SerialBot gives them the serial port, so they can flash a board, read its log and check the result themselves, while you approve every change.",
+ "title": "SerialBot: AI serial port assistant and MCP server for UART",
+ "description": "Open-source serial port assistant for Windows, macOS and Linux with a built-in MCP server: AI agents read UART logs and test ESP32/STM32 boards.",
+ "og_locale": "en_US",
  "home": "",
  "nav_label": "Sections",
  "nav_why": "Why",

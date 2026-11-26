@@ -20,6 +20,9 @@ from pathlib import Path
 SITE = Path(__file__).resolve().parent
 REPO = SITE.parent
 LANGS = ("en", "zh")
+SITE_URL = "https://serialbot.aiany.cc"
+# Pages besides each language's home, as paths below it.
+PAGES = ("", "privacy/")
 # The command drawn in the hero, as it goes over the wire.
 HERO_BYTES = b"AT+GMR\r\n"
 
@@ -48,7 +51,7 @@ def uart_svg(data: bytes) -> str:
         width = FRAME_BITS * BIT_W
         char = {0x0D: "\\r", 0x0A: "\\n"}.get(byte, chr(byte))
         labels.append(
-            f'<g class="frame"><rect x="{start}" y="8" width="{width}" height="60" rx="3"/>'
+            f'<g class="frame" aria-hidden="true"><rect x="{start}" y="8" width="{width}" height="60" rx="3"/>'
             f'<text class="char" x="{start + width / 2}" y="92">{html.escape(char)}</text>'
             f'<text class="hex" x="{start + width / 2}" y="108">0x{byte:02X}</text></g>'
         )
@@ -56,6 +59,8 @@ def uart_svg(data: bytes) -> str:
         x += GAP
     path = "M" + " L".join(f"{px},{py}" for px, py in points)
     return (
+        # role="img" with a title: screen readers announce the title, not the
+        # byte labels drawn inside.
         f'<svg class="uart" viewBox="0 0 {x} 116" role="img" aria-labelledby="uart-title">'
         f'<title id="uart-title">{{{{uart_title}}}}</title>'
         + "".join(labels)
@@ -63,11 +68,66 @@ def uart_svg(data: bytes) -> str:
     )
 
 
-def render(template: str, strings: dict, lang: str, depth: int = 0) -> str:
+def page_url(lang: str, path: str = "") -> str:
+    """The absolute URL of `path` (a key of PAGES) in `lang`."""
+    return f"{SITE_URL}/{'' if lang == 'en' else lang + '/'}{path}"
+
+
+def json_ld(strings: dict, lang: str) -> str:
+    """SoftwareApplication structured data for a home page."""
+    data = {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "SerialBot",
+        "url": page_url(lang),
+        "description": strings["description"],
+        "inLanguage": strings["html_lang"],
+        "applicationCategory": "DeveloperApplication",
+        "applicationSubCategory": "Serial port assistant",
+        "operatingSystem": "Windows, macOS, Linux",
+        "image": f"{SITE_URL}/images/windows.png",
+        "screenshot": f"{SITE_URL}/images/terminal-dark.png",
+        "downloadUrl": "https://github.com/jerry-token/serialbot/releases",
+        "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+        "isAccessibleForFree": True,
+        "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
+        "author": {"@type": "Person", "name": "Jerry", "email": "support@aiany.cc"},
+        "sameAs": ["https://github.com/jerry-token/serialbot"],
+    }
+    text = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
+    return f'<script type="application/ld+json">{text}</script>'
+
+
+def sitemap() -> str:
+    """Every page in every language, each listing its translations."""
+    urls = []
+    for path in PAGES:
+        links = "".join(
+            f'<xhtml:link rel="alternate" hreflang="{code}" href="{page_url(lang, path)}"/>'
+            for code, lang in (("en", "en"), ("zh-Hans", "zh"), ("x-default", "en"))
+        )
+        urls += [f"<url><loc>{page_url(lang, path)}</loc>{links}</url>" for lang in LANGS]
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
+        'xmlns:xhtml="http://www.w3.org/1999/xhtml">\n' + "\n".join(urls) + "\n</urlset>\n"
+    )
+
+
+ROBOTS = f"User-agent: *\nAllow: /\n\nSitemap: {SITE_URL}/sitemap.xml\n"
+
+
+def render(template: str, strings: dict, lang: str, depth: int = 0, path: str = "") -> str:
     """Fills `{{key}}` placeholders; list values become <li> items. `depth`
-    is how many folders below the language's home the page is."""
+    is how many folders below the language's home the page is, `path` the
+    page's path below it (for its canonical URL and its translations)."""
     values = dict(strings)
     values["lang"] = lang
+    values["site_url"] = SITE_URL
+    values["canonical"] = page_url(lang, path)
+    values["url_en"] = page_url("en", path)
+    values["url_zh"] = page_url("zh", path)
+    values["jsonld"] = json_ld(strings, lang)
     values["root"] = ("./" if lang == "en" else "../") if depth == 0 else "../" * (depth + (lang != "en"))
     values["uart"] = uart_svg(HERO_BYTES)
     out = template.replace("{{uart}}", values["uart"])
@@ -102,8 +162,10 @@ def build(out: Path) -> None:
         (target / "index.html").write_text(render(template, strings, lang), encoding="utf-8")
         # The privacy policy the Microsoft Store listing links to.
         (target / "privacy").mkdir()
-        page = render(privacy, strings, lang, depth=1)
+        page = render(privacy, strings, lang, depth=1, path="privacy/")
         (target / "privacy" / "index.html").write_text(page, encoding="utf-8")
+    (out / "sitemap.xml").write_text(sitemap(), encoding="utf-8")
+    (out / "robots.txt").write_text(ROBOTS, encoding="utf-8")
     for name in ("style.css", "download.js", "CNAME"):
         shutil.copy(SITE / name, out / name)
     shutil.copytree(SITE / "fonts", out / "fonts")
