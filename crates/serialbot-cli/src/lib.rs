@@ -64,6 +64,9 @@ pub struct Context<'a> {
     pub interactive: bool,
     /// Where `cli.json` lives; `None` without a config directory.
     pub config_dir: Option<std::path::PathBuf>,
+    /// The user's config and home directories, where MCP clients keep
+    /// their settings (`mcp install`); `None` if the system has none.
+    pub client_dirs: Option<serialbot_mcp::clients::Dirs>,
 }
 
 impl std::fmt::Debug for Context<'_> {
@@ -129,22 +132,17 @@ where
         }
         Command::Send(a) => commands::send::run(a, &ctx.manager, &mut out),
         Command::Signal(a) => commands::signal::run(a, &ctx.manager, &mut out),
-        Command::Mcp(m) => match &m.command {
-            args::McpCommand::Serve(a) => {
-                let env = commands::mcp::Serve {
-                    manager: Arc::clone(&ctx.manager),
-                    list_ports: Arc::clone(&ctx.list_ports),
-                    interrupted: Arc::clone(&ctx.interrupted),
-                    stdin: stdin.unwrap_or_else(|| Box::new(std::io::empty())),
-                    interactive: ctx.interactive,
-                    config_dir: ctx.config_dir.clone(),
-                };
-                commands::mcp::serve(a, env, &mut out)
-            }
-            args::McpCommand::Stdio => {
-                commands::mcp::stdio(ctx.config_dir.as_deref(), &ctx.interrupted, &mut out)
-            }
-        },
+        Command::Mcp(m) => {
+            let env = McpEnv {
+                manager: &ctx.manager,
+                list_ports: &ctx.list_ports,
+                interrupted: &ctx.interrupted,
+                interactive: ctx.interactive,
+                config_dir: ctx.config_dir.as_deref(),
+                client_dirs: ctx.client_dirs.as_ref(),
+            };
+            run_mcp(&m.command, &env, stdin, &mut out)
+        }
         Command::Run(a) => commands::run::run(a, &ctx.manager, &ctx.interrupted, &mut out),
         Command::Open(a) => {
             let io = commands::open::Io {
@@ -202,6 +200,42 @@ impl Failure {
             exit,
             message: message.into(),
         }
+    }
+}
+
+/// What the `mcp` subcommands take from the [`Context`].
+struct McpEnv<'a> {
+    manager: &'a Arc<SessionManager>,
+    list_ports: &'a Arc<PortLister>,
+    interrupted: &'a Arc<AtomicBool>,
+    interactive: bool,
+    config_dir: Option<&'a std::path::Path>,
+    client_dirs: Option<&'a serialbot_mcp::clients::Dirs>,
+}
+
+/// The `mcp` subcommands.
+fn run_mcp(
+    command: &args::McpCommand,
+    ctx: &McpEnv<'_>,
+    stdin: Option<Box<dyn std::io::Read + Send>>,
+    out: &mut Output<'_>,
+) -> Result<(), Failure> {
+    match command {
+        args::McpCommand::Serve(a) => {
+            let env = commands::mcp::Serve {
+                manager: Arc::clone(ctx.manager),
+                list_ports: Arc::clone(ctx.list_ports),
+                interrupted: Arc::clone(ctx.interrupted),
+                stdin: stdin.unwrap_or_else(|| Box::new(std::io::empty())),
+                interactive: ctx.interactive,
+                config_dir: ctx.config_dir.map(std::path::Path::to_path_buf),
+            };
+            commands::mcp::serve(a, env, out)
+        }
+        args::McpCommand::Install(a) => {
+            commands::mcp::install(a, ctx.client_dirs, ctx.config_dir, out)
+        }
+        args::McpCommand::Stdio => commands::mcp::stdio(ctx.config_dir, ctx.interrupted, out),
     }
 }
 
@@ -318,6 +352,14 @@ pub(crate) mod testing {
             }
         }
 
+        /// Where `mcp install` writes clients' settings (inside `config_dir`).
+        pub(crate) fn client_dirs(&self) -> serialbot_mcp::clients::Dirs {
+            serialbot_mcp::clients::Dirs {
+                config: self.config_dir.join("user-config"),
+                home: self.config_dir.join("home"),
+            }
+        }
+
         /// Runs `serialbot-cli <args>`.
         pub(crate) fn run(&self, args: &[&str]) -> Ran {
             let mut out = Vec::new();
@@ -339,6 +381,7 @@ pub(crate) mod testing {
                 ))),
                 interactive: self.interactive,
                 config_dir: Some(self.config_dir.clone()),
+                client_dirs: Some(self.client_dirs()),
             };
             let code = run(
                 std::iter::once("serialbot-cli").chain(args.iter().copied()),

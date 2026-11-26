@@ -163,6 +163,25 @@ export interface McpStatus {
   stdioCommand: string | null;
 }
 
+/** MCP clients whose settings SerialBot can write. */
+export type McpClientId = "claude-desktop" | "cursor" | "vscode";
+
+/** What adding SerialBot to an MCP client did. */
+export interface ClientInstall {
+  /** The client's product name. */
+  client: string;
+  /** Its configuration file. */
+  path: string;
+  /** Where the previous content was saved, if the file changed. */
+  backup: string | null;
+  /** False when the file already held the entry (or nothing was written). */
+  changed: boolean;
+  /** Why nothing was written, if so. */
+  error: string | null;
+  /** The entry to add by hand when nothing was written. */
+  snippet: string | null;
+}
+
 export type Unlisten = () => void;
 
 export interface Backend {
@@ -241,6 +260,8 @@ export interface Backend {
   onMcpChanged(handler: (status: McpStatus) => void): Promise<Unlisten>;
   mcpApply(settings: McpSettings): Promise<McpStatus>;
   mcpRegenerateToken(): Promise<McpStatus>;
+  /** Writes SerialBot into an MCP client's settings file (keeps everything else, backs it up). */
+  mcpInstallClient(client: McpClientId): Promise<ClientInstall>;
   pendingApprovals(): Promise<ApprovalRequest[]>;
   answerApproval(id: number, decision: Decision): Promise<void>;
   /** Called with the whole queue whenever a request arrives or leaves. */
@@ -340,6 +361,7 @@ export const tauriBackend: Backend = {
   mcpStatus: () => invoke("mcp_status"),
   mcpApply: (settings) => invoke("mcp_apply", { settings }),
   mcpRegenerateToken: () => invoke("mcp_regenerate_token"),
+  mcpInstallClient: (client) => invoke("mcp_install_client", { client }),
   pendingApprovals: () => invoke("pending_approvals"),
   answerApproval: (id, decision) => invoke("answer_approval", { id, decision }),
   onApprovalsChanged: (handler) =>

@@ -159,6 +159,20 @@ pub struct McpTexts {
     pub choices: &'static str,
     /// No server to bridge to.
     pub unreachable: &'static str,
+    /// `mcp install`: before the client and the file.
+    pub installed: &'static str,
+    /// `mcp install`: the file already held the entry.
+    pub unchanged: &'static str,
+    /// `mcp install`: before the backup's path.
+    pub backup: &'static str,
+    /// `mcp install`: the client must be restarted.
+    pub restart: &'static str,
+    /// `mcp install`: what an HTTP client needs running.
+    pub needs_serve: &'static str,
+    /// `mcp install`: before the entry to add by hand.
+    pub by_hand: &'static str,
+    /// `mcp install`: no home or config directory.
+    pub no_dirs: &'static str,
 }
 
 /// Texts of the interactive terminal (`open`).
@@ -366,6 +380,13 @@ static EN_MCP: McpTexts = McpTexts {
     ask: "AI wants",
     choices: "  y allow · s allow for this session · n deny",
     unreachable: "no SerialBot MCP server is running: start `serialbot-cli mcp serve`, or turn the server on in the app",
+    installed: "Added SerialBot to",
+    unchanged: "SerialBot is already set up in",
+    backup: "previous file saved as",
+    restart: "restart the client to load it",
+    needs_serve: "the client reaches `serialbot-cli mcp serve`: keep it running while you use it",
+    by_hand: "add this to the client's settings by hand:",
+    no_dirs: "this system has no home or configuration directory",
 };
 
 static ZH_MCP: McpTexts = McpTexts {
@@ -377,6 +398,13 @@ static ZH_MCP: McpTexts = McpTexts {
     ask: "AI 想要",
     choices: "  y 允许 · s 本会话内都允许 · n 拒绝",
     unreachable: "没有正在运行的 SerialBot MCP 服务：请启动 `serialbot-cli mcp serve`，或在 App 里打开 MCP 服务",
+    installed: "已把 SerialBot 加入",
+    unchanged: "SerialBot 已经配置在",
+    backup: "原文件已备份为",
+    restart: "重启该客户端后生效",
+    needs_serve: "该客户端连接的是 `serialbot-cli mcp serve`：使用时请保持它在运行",
+    by_hand: "请手动把下面的内容加入客户端配置：",
+    no_dirs: "系统没有用户目录或配置目录",
 };
 
 static EN: Strings = Strings {
@@ -658,6 +686,18 @@ static EN: Strings = Strings {
             "mcp.stdio",
             "For clients that start servers as processes (Claude Desktop): forwards to a running mcp serve, else the app",
         ),
+        (
+            "mcp.install",
+            "Add SerialBot to an MCP client's settings (other entries are kept, the old file is backed up)",
+        ),
+        (
+            "mcp.install.client",
+            "claude-desktop (starts mcp stdio), cursor or vscode (reach mcp serve over HTTP)",
+        ),
+        (
+            "mcp.install.print",
+            "Print the settings entry instead of writing it",
+        ),
     ],
 };
 
@@ -919,6 +959,15 @@ static ZH: Strings = Strings {
             "mcp.stdio",
             "给以子进程启动服务的客户端（Claude Desktop）：转发到正在运行的 mcp serve，没有则转发到 App",
         ),
+        (
+            "mcp.install",
+            "把 SerialBot 加入 MCP 客户端的配置（保留其它配置，原文件会备份）",
+        ),
+        (
+            "mcp.install.client",
+            "claude-desktop（启动 mcp stdio）、cursor 或 vscode（通过 HTTP 连接 mcp serve）",
+        ),
+        ("mcp.install.print", "只打印配置内容，不写入文件"),
     ],
 };
 

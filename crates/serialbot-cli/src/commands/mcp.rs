@@ -20,11 +20,12 @@ use std::time::Duration;
 
 use serialbot_core::SessionManager;
 use serialbot_mcp::approval::{ApprovalRequest, Approvals, Decision};
+use serialbot_mcp::clients::{self, Client, Dirs, Server};
 use serialbot_mcp::guard::{Action, AllowAll, Approval, Guard};
 use serialbot_mcp::server::{Listen, PORT_ATTEMPTS, RunningServer};
 use serialbot_mcp::{DEFAULT_PORT, MCP_PATH, SerialTools, generate_token};
 
-use crate::args::{Approve, ServeArgs};
+use crate::args::{Approve, InstallArgs, ServeArgs};
 use crate::config::{self, CliConfig};
 use crate::exit::Exit;
 use crate::output::{Output, Style};
@@ -284,6 +285,72 @@ pub fn token(explicit: Option<&str>, port: u16, dir: Option<&Path>) -> Result<St
         config.save(dir).map_err(usage)?;
     }
     Ok(token)
+}
+
+/// `mcp install`: writes SerialBot into an MCP client's settings. Claude
+/// Desktop gets this program with `mcp stdio`; Cursor and VS Code get
+/// `mcp serve`'s address (the port in `cli.json`, else the default) and
+/// token (made and saved now if there is none yet). A file that cannot be
+/// changed fails with the entry printed for adding by hand; `--print` only
+/// prints it.
+pub fn install(
+    args: &InstallArgs,
+    dirs: Option<&Dirs>,
+    config_dir: Option<&Path>,
+    out: &mut Output<'_>,
+) -> Result<(), Failure> {
+    let m = out.strings().mcp;
+    let client = Client::from(args.client);
+    let port = config_dir
+        .and_then(|dir| CliConfig::load(dir).ok())
+        .and_then(|c| c.mcp_port)
+        .unwrap_or(DEFAULT_PORT);
+    let token = token(None, port, config_dir)?;
+    let exe = std::env::current_exe()
+        .map_or_else(|_| "serialbot-cli".to_owned(), |p| p.display().to_string());
+    let server = Server {
+        url: format!("http://127.0.0.1:{port}{MCP_PATH}"),
+        token,
+        stdio: Some((exe, vec!["mcp".to_owned(), "stdio".to_owned()])),
+    };
+    let usage = |e: String| Failure::new(Exit::Usage, e);
+    if args.print {
+        out.line(
+            client
+                .snippet(&server)
+                .map_err(|e| usage(e.to_string()))?
+                .trim_end(),
+        );
+        return Ok(());
+    }
+    let dirs = dirs.ok_or_else(|| usage(m.no_dirs.to_owned()))?;
+    match clients::install(client, &server, dirs, true) {
+        Ok(done) => {
+            let path = done.path.display();
+            if done.changed {
+                out.line(&format!("{} {}: {path}", m.installed, client.name()));
+            } else {
+                out.line(&format!("{} {}: {path}", m.unchanged, client.name()));
+            }
+            if let Some(backup) = &done.backup {
+                out.error_note(&format!("{} {}", m.backup, backup.display()));
+            }
+            if done.changed {
+                out.error_note(m.restart);
+            }
+            if client != Client::ClaudeDesktop {
+                out.error_note(m.needs_serve);
+            }
+            Ok(())
+        }
+        Err(e) => {
+            out.error_note(m.by_hand);
+            if let Ok(snippet) = client.snippet(&server) {
+                out.line(snippet.trim_end());
+            }
+            Err(usage(e.to_string()))
+        }
+    }
 }
 
 /// Reads typed lines on their own thread (reading blocks).

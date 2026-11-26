@@ -73,14 +73,28 @@ pub fn launcher_for(
     if let Some(image) = appimage.filter(|p| !p.is_empty()) {
         return Some(image.to_owned());
     }
-    let exe = exe?.display().to_string();
-    if exe.to_ascii_lowercase().contains(r"\windowsapps\") {
+    let exe = exe?;
+    if is_packaged(exe) {
         return Some(match local_app_data {
             Some(dir) => format!(r"{dir}\Microsoft\WindowsApps\{STORE_ALIAS}"),
             None => STORE_ALIAS.to_owned(),
         });
     }
-    Some(exe)
+    Some(exe.display().to_string())
+}
+
+/// Whether `exe` is installed from an MSIX package (it lies under
+/// `WindowsApps`).
+pub fn is_packaged(exe: &Path) -> bool {
+    exe.display()
+        .to_string()
+        .to_ascii_lowercase()
+        .contains(r"\windowsapps\")
+}
+
+/// Whether this app runs from an MSIX package (the Microsoft Store app).
+pub fn packaged() -> bool {
+    std::env::current_exe().is_ok_and(|exe| is_packaged(&exe))
 }
 
 /// The execution alias the Microsoft Store package declares
@@ -186,5 +200,10 @@ mod tests {
             launcher_for(Some(packaged), None, None).as_deref(),
             Some("serialbot.exe")
         );
+        assert!(is_packaged(packaged));
+        assert!(!is_packaged(Path::new(
+            r"C:\Program Files\SerialBot\serialbot.exe"
+        )));
+        assert!(!super::packaged());
     }
 }

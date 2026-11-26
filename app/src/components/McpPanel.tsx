@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 import { useEffect, useState } from "react";
-import type { McpSettings, McpStatus } from "../api";
+import type { ClientInstall, McpClientId, McpSettings, McpStatus } from "../api";
 import { claudeCommand, claudeDesktopConfig } from "../api";
 import type { Strings } from "../i18n";
 
@@ -12,9 +12,18 @@ interface Props {
   onRegenerate: () => void;
   /** Copies text to the clipboard; rejects if not allowed. */
   copy: (text: string) => Promise<void>;
+  /** Writes SerialBot into a client's settings file. */
+  onInstall: (client: McpClientId) => Promise<ClientInstall>;
 }
 
-export function McpPanel({ t, status, onApply, onRegenerate, copy }: Props) {
+const CLIENTS: { id: McpClientId; name: string }[] = [
+  { id: "claude-desktop", name: "Claude Desktop" },
+  { id: "cursor", name: "Cursor" },
+  { id: "vscode", name: "VS Code" },
+];
+
+export function McpPanel({ t, status, onApply, onRegenerate, copy, onInstall }: Props) {
+  const [installed, setInstalled] = useState<ClientInstall | null>(null);
   const [port, setPort] = useState(String(status.settings.port));
   const [token, setToken] = useState(status.settings.token);
   const [note, setNote] = useState<string | null>(null);
@@ -133,6 +142,47 @@ export function McpPanel({ t, status, onApply, onRegenerate, copy }: Props) {
             {t.copy}
           </button>
         </div>
+      )}
+      <div className="row mcp-clients">
+        <span className="muted">{t.mcpAddTo}</span>
+        {CLIENTS.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            onClick={() => {
+              setNote(null);
+              onInstall(c.id).then(setInstalled, (e: unknown) => setNote(String(e)));
+            }}
+          >
+            {c.name}
+          </button>
+        ))}
+      </div>
+      {installed && !installed.error && (
+        <p className="ok">
+          {installed.changed
+            ? t.mcpAdded(installed.client, installed.path)
+            : t.mcpAlreadyAdded(installed.client)}
+          {installed.backup && ` ${t.mcpBackup(installed.backup)}`}
+        </p>
+      )}
+      {installed?.error && (
+        <>
+          <p className="error">{installed.error}</p>
+          {installed.snippet && (
+            <div className="row">
+              <span className="muted">{t.mcpAddByHand(installed.client)}</span>
+              <pre className="grow config">{installed.snippet}</pre>
+              <button
+                type="button"
+                aria-label={t.copyClientConfig(installed.client)}
+                onClick={() => copyNote(installed.snippet ?? "")}
+              >
+                {t.copy}
+              </button>
+            </div>
+          )}
+        </>
       )}
       {desktop && (
         <div className="row">
