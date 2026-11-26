@@ -113,7 +113,7 @@ pub enum Slash {
     Time,
     /// `/log [file]`: start saving (to the file) or stop.
     Log(Option<String>),
-    /// `/send-file <file>`.
+    /// `/send-file [--xmodem | --xmodem-1k | --ymodem | --ymodem-128] <file>`.
     SendFile(String),
     /// `/run <script>`.
     Run(String),
@@ -182,7 +182,10 @@ pub const SLASH_COMMANDS: &[(&str, &str)] = &[
     ("reset", ""),
     ("rts", ""),
     ("run", "<script>"),
-    ("send-file", "<file>"),
+    (
+        "send-file",
+        "<file>, or --xmodem|--xmodem-1k|--ymodem|--ymodem-128 <file>",
+    ),
     ("stop", ""),
     ("time", ""),
 ];

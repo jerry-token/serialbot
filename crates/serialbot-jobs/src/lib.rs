@@ -12,6 +12,7 @@
 pub mod export;
 pub mod filesend;
 pub mod repeat;
+pub mod xmodem;
 
 #[cfg(test)]
 pub(crate) mod test_dir {

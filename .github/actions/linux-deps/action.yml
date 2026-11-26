@@ -1,12 +1,12 @@
 name: Linux system packages
 description: >
-  Installs the Ubuntu packages the workspace needs (udev, socat, the Tauri
+  Installs the Ubuntu packages the workspace needs (udev, socat, lrzsz, the Tauri
   libraries), restored from the Actions cache when possible: the Ubuntu
   mirrors are sometimes slow enough to make a 1-minute job take 20.
 inputs:
   packages:
     description: Space-separated package names
-    default: libudev-dev socat libwebkit2gtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev
+    default: libudev-dev socat lrzsz libwebkit2gtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev
   version:
     description: Bump to rebuild the cache
     default: "1"

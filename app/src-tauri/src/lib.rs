@@ -212,8 +212,9 @@ mod ipc {
         path: String,
         chunk: usize,
         delay_ms: u64,
+        protocol: Option<String>,
     ) -> Result<FileSendStatus, String> {
-        state.send_file(id, &path, chunk, delay_ms)
+        state.send_file(id, &path, chunk, delay_ms, protocol.as_deref())
     }
 
     #[tauri::command(async)]

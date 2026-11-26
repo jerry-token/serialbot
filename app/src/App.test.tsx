@@ -297,7 +297,7 @@ class FakeBackend implements Backend {
   }
 
   openPath: string | null = "/home/me/fw.bin";
-  fileCalls: Array<[number, string, number, number]> = [];
+  fileCalls: Array<[number, string, number, number, string]> = [];
   file: FileSendStatus = { running: false, name: null, sent: 0, total: 0, error: null };
   failFile: string | null = null;
   fileStops = 0;
@@ -306,10 +306,17 @@ class FakeBackend implements Backend {
     return this.openPath;
   }
 
-  async sendFile(id: number, path: string, chunk: number, delayMs: number) {
+  async sendFile(id: number, path: string, chunk: number, delayMs: number, protocol: string) {
     if (this.failFile) throw this.failFile;
-    this.fileCalls.push([id, path, chunk, delayMs]);
-    this.file = { running: true, name: "fw.bin", sent: 0, total: 2048, error: null };
+    this.fileCalls.push([id, path, chunk, delayMs, protocol]);
+    this.file = {
+      running: true,
+      name: "fw.bin",
+      sent: 0,
+      total: 2048,
+      error: null,
+      protocol: protocol === "raw" ? null : protocol.toUpperCase(),
+    };
     return this.file;
   }
 
@@ -1268,7 +1275,7 @@ describe("App", () => {
     await user.clear(pause);
     await user.type(pause, "5");
     await user.click(screen.getByRole("button", { name: "Choose file and send…" }));
-    await waitFor(() => expect(backend.fileCalls).toEqual([[1, "/home/me/fw.bin", 256, 5]]));
+    await waitFor(() => expect(backend.fileCalls).toEqual([[1, "/home/me/fw.bin", 256, 5, "raw"]]));
     expect(screen.queryByLabelText("Chunk bytes")).toBeNull();
     await waitFor(() => expect(status()).toHaveTextContent("Sending fw.bin 0% (0 B / 2.0 KB)"));
     expect(fileButton()).toBeDisabled();
@@ -1279,6 +1286,29 @@ describe("App", () => {
     await waitFor(() => expect(status()).not.toHaveTextContent("Sending"));
     expect(backend.fileStops).toBe(1);
     expect(fileButton()).toBeEnabled();
+  });
+
+  it("sends a file with YMODEM and waits for the bootloader", async () => {
+    const { backend, user } = setup();
+    await openPort(user);
+    await user.click(screen.getByRole("button", { name: "Send a file" }));
+    await user.selectOptions(screen.getByLabelText("Protocol"), "YMODEM (1K)");
+    expect(screen.queryByLabelText("Chunk bytes")).toBeNull();
+    expect(screen.getByText(/Put the device in download mode/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Choose file and send…" }));
+    await waitFor(() =>
+      expect(backend.fileCalls).toEqual([[1, "/home/me/fw.bin", 1024, 0, "ymodem"]]),
+    );
+    await waitFor(() =>
+      expect(status()).toHaveTextContent("YMODEM: waiting for the device to start receiving fw.bin"),
+    );
+    backend.file = { ...backend.file, sent: 1024 };
+    await waitFor(() => expect(status()).toHaveTextContent("Sending fw.bin 50% (1.0 KB / 2.0 KB) · YMODEM"));
+    // The panel remembers the protocol.
+    backend.file = { ...backend.file, running: false };
+    await waitFor(() => expect(status()).not.toHaveTextContent("Sending"));
+    await user.click(screen.getByRole("button", { name: "Send a file" }));
+    expect(screen.getByLabelText("Protocol")).toHaveValue("ymodem");
   });
 
   it("handles a cancelled dialog, bad options and failed file sends", async () => {
@@ -1295,7 +1325,7 @@ describe("App", () => {
     fireEvent.change(screen.getByLabelText("Chunk bytes"), { target: { value: "999999" } });
     fireEvent.change(screen.getByLabelText("Pause ms"), { target: { value: "" } });
     await user.click(screen.getByRole("button", { name: "Choose file and send…" }));
-    await waitFor(() => expect(backend.fileCalls).toEqual([[1, "/tmp/a.bin", 65536, 0]]));
+    await waitFor(() => expect(backend.fileCalls).toEqual([[1, "/tmp/a.bin", 65536, 0, "raw"]]));
 
     // The device went away during the send.
     backend.file = { ...backend.file, running: false, error: "session is Disconnected" };

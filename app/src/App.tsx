@@ -769,13 +769,13 @@ export function App({
     return () => clearInterval(timer);
   }, [backend, sendingIds]);
 
-  const startFileSend = async ({ chunk, delayMs }: FileSendOptions) => {
+  const startFileSend = async ({ protocol, chunk, delayMs }: FileSendOptions) => {
     if (!active) return;
     const id = active.id;
     try {
       const path = await backend.chooseOpenFile();
       if (!path) return;
-      const status = await backend.sendFile(id, path, chunk, delayMs);
+      const status = await backend.sendFile(id, path, chunk, delayMs, protocol);
       setFileSends((all) => ({ ...all, [id]: status }));
       setError(null);
     } catch (e) {
@@ -1370,12 +1370,15 @@ export function App({
           )}
           {active && fileSend?.running && (
             <span className="progress">
-              {t.sendingFile(
-                fileSend.name ?? "",
-                fileSend.total > 0 ? Math.floor((fileSend.sent * 100) / fileSend.total) : 0,
-                formatBytes(fileSend.sent),
-                formatBytes(fileSend.total),
-              )}{" "}
+              {fileSend.protocol && fileSend.sent === 0
+                ? t.waitingForReceiver(fileSend.name ?? "", fileSend.protocol)
+                : t.sendingFile(
+                    fileSend.name ?? "",
+                    fileSend.total > 0 ? Math.floor((fileSend.sent * 100) / fileSend.total) : 0,
+                    formatBytes(fileSend.sent),
+                    formatBytes(fileSend.total),
+                  )}
+              {fileSend.protocol && fileSend.sent > 0 && ` · ${fileSend.protocol}`}{" "}
               <button type="button" className="chip" onClick={() => void stopFileSend(active.id)}>
                 {t.stopFile}
               </button>

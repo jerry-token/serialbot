@@ -65,7 +65,7 @@ SerialBot 补上的就是这一环，让 Agent 直接面对设备：
 **发送**
 - ✍️ 多行输入，文本或 HEX，可选结尾符；`Enter` 发送，`Shift+Enter` 换行，`↑` 调出历史。发出去的是原始字节，和输入完全一致，只加你选的结尾符。
 - 🧮 HEX 发送可自动追加校验：CRC-8、CRC-16（Modbus、CCITT）、CRC-32、XOR、SUM8、LRC。
-- ⏲️ 定时发送、📋 扩展命令列表（点一下发送，或整组按顺序执行；⧉ 可把命令列表放到独立窗口，并单独选择发往哪个端口）、📄 分块发送文件。
+- ⏲️ 定时发送、📋 扩展命令列表（点一下发送，或整组按顺序执行；⧉ 可把命令列表放到独立窗口，并单独选择发往哪个端口）、📄 发送文件：分块直接发送，或用 XMODEM（128 / 1K）、YMODEM 发给 MCU 的 bootloader（终端里 `/send-file --ymodem fw.bin`，命令行 `serialbot-cli send <端口> --file fw.bin --protocol ymodem`）。
 
 **AI 能用，你说了算**
 - 🤖 内置 MCP 服务：Claude Code、Claude Desktop 等 AI 工具可以列出和打开串口、收发数据、等待回复、控制 DTR / RTS，用的就是你在窗口里看到的会话。

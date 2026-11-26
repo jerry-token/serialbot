@@ -96,6 +96,13 @@ const en = {
   chunkDelay: "Pause ms",
   chunkDelayHint: "Wait after each chunk, for devices without flow control",
   chooseFile: "Choose file and send…",
+  fileProtocol: "Protocol",
+  fileProtocolHint: "Plain bytes, or XMODEM / YMODEM to a bootloader",
+  fileProtocolRaw: "Plain bytes",
+  fileProtocolNote:
+    "Put the device in download mode; sending starts when its bootloader asks (C or NAK), within a minute.",
+  waitingForReceiver: (name: string, protocol: string) =>
+    `${protocol}: waiting for the device to start receiving ${name}…`,
   sendingFile: (name: string, percent: number, sent: string, total: string) =>
     `Sending ${name} ${percent}% (${sent} / ${total})`,
   stopFile: "Stop",
@@ -406,6 +413,11 @@ const zh: Strings = {
   chunkDelay: "块间隔 ms",
   chunkDelayHint: "每块之后等待，用于没有流控的设备",
   chooseFile: "选择文件并发送…",
+  fileProtocol: "协议",
+  fileProtocolHint: "直接发送字节，或用 XMODEM / YMODEM 发给 bootloader",
+  fileProtocolRaw: "直接发送",
+  fileProtocolNote: "请让设备进入下载模式；bootloader 发出请求（C 或 NAK）后开始发送，最多等一分钟。",
+  waitingForReceiver: (name: string, protocol: string) => `${protocol}：等待设备开始接收 ${name}…`,
   sendingFile: (name: string, percent: number, sent: string, total: string) =>
     `正在发送 ${name} ${percent}%（${sent} / ${total}）`,
   stopFile: "停止",

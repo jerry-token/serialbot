@@ -24,6 +24,8 @@ env:
   RUSTDOCFLAGS: -D warnings
   # Virtual-port tests must run in CI, never silently skip.
   SERIALBOT_REQUIRE_SOCAT: "1"
+  # XMODEM / YMODEM are checked against lrzsz's receivers.
+  SERIALBOT_REQUIRE_LRZSZ: "1"
   # The toolchain comes from rust-toolchain.toml (rustup installs it on first use).
 
 jobs:

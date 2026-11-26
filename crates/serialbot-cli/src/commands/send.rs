@@ -16,7 +16,9 @@ use serialbot_core::transport::TransportError;
 use serialbot_core::{SessionManager, encoding, hex};
 
 use crate::Failure;
-use crate::args::{PortArgs, SendArgs};
+use serialbot_jobs::xmodem::{self, ModemError, SessionLink};
+
+use crate::args::{FileProtocol, PortArgs, SendArgs};
 use crate::exit::Exit;
 use crate::i18n::Strings;
 use crate::output::Output;
@@ -32,11 +34,19 @@ const READ_STEP: usize = 64 * 1024;
 /// file); 3 the port cannot be opened; 4 the device went away. With
 /// `--print`, received bytes go to standard output unchanged: up to the
 /// match, or everything within `--timeout` without `--expect`.
+///
+/// With `--protocol` the file goes to a bootloader with XMODEM / YMODEM:
+/// 0 delivered; 1 the receiver did not start within `--timeout` (60s),
+/// refused blocks or cancelled; 4 the device went away before the data was
+/// in.
 pub fn run(args: &SendArgs, manager: &SessionManager, out: &mut Output<'_>) -> Result<(), Failure> {
     let s = out.strings();
     let data = payload(args, s)?;
     let session = open(manager, &args.port, s)?;
-    let result = exchange(&session, args, &data, out);
+    let result = match args.protocol {
+        Some(protocol) => transfer(&session, args, protocol, &data, out),
+        None => exchange(&session, args, &data, out),
+    };
     // The port is the user's again as soon as we are done.
     let _ = manager.remove(session.id());
     result
@@ -94,6 +104,52 @@ pub(crate) fn lost(e: &SessionError, port: &str, s: &Strings) -> Failure {
     )
 }
 
+/// The default `--timeout`.
+const TIMEOUT: Duration = Duration::from_secs(5);
+
+/// `--protocol`: the file to a bootloader.
+fn transfer(
+    session: &Session,
+    args: &SendArgs,
+    protocol: FileProtocol,
+    data: &[u8],
+    out: &mut Output<'_>,
+) -> Result<(), Failure> {
+    let s = out.strings();
+    let modem = protocol.modem(args.timeout.unwrap_or(Duration::from_secs(60)));
+    let name = args
+        .file
+        .as_ref()
+        .and_then(|p| p.file_name())
+        .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+    out.error_note(&format!("{}: {} {name}", modem.name(), s.modem_waiting));
+    let mut link = SessionLink::new(session, || false);
+    match xmodem::send(&mut link, modem, &name, data, &mut |_| {}) {
+        Ok(done) => {
+            let closed = if done.closed_early {
+                format!("; {}", s.modem_closed_early)
+            } else {
+                String::new()
+            };
+            out.error_note(&format!(
+                "{} {name} ({} B, {}){closed}",
+                s.modem_sent,
+                data.len(),
+                modem.name()
+            ));
+            Ok(())
+        }
+        Err(ModemError::Link(e)) => Err(Failure::new(
+            Exit::Disconnected,
+            format!("{} ({}): {e}", s.disconnected, args.port.port),
+        )),
+        Err(e) => Err(Failure::new(
+            Exit::Timeout,
+            format!("{}: {e}", modem.name()),
+        )),
+    }
+}
+
 fn exchange(
     session: &Session,
     args: &SendArgs,
@@ -102,17 +158,18 @@ fn exchange(
 ) -> Result<(), Failure> {
     let s = out.strings();
     let port = &args.port.port;
+    let timeout = args.timeout.unwrap_or(TIMEOUT);
     let start = session.end();
     let Some(pattern) = &args.expect else {
         session.write(data).map_err(|e| lost(&e, port, s))?;
         if args.print {
-            std::thread::sleep(args.timeout);
+            std::thread::sleep(timeout);
             print_received(session, start, None, out);
         }
         return Ok(());
     };
     let found = session
-        .send_and_expect(data, pattern, args.timeout, MATCH_WINDOW)
+        .send_and_expect(data, pattern, timeout, MATCH_WINDOW)
         .map_err(|e| lost(&e, port, s));
     let until = match &found {
         Ok(Some(m)) => Some(m.next),
@@ -125,7 +182,7 @@ fn exchange(
         Some(_) => Ok(()),
         None => Err(Failure::new(
             Exit::Timeout,
-            format!("{} ({}): {pattern}", s.no_match, human(args.timeout)),
+            format!("{} ({}): {pattern}", s.no_match, human(timeout)),
         )),
     }
 }
@@ -360,5 +417,93 @@ mod tests {
             "{}",
             ran.err
         );
+    }
+
+    /// A bootloader on `port`: starts with `C` once the port is open, ACKs
+    /// every block and the EOT; returns the blocks' bytes.
+    fn bootloader(f: &Fixture, port: &'static str) -> std::thread::JoinHandle<Vec<u8>> {
+        let devices = std::sync::Arc::clone(&f.devices);
+        std::thread::spawn(move || {
+            let deadline = std::time::Instant::now() + Duration::from_secs(10);
+            let device = loop {
+                if let Some(d) = devices.lock().unwrap().get(port).cloned() {
+                    break d;
+                }
+                assert!(std::time::Instant::now() < deadline, "never opened");
+                std::thread::sleep(Duration::from_millis(1));
+            };
+            device.send(b"C");
+            let mut got = Vec::new();
+            while std::time::Instant::now() < deadline {
+                let bytes = device.take_written();
+                if bytes.is_empty() {
+                    std::thread::sleep(Duration::from_millis(1));
+                    continue;
+                }
+                got.extend_from_slice(&bytes);
+                device.send(&[0x06]);
+                if bytes == [0x04] {
+                    break;
+                }
+            }
+            got
+        })
+    }
+
+    #[test]
+    fn sends_a_file_to_a_bootloader_with_xmodem() {
+        let f = Fixture::new();
+        let dir = std::env::temp_dir().join(format!("serialbot-cli-xmodem-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("fw.bin");
+        std::fs::write(&path, [0xAB; 200]).unwrap();
+        let device = bootloader(&f, "mock0");
+        let path = path.to_str().unwrap();
+        let ran = f.run(&["send", "mock0", "--file", path, "--protocol", "xmodem-1k"]);
+        assert_eq!(ran.code, 0, "{ran:?}");
+        assert!(
+            ran.err.contains("XMODEM-1K: waiting for the device"),
+            "{ran:?}"
+        );
+        assert!(
+            ran.err.contains("sent fw.bin (200 B, XMODEM-1K)"),
+            "{ran:?}"
+        );
+        // 200 bytes: one 1 KiB block (more than 128 left), then EOT.
+        assert_eq!(device.join().unwrap().len(), 1029 + 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_bootloader_that_never_starts_exits_with_1() {
+        let f = Fixture::new();
+        let dir =
+            std::env::temp_dir().join(format!("serialbot-cli-nostart-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("fw.bin");
+        std::fs::write(&path, b"x").unwrap();
+        let path = path.to_str().unwrap();
+        let ran = f.run(&[
+            "send",
+            "mock0",
+            "--file",
+            path,
+            "--protocol",
+            "ymodem",
+            "--timeout",
+            "100ms",
+        ]);
+        assert_eq!(ran.code, Exit::Timeout as u8, "{ran:?}");
+        assert!(
+            ran.err.contains("YMODEM: the receiver did not start"),
+            "{ran:?}"
+        );
+        let ran = f.run(&["send", "mock0", "--protocol", "ymodem", "AT"]);
+        assert_eq!(
+            ran.code,
+            Exit::Usage as u8,
+            "--protocol needs --file: {ran:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

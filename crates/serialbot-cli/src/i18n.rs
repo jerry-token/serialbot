@@ -82,6 +82,12 @@ pub struct Strings {
     pub cannot_open: &'static str,
     /// The device went away; followed by the port.
     pub disconnected: &'static str,
+    /// `send --protocol`: waiting for the bootloader; then the file name.
+    pub modem_waiting: &'static str,
+    /// `send --protocol`: delivered; then the file name.
+    pub modem_sent: &'static str,
+    /// The receiver closed the port right after the last block.
+    pub modem_closed_early: &'static str,
     /// No reply matched in time; followed by the pattern.
     pub no_match: &'static str,
     /// Reading the file to send failed; followed by the reason.
@@ -208,6 +214,8 @@ pub struct Term {
     pub baud: &'static str,
     /// A file is being sent; followed by its name.
     pub sending: &'static str,
+    /// A file waits for the bootloader (XMODEM / YMODEM).
+    pub modem_waiting: &'static str,
     /// A file was sent; followed by its name.
     pub sent: &'static str,
     /// Something failed; followed by the reason.
@@ -268,6 +276,7 @@ static EN_TERM: Term = Term {
     back: "reconnected",
     baud: "baud rate",
     sending: "sending",
+    modem_waiting: "waiting for the device to start receiving",
     sent: "sent",
     failed: "failed",
     display: "display",
@@ -307,6 +316,7 @@ static ZH_TERM: Term = Term {
     back: "已重新连接",
     baud: "波特率",
     sending: "正在发送",
+    modem_waiting: "等待设备开始接收",
     sent: "已发送",
     failed: "失败",
     display: "显示",
@@ -420,6 +430,9 @@ static EN: Strings = Strings {
     cannot_open: "cannot open",
     disconnected: "the device went away",
     no_match: "no reply matched within the timeout",
+    modem_waiting: "waiting for the device to start receiving",
+    modem_sent: "sent",
+    modem_closed_early: "the device closed the port after the last block",
     cannot_read: "cannot read",
     empty_data: "nothing to send",
     term: &EN_TERM,
@@ -469,7 +482,14 @@ static EN: Strings = Strings {
             "send.expect",
             "Wait for a reply matching this regular expression",
         ),
-        ("send.timeout", "How long to wait (500ms, 5s, 1m)"),
+        (
+            "send.timeout",
+            "How long to wait (500ms, 5s, 1m); 5s, or 60s for --protocol to start",
+        ),
+        (
+            "send.protocol",
+            "Send --file to a bootloader: xmodem, xmodem-1k, ymodem or ymodem-128",
+        ),
         ("send.print", "Print what is received while waiting"),
         (
             "monitor",
@@ -714,6 +734,9 @@ static ZH: Strings = Strings {
     cannot_open: "无法打开",
     disconnected: "设备已断开",
     no_match: "超时内没有收到匹配的回复",
+    modem_waiting: "等待设备开始接收",
+    modem_sent: "已发送",
+    modem_closed_early: "设备在最后一块之后关闭了端口",
     cannot_read: "无法读取",
     empty_data: "没有要发送的数据",
     term: &ZH_TERM,
@@ -760,7 +783,14 @@ static ZH: Strings = Strings {
         ("send.encoding", "文本编码（utf-8、gbk……）"),
         ("send.checksum", "追加在数据后的校验"),
         ("send.expect", "等待匹配这个正则表达式的回复"),
-        ("send.timeout", "等待多久（500ms、5s、1m）"),
+        (
+            "send.timeout",
+            "等待多久（500ms、5s、1m）；默认 5s，--protocol 等待开始时默认 60s",
+        ),
+        (
+            "send.protocol",
+            "把 --file 发给 bootloader：xmodem、xmodem-1k、ymodem 或 ymodem-128",
+        ),
         ("send.print", "等待期间输出收到的内容"),
         (
             "monitor",
