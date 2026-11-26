@@ -2,7 +2,8 @@
 // Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! Sending a file: its bytes are written to a session in chunks, with an
 //! optional pause after each chunk for devices that cannot keep up (no
-//! flow control, small receive buffers).
+//! flow control, small receive buffers), or with XMODEM / YMODEM to a
+//! bootloader (see [`crate::xmodem`]).
 //!
 //! Each session has at most one file job, on its own thread, so the window
 //! stays responsive and can show progress or stop it. Markers in the log
@@ -16,6 +17,8 @@ use std::time::Duration;
 
 use serde::Serialize;
 use serialbot_core::Session;
+
+use crate::xmodem::{self, Modem, ModemError, SessionLink};
 
 /// Largest file accepted (64 MiB); serial links rarely carry more and the
 /// whole file is read into memory.
@@ -39,6 +42,11 @@ pub struct FileSendStatus {
     pub total: u64,
     /// Why the job stopped early, if a write failed.
     pub error: Option<String>,
+    /// `XMODEM`, `XMODEM-1K`, `YMODEM` or `YMODEM-128`; `None` for a
+    /// plain send.
+    pub protocol: Option<String>,
+    /// Blocks sent again (XMODEM / YMODEM).
+    pub retries: u32,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -102,23 +110,39 @@ impl FileSends {
         if delay_ms > MAX_DELAY_MS {
             return Err(format!("the delay must be at most {MAX_DELAY_MS} ms"));
         }
-        let size = std::fs::metadata(path)
-            .map_err(|e| format!("cannot read {}: {e}", path.display()))?
-            .len();
-        if size > MAX_FILE_BYTES {
-            return Err(format!(
-                "the file is too large ({size} bytes; at most {MAX_FILE_BYTES})"
-            ));
-        }
-        let data =
-            std::fs::read(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
-        if data.is_empty() {
-            return Err("the file is empty".into());
-        }
-        let name = path.file_name().map_or_else(
-            || path.display().to_string(),
-            |n| n.to_string_lossy().into_owned(),
-        );
+        let (name, data) = read_file(path)?;
+        let delay = Duration::from_millis(delay_ms);
+        Ok(self.spawn(id, name, data, None, move |job| {
+            run(&session, job, chunk, delay);
+        }))
+    }
+
+    /// Reads the file at `path` and starts sending it to `session` with
+    /// XMODEM or YMODEM (see [`crate::xmodem`]): the receiver must start
+    /// the transfer within `modem.start_timeout`. Stops the session's
+    /// previous job first. Fails like [`FileSends::start`] for a file that
+    /// cannot be sent.
+    pub fn start_modem(
+        &self,
+        id: u32,
+        session: Arc<Session>,
+        path: &Path,
+        modem: Modem,
+    ) -> Result<FileSendStatus, String> {
+        let (name, data) = read_file(path)?;
+        Ok(self.spawn(id, name, data, Some(modem), move |job| {
+            run_modem(&session, job, modem);
+        }))
+    }
+
+    fn spawn(
+        &self,
+        id: u32,
+        name: String,
+        data: Vec<u8>,
+        modem: Option<Modem>,
+        body: impl FnOnce(&Running) + Send + 'static,
+    ) -> FileSendStatus {
         self.stop(id);
         let status = Arc::new(Mutex::new(FileSendStatus {
             running: true,
@@ -126,13 +150,21 @@ impl FileSends {
             sent: 0,
             total: data.len() as u64,
             error: None,
+            protocol: modem.map(|m| m.name().to_owned()),
+            retries: 0,
         }));
         let stop = Arc::new((Mutex::new(false), Condvar::new()));
         let thread = {
-            let stop = Arc::clone(&stop);
-            let status = Arc::clone(&status);
-            let delay = Duration::from_millis(delay_ms);
-            std::thread::spawn(move || run(&session, &name, &data, chunk, delay, &stop, &status))
+            let job = Running {
+                name,
+                data,
+                stop: Arc::clone(&stop),
+                status: Arc::clone(&status),
+            };
+            std::thread::spawn(move || {
+                body(&job);
+                lock(&job.status).running = false;
+            })
         };
         let started = lock(&status).clone();
         lock(&self.jobs).insert(
@@ -143,7 +175,7 @@ impl FileSends {
                 thread: Some(thread),
             },
         );
-        Ok(started)
+        started
     }
 
     /// Stops the session's job, if one is running, and waits for it to end.
@@ -182,21 +214,51 @@ impl FileSends {
     }
 }
 
-fn run(
-    session: &Session,
-    name: &str,
-    data: &[u8],
-    chunk: usize,
-    delay: Duration,
-    stop: &(Mutex<bool>, Condvar),
-    status: &Mutex<FileSendStatus>,
-) {
+/// The file name (without directories) and contents of `path`, if it can
+/// be sent: readable, not empty, at most [`MAX_FILE_BYTES`].
+fn read_file(path: &Path) -> Result<(String, Vec<u8>), String> {
+    let size = std::fs::metadata(path)
+        .map_err(|e| format!("cannot read {}: {e}", path.display()))?
+        .len();
+    if size > MAX_FILE_BYTES {
+        return Err(format!(
+            "the file is too large ({size} bytes; at most {MAX_FILE_BYTES})"
+        ));
+    }
+    let data = std::fs::read(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    if data.is_empty() {
+        return Err("the file is empty".into());
+    }
+    let name = path.file_name().map_or_else(
+        || path.display().to_string(),
+        |n| n.to_string_lossy().into_owned(),
+    );
+    Ok((name, data))
+}
+
+/// What a job's thread works on.
+struct Running {
+    name: String,
+    data: Vec<u8>,
+    /// Set to stop; the condvar wakes the thread from a pause.
+    stop: Arc<(Mutex<bool>, Condvar)>,
+    status: Arc<Mutex<FileSendStatus>>,
+}
+
+impl Running {
+    fn stopped(&self) -> bool {
+        *lock(&self.stop.0)
+    }
+}
+
+fn run(session: &Session, job: &Running, chunk: usize, delay: Duration) {
+    let (name, data, stop, status) = (&job.name, &job.data, &*job.stop, &*job.status);
     let total = data.len();
     session.mark(&format!("send file {name} ({total} bytes)"));
     let mut sent = 0;
     let mut end = None;
     for part in data.chunks(chunk) {
-        if *lock(&stop.0) {
+        if job.stopped() {
             end = Some(format!("file send stopped at {sent}/{total} bytes"));
             break;
         }
@@ -219,7 +281,45 @@ fn run(
         }
     }
     session.mark(end.as_deref().unwrap_or("file sent"));
-    lock(status).running = false;
+}
+
+fn run_modem(session: &Session, job: &Running, modem: Modem) {
+    let (name, total) = (&job.name, job.data.len());
+    let protocol = modem.name();
+    session.mark(&format!(
+        "send file {name} ({total} bytes) with {protocol}: waiting for the receiver"
+    ));
+    let mut link = SessionLink::new(session, || job.stopped());
+    let result = xmodem::send(&mut link, modem, name, &job.data, &mut |sent| {
+        lock(&job.status).sent = sent;
+    });
+    let end = match result {
+        Ok(done) => {
+            lock(&job.status).retries = done.retries;
+            let again = if done.retries > 0 {
+                format!(", {} blocks sent again", done.retries)
+            } else {
+                String::new()
+            };
+            let closed = if done.closed_early {
+                "; the receiver closed the port after the last block"
+            } else {
+                ""
+            };
+            format!("file sent with {protocol}{again}{closed}")
+        }
+        Err(ModemError::Stopped) => {
+            let sent = lock(&job.status).sent;
+            format!("{protocol} send stopped at {sent}/{total} bytes")
+        }
+        Err(e) => {
+            let sent = lock(&job.status).sent;
+            let e = e.to_string();
+            lock(&job.status).error = Some(e.clone());
+            format!("{protocol} send failed at {sent}/{total} bytes: {e}")
+        }
+    };
+    session.mark(&end);
 }
 
 #[cfg(test)]
@@ -358,6 +458,91 @@ mod tests {
         assert!(err(&dir.0.join("missing.bin"), 1, 0).contains("cannot read"));
         assert!(err(&dir.0, 1, 0).contains("cannot read"), "a directory");
         assert_eq!(jobs.status(1), FileSendStatus::default());
+    }
+
+    /// A device that asks for XMODEM with `C` until data comes and ACKs every block and the
+    /// EOT; returns everything it received when the EOT came.
+    fn xmodem_device(d: MockDevice) -> std::thread::JoinHandle<Vec<u8>> {
+        std::thread::spawn(move || {
+            let mut got = Vec::new();
+            let deadline = Instant::now() + Duration::from_secs(10);
+            let mut last_c: Option<Instant> = None;
+            while Instant::now() < deadline {
+                let bytes = d.take_written();
+                if bytes.is_empty() {
+                    // Like a bootloader: C again and again until data comes.
+                    if got.is_empty()
+                        && last_c.is_none_or(|t| t.elapsed() > Duration::from_millis(50))
+                    {
+                        d.send(b"C");
+                        last_c = Some(Instant::now());
+                    }
+                    std::thread::sleep(Duration::from_millis(2));
+                    continue;
+                }
+                got.extend_from_slice(&bytes);
+                d.send(&[xmodem::ACK]);
+                if bytes == [xmodem::EOT] {
+                    break;
+                }
+            }
+            got
+        })
+    }
+
+    #[test]
+    fn sends_with_xmodem_and_reports_the_protocol() {
+        let dir = TempDir::new("filesend-xmodem");
+        let path = file(&dir, "fw.bin", &[0x55; 300]);
+        let (s, d) = session();
+        let device = xmodem_device(d);
+        let jobs = FileSends::default();
+        let modem = Modem::parse("xmodem").unwrap();
+        let started = jobs.start_modem(1, Arc::clone(&s), &path, modem).unwrap();
+        assert_eq!(started.protocol.as_deref(), Some("XMODEM"));
+        wait_until(|| !jobs.status(1).running);
+        let got = device.join().unwrap();
+        let status = jobs.status(1);
+        assert_eq!((status.sent, status.total, status.error), (300, 300, None));
+        // Three 128-byte CRC blocks, then EOT.
+        assert_eq!(got.len(), 3 * 133 + 1);
+        assert_eq!(&got[..3], &[xmodem::SOH, 1, 0xFE]);
+        assert_eq!(
+            markers(&s),
+            [
+                "send file fw.bin (300 bytes) with XMODEM: waiting for the receiver",
+                "file sent with XMODEM"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_modem_send_reports_failure_and_stops_on_request() {
+        let dir = TempDir::new("filesend-modem-fail");
+        let path = file(&dir, "fw.bin", b"abc");
+        let (s, _d) = session();
+        let jobs = FileSends::default();
+        let mut modem = Modem::parse("ymodem").unwrap();
+        modem.start_timeout = Duration::from_millis(50);
+        jobs.start_modem(1, Arc::clone(&s), &path, modem).unwrap();
+        wait_until(|| !jobs.status(1).running);
+        let error = jobs.status(1).error.unwrap();
+        assert!(error.contains("did not start"), "{error}");
+        assert!(markers(&s)[1].starts_with("YMODEM send failed at 0/3 bytes"));
+
+        // Waiting for a receiver that never comes, then stopped.
+        modem.start_timeout = Duration::from_secs(60);
+        jobs.start_modem(1, Arc::clone(&s), &path, modem).unwrap();
+        std::thread::sleep(Duration::from_millis(50));
+        let started = Instant::now();
+        jobs.stop(1);
+        assert!(started.elapsed() < Duration::from_secs(5));
+        assert_eq!(jobs.status(1).error, None);
+        assert_eq!(
+            markers(&s).last().unwrap(),
+            "YMODEM send stopped at 0/3 bytes"
+        );
+        assert!(jobs.start_modem(1, s, &dir.0.join("none"), modem).is_err());
     }
 
     #[test]

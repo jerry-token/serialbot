@@ -306,12 +306,52 @@ pub struct SendArgs {
     /// Wait for a reply matching this regular expression.
     #[arg(long, value_parser = parse_regex, value_name = "REGEX")]
     pub expect: Option<Regex>,
-    /// How long to wait.
-    #[arg(long, value_parser = parse_duration, default_value = "5s")]
-    pub timeout: Duration,
+    /// How long to wait (5s; with `--protocol`, 60s for the receiver to start).
+    #[arg(long, value_parser = parse_duration)]
+    pub timeout: Option<Duration>,
     /// Print what is received.
     #[arg(long)]
     pub print: bool,
+    /// Send the file with XMODEM or YMODEM, to a bootloader.
+    #[arg(
+        long,
+        value_enum,
+        requires = "file",
+        conflicts_with_all = ["text", "hex", "checksum", "expect", "print"]
+    )]
+    pub protocol: Option<FileProtocol>,
+}
+
+/// File transfer protocols of `send --protocol`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum FileProtocol {
+    /// 128-byte blocks; CRC or checksum, as the receiver asks.
+    Xmodem,
+    /// 1024-byte blocks (CRC).
+    #[value(name = "xmodem-1k")]
+    Xmodem1k,
+    /// File name and size, then 1024-byte blocks.
+    Ymodem,
+    /// File name and size, then 128-byte blocks.
+    #[value(name = "ymodem-128")]
+    Ymodem128,
+}
+
+impl FileProtocol {
+    /// The transfer settings, waiting `start` for the receiver.
+    pub fn modem(self, start: Duration) -> serialbot_jobs::xmodem::Modem {
+        use serialbot_jobs::xmodem::{Modem, Protocol};
+        let (protocol, one_k) = match self {
+            Self::Xmodem => (Protocol::Xmodem, false),
+            Self::Xmodem1k => (Protocol::Xmodem, true),
+            Self::Ymodem => (Protocol::Ymodem, true),
+            Self::Ymodem128 => (Protocol::Ymodem, false),
+        };
+        Modem {
+            start_timeout: start,
+            ..Modem::new(protocol, one_k)
+        }
+    }
 }
 
 /// Options of `monitor`.

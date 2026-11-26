@@ -66,6 +66,8 @@ Not automated, still required:
 - `crates/serialbot-jobs` — background jobs per session, shared by the app and the CLI:
   `filesend.rs` / `repeat.rs` / `export.rs` (file send, timed send, save/capture); the app
   stops them when a session closes
+  - `src/xmodem.rs` — XMODEM (128 / 1K) and YMODEM sending to bootloaders
+  - `tests/modem_lrzsz.rs` — XMODEM / YMODEM against lrzsz's `rx` / `rb` over socat (Linux only)
 - `crates/serialbot-cli` — `serialbot-cli`, the terminal front end
   - `src/lib.rs` — `run(args, Context)`: commands get output, language and devices passed in
   - `src/commands/` — one file per subcommand (`ports`, `send`, `monitor`, `signal`, `open`, `run`,

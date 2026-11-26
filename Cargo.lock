@@ -3862,8 +3862,10 @@ dependencies = [
 name = "serialbot-jobs"
 version = "0.3.0"
 dependencies = [
+ "regex",
  "serde",
  "serialbot-core",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

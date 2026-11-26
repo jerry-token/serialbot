@@ -124,7 +124,14 @@ export interface FileSendStatus {
   sent: number;
   total: number;
   error: string | null;
+  /** "XMODEM", "XMODEM-1K", "YMODEM" or "YMODEM-128"; null for a plain send. */
+  protocol?: string | null;
+  /** Blocks sent again (XMODEM / YMODEM). */
+  retries?: number;
 }
+
+/** How a file is sent: plain chunks, or to a bootloader. */
+export type FileProtocol = "raw" | "xmodem" | "xmodem-1k" | "ymodem" | "ymodem-128";
 
 export interface McpSettings {
   enabled: boolean;
@@ -210,7 +217,14 @@ export interface Backend {
   /** Asks for a file to open; null when the user cancels. */
   chooseOpenFile(): Promise<string | null>;
   /** Writes the file at `path` in chunks of `chunk` bytes, pausing `delayMs` after each. */
-  sendFile(id: number, path: string, chunk: number, delayMs: number): Promise<FileSendStatus>;
+  /** Starts sending a file: in chunks (`raw`), or with XMODEM / YMODEM to a bootloader. */
+  sendFile(
+    id: number,
+    path: string,
+    chunk: number,
+    delayMs: number,
+    protocol: FileProtocol,
+  ): Promise<FileSendStatus>;
   stopFileSend(id: number): Promise<FileSendStatus>;
   fileSendStatus(id: number): Promise<FileSendStatus>;
   /** Writes what the session's log holds now to `path`. */
@@ -297,7 +311,8 @@ export const tauriBackend: Backend = {
     const path = await open({ multiple: false, directory: false });
     return typeof path === "string" ? path : null;
   },
-  sendFile: (id, path, chunk, delayMs) => invoke("send_file", { id, path, chunk, delayMs }),
+  sendFile: (id, path, chunk, delayMs, protocol) =>
+    invoke("send_file", { id, path, chunk, delayMs, protocol }),
   stopFileSend: (id) => invoke("stop_file_send", { id }),
   fileSendStatus: (id) => invoke("file_send_status", { id }),
   exportLog: (id, path, format) =>

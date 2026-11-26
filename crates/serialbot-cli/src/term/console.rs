@@ -15,6 +15,7 @@ use serialbot_core::session::{Session, SessionState};
 use serialbot_core::{SessionManager, encoding};
 use serialbot_jobs::export::{Captures, ExportFormat};
 use serialbot_jobs::filesend::FileSends;
+use serialbot_jobs::xmodem::Modem;
 
 use super::feed::Feed;
 use super::keys::{Local, Slash};
@@ -416,18 +417,33 @@ impl Console {
         }
     }
 
-    fn send_file(&mut self, path: &str, notes: &mut Vec<String>) {
+    /// `/send-file [--xmodem | --xmodem-1k | --ymodem | --ymodem-128] <file>`.
+    fn send_file(&mut self, arg: &str, notes: &mut Vec<String>) {
         let t = self.term();
-        match self.files.start(
-            1,
-            Arc::clone(&self.session),
-            std::path::Path::new(path),
-            FILE_CHUNK,
-            0,
-        ) {
+        let (modem, path) = match arg.split_once(char::is_whitespace) {
+            Some((flag, rest)) if flag.starts_with("--") => {
+                let Some(modem) = Modem::parse(&flag[2..]) else {
+                    notes.push(format!("{flag}: {}", t.unknown_command));
+                    return;
+                };
+                (Some(modem), rest.trim())
+            }
+            _ => (None, arg),
+        };
+        let session = Arc::clone(&self.session);
+        let file = std::path::Path::new(path);
+        let started = match modem {
+            Some(modem) => self.files.start_modem(1, session, file, modem),
+            None => self.files.start(1, session, file, FILE_CHUNK, 0),
+        };
+        match started {
             Ok(status) => {
                 self.file_running = status.running;
-                notes.push(format!("{} {path} ({} B)", t.sending, status.total));
+                let mut note = format!("{} {path} ({} B)", t.sending, status.total);
+                if let Some(modem) = modem {
+                    note = format!("{note}, {}: {}", modem.name(), t.modem_waiting);
+                }
+                notes.push(note);
             }
             Err(e) => notes.push(format!("{}: {e}", t.failed)),
         }
@@ -621,10 +637,11 @@ impl Console {
         }
         if self.file_running {
             let s = self.files.status(1);
-            parts.push(format!(
-                "↑ {}%",
-                (s.sent * 100).checked_div(s.total).unwrap_or(0)
-            ));
+            let percent = (s.sent * 100).checked_div(s.total).unwrap_or(0);
+            parts.push(match s.protocol {
+                Some(p) => format!("↑ {p} {percent}%"),
+                None => format!("↑ {percent}%"),
+            });
         }
         parts
     }

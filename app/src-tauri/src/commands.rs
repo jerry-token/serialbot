@@ -22,6 +22,7 @@ pub use serialbot_mcp::PortLister;
 use crate::export::{CaptureStatus, Captures, ExportFormat, ExportSummary};
 use crate::filesend::{FileSendStatus, FileSends};
 use crate::repeat::{RepeatStatus, Repeaters};
+use serialbot_jobs::xmodem::Modem;
 
 /// Largest payload one [`AppState::read`] returns.
 pub const MAX_READ_BYTES: usize = 4 * 1024 * 1024;
@@ -654,19 +655,30 @@ impl AppState {
         self.repeaters.status(id)
     }
 
-    /// Starts writing the file at `path` in chunks of `chunk` bytes with
-    /// `delay_ms` after each, replacing the session's previous file job
-    /// (see [`FileSends::start`] for the limits).
+    /// Starts sending the file at `path`, replacing the session's previous
+    /// file job. With `protocol` `None` or `raw` it is written in chunks of
+    /// `chunk` bytes with `delay_ms` after each (see [`FileSends::start`]
+    /// for the limits); with `xmodem`, `xmodem-1k`, `ymodem` or
+    /// `ymodem-128` it goes to a bootloader, which must start the transfer
+    /// within a minute (see [`FileSends::start_modem`]).
     pub fn send_file(
         &self,
         id: u32,
         path: &str,
         chunk: usize,
         delay_ms: u64,
+        protocol: Option<&str>,
     ) -> Result<FileSendStatus, String> {
         let session = self.manager.get(SessionId(id)).map_err(|e| e.to_string())?;
-        self.file_sends
-            .start(id, session, std::path::Path::new(path), chunk, delay_ms)
+        let path = std::path::Path::new(path);
+        match protocol.filter(|p| !p.eq_ignore_ascii_case("raw")) {
+            None => self.file_sends.start(id, session, path, chunk, delay_ms),
+            Some(name) => {
+                let modem = Modem::parse(name)
+                    .ok_or_else(|| format!("unknown file transfer protocol {name}"))?;
+                self.file_sends.start_modem(id, session, path, modem)
+            }
+        }
     }
 
     /// Stops the session's file job, if any; returns its final progress.
@@ -1002,13 +1014,13 @@ mod tests {
         std::fs::write(&path, b"hello").unwrap();
         let path = path.to_str().unwrap();
         assert!(
-            app.send_file(1, path, 2, 0)
+            app.send_file(1, path, 2, 0, None)
                 .unwrap_err()
                 .contains("no session")
         );
         app.open(&request("mock0")).unwrap();
         let device = devices.lock().unwrap()["mock0"].clone();
-        let started = app.send_file(1, path, 2, 0).unwrap();
+        let started = app.send_file(1, path, 2, 0, None).unwrap();
         assert_eq!((started.running, started.total), (true, 5));
         let deadline = Instant::now() + Duration::from_secs(5);
         while app.file_send_status(1).running {
@@ -1016,11 +1028,18 @@ mod tests {
             std::thread::sleep(Duration::from_millis(2));
         }
         assert_eq!(device.take_written(), b"hello");
-        app.send_file(1, path, 1, 60_000).unwrap();
+        app.send_file(1, path, 1, 60_000, Some("raw")).unwrap();
         let stopped = app.stop_file_send(1);
         assert!(!stopped.running);
         assert!(stopped.sent < 5);
-        app.send_file(1, path, 1, 60_000).unwrap();
+        assert!(
+            app.send_file(1, path, 1, 0, Some("zmodem"))
+                .unwrap_err()
+                .contains("unknown file transfer protocol")
+        );
+        let modem = app.send_file(1, path, 1, 0, Some("ymodem")).unwrap();
+        assert_eq!(modem.protocol.as_deref(), Some("YMODEM"));
+        assert!(app.file_send_status(1).running, "waits for the receiver");
         app.close(1).unwrap();
         assert_eq!(app.file_send_status(1), FileSendStatus::default());
         app.shutdown();
@@ -1102,7 +1121,8 @@ mod tests {
         let live = dir.0.join("live.log");
         app.open(&request("mock0")).unwrap();
         app.start_repeat(1, b"r".to_vec(), 60_000, None).unwrap();
-        app.send_file(1, fw.to_str().unwrap(), 1, 60_000).unwrap();
+        app.send_file(1, fw.to_str().unwrap(), 1, 60_000, None)
+            .unwrap();
         app.start_capture(1, live.to_str().unwrap(), ExportFormat::Raw, 0)
             .unwrap();
         devices.lock().unwrap()["mock0"].send(b"one ");

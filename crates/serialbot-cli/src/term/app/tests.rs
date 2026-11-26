@@ -247,6 +247,27 @@ fn sending_a_file() {
     assert_eq!(r.device.take_written().len(), 3000);
     r.type_line("/send-file /no/such/file");
     assert!(r.shows("failed"), "{}", r.screen());
+
+    // XMODEM to a bootloader that starts with C and ACKs everything.
+    r.type_line(&format!("/send-file --xmodem {}", path.display()));
+    assert!(
+        r.shows("XMODEM: waiting for the device to start receiving"),
+        "{}",
+        r.screen()
+    );
+    assert!(r.shows("↑ XMODEM 0%"), "{}", r.screen());
+    r.device.send(b"C");
+    let mut blocks = 0;
+    r.until(|r| {
+        let written = r.device.take_written();
+        if !written.is_empty() {
+            blocks += 1;
+            r.device.send(&[0x06]);
+        }
+        r.shows("sent fw.bin (3000 B)") && blocks > 24
+    });
+    r.type_line("/send-file --zmodem x");
+    assert!(r.shows("--zmodem: unknown command"), "{}", r.screen());
     let _ = std::fs::remove_dir_all(&dir);
 }
 
