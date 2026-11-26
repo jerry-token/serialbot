@@ -56,7 +56,7 @@ You stay in charge. Every change to a port needs your approval, and every line t
 - 🌈 Text or HEX with millisecond timestamps, **ANSI colors** (Zephyr, ESP-IDF and other colored logs), and encodings such as UTF-8, GBK, GB18030, Big5 and Shift_JIS.
 - ✂️ Auto frame split by gap; **Δt** shows the time since the line before, so in HEX view you see the gaps between frames.
 - 🔎 `Ctrl/Cmd+F` search, "only matching lines" filter, and **keyword highlight** (`ERROR`, `WARN`, … in ⚙️).
-- 📈 **Plot**: numbers in received lines (`temp=23.6 hum=41`, or `1.2, 3.4, 5.6`) become live curves, each on its own scale.
+- 📈 **Plot**: numbers in received lines (`temp=23.6 hum=41`, or `1.2, 3.4, 5.6`) become live curves, each on its own scale. VOFA+ FireWater lines and JustFloat binary frames work too.
 - 🖥️ **Terminal mode (TTY)**: a full terminal emulator on any session (cursor, colors, `top`, `vi`); keys go straight to the device, so you can log in to a Linux board's shell.
 - 🔢 Line numbers (**#**) and ★ **bookmarks**: mark the lines that matter and jump back to them.
 - ⏸️ Pause, and smooth scrolling through tens of thousands of lines.
@@ -212,7 +212,7 @@ serialbot-cli mcp serve                               # MCP server without the a
 ```
 
 - **`open`** replaces minicom/picocom: the same `Ctrl+A` letters (`X` quit, `L` log, `S` send a file, `1`/`2` DTR/RTS …), an input box with history and Ctrl+R, `/` commands with Tab completion, raw mode for shells and vim, and reconnecting when the device comes back. Piped, it turns into a plain pipe.
-- **`tui`** shows up to four sessions side by side or stacked (`Ctrl+A |`, `Ctrl+A -`, `Ctrl+A ←/→`, mouse), with a session list and scrollback. `Ctrl+A V` draws a waveform of the numbers in the data (`name=value`, number columns, or `--plot 'temp=([0-9.]+)'`), up to six curves told apart by color *and* point shape. `--mcp` adds the AI panel, where an agent's changes are allowed with `y`/`s` or refused with `n`. `/groups <file>` shows the app's exported command groups.
+- **`tui`** shows up to four sessions side by side or stacked (`Ctrl+A |`, `Ctrl+A -`, `Ctrl+A ←/→`, mouse), with a session list and scrollback. `Ctrl+A V` draws a waveform of the numbers in the data (`name=value`, number columns, `--plot 'temp=([0-9.]+)'`, or `--plot justfloat` for VOFA+ frames), up to six curves told apart by color *and* point shape. `--mcp` adds the AI panel, where an agent's changes are allowed with `y`/`s` or refused with `n`. `/groups <file>` shows the app's exported command groups.
 - **`mcp serve`** keeps its token in `cli.json` next to the app's settings; `mcp stdio` is the bridge for Claude Desktop, to `mcp serve` or, if it is not running, the app.
 - Exit codes for scripts: 0 ok, 1 timeout, 2 bad arguments, 3 port busy or missing, 4 device gone.
 - Messages follow the system language (English or Chinese). `serialbot-cli completions bash|zsh|fish|powershell` prints completions.

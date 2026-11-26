@@ -1349,6 +1349,14 @@ mark.kw {
   text-align: center;
 }
 
+.plot-format {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  max-width: 45%;
+  font-size: 12px;
+}
+
 .plot .u-legend {
   font-size: 12px;
   color: var(--text);

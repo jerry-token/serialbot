@@ -18,7 +18,7 @@ use serialbot_core::SessionManager;
 use serialbot_core::session::SessionState;
 
 use super::ai::Ai;
-use super::plot::{Pattern, Plot};
+use super::plot::{Format, Pattern, Plot};
 use crate::args::PortArgs;
 use crate::i18n::{Lang, TuiTexts};
 use crate::term::console::{Console, Effect, Flow, Settings};
@@ -93,6 +93,8 @@ pub struct Options {
     /// How the waveform finds numbers (empty: as the App does); given
     /// patterns also show it from the start.
     pub plot: Vec<Pattern>,
+    /// Text lines or VOFA+ `JustFloat` frames; `JustFloat` also shows it.
+    pub plot_format: Format,
 }
 
 impl Tui {
@@ -284,8 +286,8 @@ impl Tui {
             lines: VecDeque::new(),
             scroll: 0,
             unread: false,
-            plot: Plot::new(self.options.plot.clone()),
-            plot_shown: !self.options.plot.is_empty(),
+            plot: Plot::new(self.options.plot.clone()).with_format(self.options.plot_format),
+            plot_shown: !self.options.plot.is_empty() || self.options.plot_format != Format::Text,
         });
         Ok(())
     }
@@ -749,8 +751,9 @@ impl Tui {
         Flow::Continue
     }
 
-    /// `/plot`: on/off; `auto`; `clear`; `color <curve> <color>`; or a
-    /// pattern (which also shows it).
+    /// `/plot`: on/off; `auto` (text, numbers found the App's way);
+    /// `justfloat` (VOFA+ binary frames); `clear`; `color <curve> <color>`;
+    /// or a pattern (which also shows it).
     fn plot(&mut self, arg: Option<&str>, notes: &mut Vec<String>) {
         let t = self.texts();
         let Some(pane) = self.panes.get_mut(self.focus) else {
@@ -760,8 +763,12 @@ impl Tui {
         let words: Vec<&str> = arg.unwrap_or_default().split_whitespace().collect();
         match words.as_slice() {
             [] => pane.plot_shown = !pane.plot_shown,
-            ["auto"] => {
+            ["auto" | "text"] => {
                 pane.plot = Plot::default();
+                pane.plot_shown = true;
+            }
+            ["justfloat" | "JustFloat"] => {
+                pane.plot = Plot::just_float();
                 pane.plot_shown = true;
             }
             ["clear"] => pane.plot.clear(),

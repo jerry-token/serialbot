@@ -9,6 +9,11 @@
 //! that: a regular expression whose capture groups are the numbers, named
 //! `name=regex`, by `(?P<name>…)` groups, or after the pattern.
 //!
+//! VOFA+ formats work too: `FireWater` text (`prefix:1.0,2.0,3.0`, numbers
+//! named `ch1`, `ch2`, … whatever the prefix) is found the default way, and
+//! `JustFloat` binary frames (little-endian `f32` values, then the tail
+//! `00 00 80 7F`) when the plot is switched to [`Format::JustFloat`].
+//!
 //! Curves are told apart by color *and* point shape, in a fixed order:
 //! cyan •, yellow ×, magenta +, green ▪, blue ◆, white ○. Only the eight
 //! basic terminal colors are used, so dark and light themes both work;
@@ -64,16 +69,30 @@ static BARE_LINE: LazyLock<Option<Regex>> = LazyLock::new(|| {
     ))
     .ok()
 });
+static FIREWATER: LazyLock<Option<Regex>> = LazyLock::new(|| {
+    Regex::new(&format!(
+        r"^\s*[A-Za-z_][\w.\[\]]*\s*:\s*{NUMBER}(?:\s*,\s*{NUMBER})+\s*,?\s*$"
+    ))
+    .ok()
+});
 static BARE: LazyLock<Option<Regex>> = LazyLock::new(|| Regex::new(NUMBER).ok());
 static ESCAPES: LazyLock<Option<Regex>> = LazyLock::new(|| {
     Regex::new(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-_])").ok()
 });
 
-/// The numbers of one line found the App's way (see the module docs).
+/// The numbers of one line found the App's way (see the module docs): a
+/// `FireWater` line `prefix:1,2,3` gives `ch1`, `ch2`, `ch3` (one value after
+/// the prefix is a `name: value` pair instead).
 pub fn auto_sample(line: &str) -> Vec<(String, f64)> {
-    let (Some(pair), Some(bare_line), Some(bare)) = (&*PAIR, &*BARE_LINE, &*BARE) else {
+    let (Some(pair), Some(bare_line), Some(bare), Some(firewater)) =
+        (&*PAIR, &*BARE_LINE, &*BARE, &*FIREWATER)
+    else {
         return Vec::new();
     };
+    if firewater.is_match(line) {
+        let values = line.split_once(':').map_or("", |(_, v)| v);
+        return channels(bare, values);
+    }
     let mut sample: Vec<(String, f64)> = Vec::new();
     for m in pair.captures_iter(line) {
         let value: Option<f64> = m.get(2).and_then(|v| v.as_str().parse().ok());
@@ -84,12 +103,49 @@ pub fn auto_sample(line: &str) -> Vec<(String, f64)> {
     if !sample.is_empty() || !bare_line.is_match(line) {
         return sample;
     }
-    for (i, m) in bare.find_iter(line).enumerate() {
-        if let Some(value) = m.as_str().parse::<f64>().ok().filter(|v| v.is_finite()) {
-            sample.push((format!("ch{}", i + 1), value));
+    channels(bare, line)
+}
+
+/// Every number in `text` as `ch1`, `ch2`, … (counted even when skipped).
+fn channels(bare: &Regex, text: &str) -> Vec<(String, f64)> {
+    bare.find_iter(text)
+        .enumerate()
+        .filter_map(|(i, m)| {
+            let value = m.as_str().parse::<f64>().ok().filter(|v| v.is_finite())?;
+            Some((format!("ch{}", i + 1), value))
+        })
+        .collect()
+}
+
+/// The tail that ends every VOFA+ `JustFloat` frame (`+inf` as an `f32`).
+pub const JUSTFLOAT_TAIL: [u8; 4] = [0x00, 0x00, 0x80, 0x7F];
+
+/// The most values a `JustFloat` frame may carry; longer ones are dropped.
+pub const MAX_CHANNELS: usize = 64;
+
+/// How received bytes become samples.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Format {
+    /// Lines of text (CR, LF or CRLF), numbers found the default way or
+    /// by patterns.
+    #[default]
+    Text,
+    /// VOFA+ `JustFloat`: little-endian `f32` values, then [`JUSTFLOAT_TAIL`].
+    /// A frame whose length is not a multiple of four, or longer than
+    /// [`MAX_CHANNELS`] values, is dropped; NaN and infinite values leave a
+    /// gap in their curve.
+    JustFloat,
+}
+
+impl Format {
+    /// `text` / `justfloat` (as `--plot` and `/plot` take them).
+    pub fn parse(word: &str) -> Option<Self> {
+        match word.to_ascii_lowercase().as_str() {
+            "text" | "auto" => Some(Self::Text),
+            "justfloat" => Some(Self::JustFloat),
+            _ => None,
         }
     }
-    sample
 }
 
 /// Sets `name` (its last value wins).
@@ -203,6 +259,8 @@ pub struct Plot {
     pub series: Vec<Series>,
     /// Samples taken so far (lines that had numbers), all curves aligned.
     pub samples: usize,
+    /// Text lines or binary frames.
+    pub format: Format,
     pending: Vec<u8>,
 }
 
@@ -215,9 +273,25 @@ impl Plot {
         }
     }
 
-    /// Adds received bytes; every finished line (CR, LF or CRLF) that has
-    /// numbers is one sample.
+    /// A plot reading VOFA+ `JustFloat` frames.
+    pub fn just_float() -> Self {
+        Self::default().with_format(Format::JustFloat)
+    }
+
+    /// The same plot reading `format` (patterns apply to text only).
+    #[must_use]
+    pub fn with_format(mut self, format: Format) -> Self {
+        self.format = format;
+        self
+    }
+
+    /// Adds received bytes. As text, every finished line (CR, LF or CRLF)
+    /// that has numbers is one sample; as `JustFloat`, every whole frame.
     pub fn push(&mut self, bytes: &[u8]) {
+        if self.format == Format::JustFloat {
+            self.push_frames(bytes);
+            return;
+        }
         for &b in bytes {
             if b == b'\n' || b == b'\r' {
                 let line = std::mem::take(&mut self.pending);
@@ -227,6 +301,37 @@ impl Plot {
             } else {
                 self.pending.push(b);
             }
+        }
+    }
+
+    fn push_frames(&mut self, bytes: &[u8]) {
+        self.pending.extend_from_slice(bytes);
+        while let Some(end) = self
+            .pending
+            .windows(JUSTFLOAT_TAIL.len())
+            .position(|w| w == JUSTFLOAT_TAIL)
+        {
+            let frame: Vec<u8> = self.pending.drain(..end + JUSTFLOAT_TAIL.len()).collect();
+            let body = &frame[..end];
+            if body.is_empty() || !body.len().is_multiple_of(4) || body.len() / 4 > MAX_CHANNELS {
+                continue;
+            }
+            let sample: Vec<(String, f64)> = body
+                .chunks_exact(4)
+                .enumerate()
+                .filter_map(|(i, c)| {
+                    let value = f64::from(f32::from_le_bytes([c[0], c[1], c[2], c[3]]));
+                    value.is_finite().then(|| (format!("ch{}", i + 1), value))
+                })
+                .collect();
+            self.add(&sample);
+        }
+        // No tail yet: keep at most one frame's worth (and the start of a
+        // tail), so noise cannot grow the buffer.
+        let keep = MAX_CHANNELS * 4 + JUSTFLOAT_TAIL.len() - 1;
+        if self.pending.len() > keep {
+            let cut = self.pending.len() - keep;
+            self.pending.drain(..cut);
         }
     }
 
