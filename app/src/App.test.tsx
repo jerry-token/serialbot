@@ -2233,6 +2233,22 @@ describe("Plot view", () => {
   });
 });
 
+describe("Copy for AI", () => {
+  it("copies the shown lines with a header and a question", async () => {
+    const { backend, user, copy } = setup();
+    await openPort(user);
+    act(() => backend.receive(1, "rst:0x1 (POWERON_RESET)\nGuru Meditation Error\n"));
+    await waitFor(() => expect(screen.getByText("Guru Meditation Error")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Copy for AI" }));
+    const copied: unknown[][] = copy.mock.calls;
+    const text = String(copied.at(-1)?.[0]);
+    expect(text).toMatch(/^Serial log from SerialBot: port COM3, 2 lines, /);
+    expect(text).toMatch(/\d\d:\d\d:\d\d\.\d{3} RX Guru Meditation Error\n```/);
+    expect(text).toContain("What does this log show?");
+    expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
+  });
+});
+
 describe("Terminal mode", () => {
   function setupTty(backend = new FakeBackend()) {
     const user = userEvent.setup();

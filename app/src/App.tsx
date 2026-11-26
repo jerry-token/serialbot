@@ -35,6 +35,7 @@ import { ApprovalDialog } from "./components/ApprovalDialog";
 import { Bookmarks } from "./components/Bookmarks";
 import { TtyView } from "./components/TtyView";
 import { PlotView } from "./components/PlotView";
+import { aiPrompt } from "./aiprompt";
 import { type ChartFactory, type ChartTheme, chartThemeFromCss, loadUplotChart } from "./chart";
 import { PlotData } from "./plot";
 import { loadXtermScreen, type ScreenFactory, type ScreenTheme, themeFromCss } from "./screen";
@@ -224,6 +225,7 @@ export function App({
   );
   const views = useRef(new Map<number, SessionView>());
   const [encoding, setEncoding] = useState("utf-8");
+  const [aiCopied, setAiCopied] = useState(false);
   const [frameGapMs, setFrameGapMs] = useState(0);
   // Display settings also apply to sessions that appear later.
   const display = useRef({
@@ -1074,6 +1076,25 @@ export function App({
                 pressed={paused}
                 onChange={togglePause}
               />
+              <button
+                type="button"
+                className="chip"
+                title={t.copyForAiHint}
+                disabled={!active}
+                onClick={() => {
+                  if (!active) return;
+                  const text = aiPrompt(visibleLines, active.alias ?? active.port, t.aiPrompt);
+                  copy(text).then(
+                    () => {
+                      setAiCopied(true);
+                      setTimeout(() => setAiCopied(false), 2000);
+                    },
+                    (e: unknown) => setError(errorMessage(e)),
+                  );
+                }}
+              >
+                {aiCopied ? t.copied : t.copyForAi}
+              </button>
               <Bookmarks
                 t={t}
                 lines={bookmarked}

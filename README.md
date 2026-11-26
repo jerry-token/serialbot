@@ -147,7 +147,7 @@ Get the file for your system from [Releases](https://github.com/jerry-token/seri
 ## 🚀 Quick start
 
 1. 🔌 Plug in a USB-serial adapter, pick the port at the top and set the baud rate. Data bits, parity, stop bits and flow control are under `8N1 ▾`. Then press **Open**.
-2. 📥 The receive view shows timestamps by default. The chips at the top right switch Δt, HEX view, sent data, auto-scroll and pause. 🔍 searches; ⚙️ sets the encoding, frame gap, ANSI colors and highlighted keywords.
+2. 📥 The receive view shows timestamps by default. The chips at the top right switch Δt, HEX view, sent data, auto-scroll and pause. **Copy for AI** copies the newest 200 lines shown (or the search results) with times and a question, ready to paste into any AI chat. 🔍 searches; ⚙️ sets the encoding, frame gap, ANSI colors and highlighted keywords.
 3. 📤 Type a command in the box at the bottom and press `Enter`. Tick HEX to send bytes such as `01 03 00 00`.
 4. 🎛️ To reset a board, use **DTR / RTS** in the status bar, or **⏱** for a timed sequence.
 

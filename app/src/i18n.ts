@@ -169,6 +169,15 @@ const en = {
   mcpDesktop: "Claude Desktop and other stdio clients: add to claude_desktop_config.json (SerialBot must be running):",
   copyCommand: "Copy Claude Code command",
   copyDesktop: "Copy Claude Desktop config",
+  copyForAi: "Copy for AI",
+  copyForAiHint:
+    "Copy the newest 200 lines shown (or the search results), with times and a question, to paste into an AI chat",
+  aiPrompt: {
+    intro: (port: string, count: number, from: string, to: string) =>
+      `Serial log from SerialBot: port ${port}, ${count} lines, ${from} to ${to}.`,
+    legend: "RX = received from the device, TX = sent to it, --- name --- = a marker.",
+    question: "What does this log show? If the device reset, crashed or failed, why, and what should I check?",
+  },
   mcpAddTo: "Add SerialBot to:",
   mcpAdded: (client: string, path: string) =>
     `Added to ${client} (${path}). Restart ${client} to use it.`,
@@ -469,6 +478,14 @@ const zh: Strings = {
   mcpDesktop: "Claude Desktop 等只支持 stdio 的客户端：加到 claude_desktop_config.json（需要 SerialBot 正在运行）：",
   copyCommand: "复制 Claude Code 命令",
   copyDesktop: "复制 Claude Desktop 配置",
+  copyForAi: "复制给 AI",
+  copyForAiHint: "复制当前显示的最新 200 行（或搜索结果），带上时间和一个问题，粘贴到任意 AI 聊天里",
+  aiPrompt: {
+    intro: (port: string, count: number, from: string, to: string) =>
+      `来自 SerialBot 的串口日志：端口 ${port}，共 ${count} 行，${from} 到 ${to}。`,
+    legend: "RX = 设备发来的，TX = 发给设备的，--- 名称 --- = 标记。",
+    question: "这段日志说明了什么？如果设备重启、崩溃或出错了，原因是什么，我该检查哪里？",
+  },
   mcpAddTo: "把 SerialBot 添加到：",
   mcpAdded: (client: string, path: string) => `已添加到 ${client}（${path}）。重启 ${client} 后生效。`,
   mcpAlreadyAdded: (client: string) => `${client} 已经配置好了。`,
