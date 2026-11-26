@@ -712,7 +712,7 @@ static EN: Strings = Strings {
         ),
         (
             "mcp.install.client",
-            "claude-desktop (starts mcp stdio), cursor or vscode (reach mcp serve over HTTP)",
+            "claude-desktop (starts mcp stdio); cursor, vscode, codex, gemini or opencode (reach mcp serve over HTTP)",
         ),
         (
             "mcp.install.print",
@@ -995,7 +995,7 @@ static ZH: Strings = Strings {
         ),
         (
             "mcp.install.client",
-            "claude-desktop（启动 mcp stdio）、cursor 或 vscode（通过 HTTP 连接 mcp serve）",
+            "claude-desktop（启动 mcp stdio）；cursor、vscode、codex、gemini 或 opencode（通过 HTTP 连接 mcp serve）",
         ),
         ("mcp.install.print", "只打印配置内容，不写入文件"),
     ],

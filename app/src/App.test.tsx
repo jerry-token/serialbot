@@ -2635,6 +2635,11 @@ describe("MCP panel", () => {
   it("adds itself to MCP clients, or shows the entry to add by hand", async () => {
     const { backend, user, copy } = setup();
     const panel = await openPanel(user);
+    for (const name of ["Codex", "Gemini CLI", "opencode"]) {
+      await user.click(within(panel).getByRole("button", { name }));
+    }
+    expect(backend.installed).toEqual(["codex", "gemini", "opencode"]);
+    backend.installed = [];
     await user.click(within(panel).getByRole("button", { name: "Cursor" }));
     expect(backend.installed).toEqual(["cursor"]);
     expect(

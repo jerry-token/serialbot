@@ -131,7 +131,8 @@ export interface FileSendStatus {
 }
 
 /** How a file is sent: plain chunks, or to a bootloader. */
-export type FileProtocol = "raw" | "xmodem" | "xmodem-1k" | "ymodem" | "ymodem-128";
+export type FileProtocol =
+  "raw" | "xmodem" | "xmodem-1k" | "ymodem" | "ymodem-128";
 
 export interface McpSettings {
   enabled: boolean;
@@ -171,7 +172,8 @@ export interface McpStatus {
 }
 
 /** MCP clients whose settings SerialBot can write. */
-export type McpClientId = "claude-desktop" | "cursor" | "vscode";
+export type McpClientId =
+  "claude-desktop" | "cursor" | "vscode" | "codex" | "gemini" | "opencode";
 
 /** What adding SerialBot to an MCP client did. */
 export interface ClientInstall {
@@ -209,11 +211,16 @@ export interface Backend {
   writeData(id: number, data: Uint8Array): Promise<number>;
   readLog(id: number, cursor: number, maxBytes: number): Promise<LogChunk>;
   /** Called with the full list whenever sessions are opened, closed or change state. */
-  onSessionsChanged(handler: (sessions: SessionInfo[]) => void): Promise<Unlisten>;
+  onSessionsChanged(
+    handler: (sessions: SessionInfo[]) => void,
+  ): Promise<Unlisten>;
   /** Called with the ids of sessions that have new log entries or a new state. */
   onLogChanged(handler: (ids: number[]) => void): Promise<Unlisten>;
   /** Asks where to save; null when the user cancels. */
-  chooseSaveFile(defaultName: string, format: ExportFormat): Promise<string | null>;
+  chooseSaveFile(
+    defaultName: string,
+    format: ExportFormat,
+  ): Promise<string | null>;
   /** Asks for a file to open; null when the user cancels. */
   chooseOpenFile(): Promise<string | null>;
   /** Writes the file at `path` in chunks of `chunk` bytes, pausing `delayMs` after each. */
@@ -228,9 +235,17 @@ export interface Backend {
   stopFileSend(id: number): Promise<FileSendStatus>;
   fileSendStatus(id: number): Promise<FileSendStatus>;
   /** Writes what the session's log holds now to `path`. */
-  exportLog(id: number, path: string, format: ExportFormat): Promise<{ bytes: number }>;
+  exportLog(
+    id: number,
+    path: string,
+    format: ExportFormat,
+  ): Promise<{ bytes: number }>;
   /** Saves the log to `path` and keeps appending new entries. */
-  startCapture(id: number, path: string, format: ExportFormat): Promise<CaptureStatus>;
+  startCapture(
+    id: number,
+    path: string,
+    format: ExportFormat,
+  ): Promise<CaptureStatus>;
   stopCapture(id: number): Promise<CaptureStatus>;
   captureStatus(id: number): Promise<CaptureStatus>;
   /** Sends `data` every `intervalMs`, `count` times or (null) until stopped. */
@@ -246,7 +261,10 @@ export interface Backend {
   encodeText(text: string, encoding: string): Promise<number[]>;
   signals(id: number): Promise<SignalsInfo>;
   /** Drives DTR and/or RTS; an omitted line is left unchanged. */
-  setSignals(id: number, levels: { dtr?: boolean; rts?: boolean }): Promise<SignalsInfo>;
+  setSignals(
+    id: number,
+    levels: { dtr?: boolean; rts?: boolean },
+  ): Promise<SignalsInfo>;
   /** Opens the command list in its own window, or brings it to the front. */
   openCommandWindow(title: string): Promise<void>;
   /**
@@ -254,7 +272,11 @@ export interface Backend {
    * `onClosed` runs once when a newly opened window closes (not for a window
    * that was already open).
    */
-  openSessionWindow(id: number, title: string, onClosed: () => void): Promise<void>;
+  openSessionWindow(
+    id: number,
+    title: string,
+    onClosed: () => void,
+  ): Promise<void>;
   /** Closes the window this page runs in. */
   closeWindow(): Promise<void>;
   /** The app version, e.g. "0.2.0". */
@@ -279,7 +301,9 @@ export interface Backend {
   pendingApprovals(): Promise<ApprovalRequest[]>;
   answerApproval(id: number, decision: Decision): Promise<void>;
   /** Called with the whole queue whenever a request arrives or leaves. */
-  onApprovalsChanged(handler: (queue: ApprovalRequest[]) => void): Promise<Unlisten>;
+  onApprovalsChanged(
+    handler: (queue: ApprovalRequest[]) => void,
+  ): Promise<Unlisten>;
 }
 
 /** The backend inside the Tauri app. Errors reject with the message string. */
@@ -295,10 +319,14 @@ export const tauriBackend: Backend = {
   onPortsChanged: (handler) =>
     listen<PortInfo[]>("ports-changed", (event) => handler(event.payload)),
   writeData: (id, data) => invoke("write_data", { id, data: Array.from(data) }),
-  readLog: (id, cursor, maxBytes) => invoke("read_log", { id, cursor, maxBytes }),
+  readLog: (id, cursor, maxBytes) =>
+    invoke("read_log", { id, cursor, maxBytes }),
   onSessionsChanged: (handler) =>
-    listen<SessionInfo[]>("sessions-changed", (event) => handler(event.payload)),
-  onLogChanged: (handler) => listen<number[]>("log-changed", (event) => handler(event.payload)),
+    listen<SessionInfo[]>("sessions-changed", (event) =>
+      handler(event.payload),
+    ),
+  onLogChanged: (handler) =>
+    listen<number[]>("log-changed", (event) => handler(event.payload)),
   chooseSaveFile: (defaultName, format) =>
     save({
       defaultPath: defaultName,
@@ -328,10 +356,15 @@ export const tauriBackend: Backend = {
   encodeText: (text, encoding) => invoke("encode_text", { text, encoding }),
   signals: (id) => invoke("signals", { id }),
   setSignals: (id, levels) =>
-    invoke("set_signals", { id, dtr: levels.dtr ?? null, rts: levels.rts ?? null }),
+    invoke("set_signals", {
+      id,
+      dtr: levels.dtr ?? null,
+      rts: levels.rts ?? null,
+    }),
   onSignalsChanged: (handler) =>
     listen<SignalsInfo>("signals-changed", (event) => handler(event.payload)),
-  onMcpChanged: (handler) => listen<McpStatus>("mcp-changed", (event) => handler(event.payload)),
+  onMcpChanged: (handler) =>
+    listen<McpStatus>("mcp-changed", (event) => handler(event.payload)),
   setAlwaysOnTop: (on) => getCurrentWindow().setAlwaysOnTop(on),
   appVersion: () => getVersion(),
   openLink: (url) => invoke("open_link", { url }),
@@ -380,7 +413,9 @@ export const tauriBackend: Backend = {
   pendingApprovals: () => invoke("pending_approvals"),
   answerApproval: (id, decision) => invoke("answer_approval", { id, decision }),
   onApprovalsChanged: (handler) =>
-    listen<ApprovalRequest[]>("approvals-changed", (event) => handler(event.payload)),
+    listen<ApprovalRequest[]>("approvals-changed", (event) =>
+      handler(event.payload),
+    ),
 };
 
 /** The local time zone in minutes east of UTC (as the backend expects). */
@@ -389,8 +424,16 @@ export function utcOffsetMin(date = new Date()): number {
 }
 
 /** A file name for saving a session's log, e.g. "ttyUSB0_20261118-101338.log". */
-export function saveFileName(port: string, format: ExportFormat, now = new Date()): string {
-  const base = port.split(/[\\/]/).pop()?.replace(/[^\w.-]/g, "_") || "serial";
+export function saveFileName(
+  port: string,
+  format: ExportFormat,
+  now = new Date(),
+): string {
+  const base =
+    port
+      .split(/[\\/]/)
+      .pop()
+      ?.replace(/[^\w.-]/g, "_") || "serial";
   const p = (n: number) => String(n).padStart(2, "0");
   const stamp =
     `${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}-` +
@@ -415,7 +458,11 @@ export function claudeCommand(url: string, token: string): string {
  * `serialbot mcp`, the stdio bridge to the running app.
  */
 export function claudeDesktopConfig(command: string): string {
-  return JSON.stringify({ mcpServers: { serialbot: { command, args: ["mcp"] } } }, null, 2);
+  return JSON.stringify(
+    { mcpServers: { serialbot: { command, args: ["mcp"] } } },
+    null,
+    2,
+  );
 }
 
 /** Text for a rejected backend call (Tauri rejects with plain strings). */

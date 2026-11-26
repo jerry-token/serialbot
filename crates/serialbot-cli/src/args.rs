@@ -123,6 +123,12 @@ pub enum ClientArg {
     Cursor,
     /// VS Code (the user `mcp.json`).
     Vscode,
+    /// Codex (`~/.codex/config.toml`).
+    Codex,
+    /// Gemini CLI (`~/.gemini/settings.json`).
+    Gemini,
+    /// opencode (`~/.config/opencode/opencode.json`).
+    Opencode,
 }
 
 impl From<ClientArg> for serialbot_mcp::clients::Client {
@@ -131,6 +137,9 @@ impl From<ClientArg> for serialbot_mcp::clients::Client {
             ClientArg::ClaudeDesktop => Self::ClaudeDesktop,
             ClientArg::Cursor => Self::Cursor,
             ClientArg::Vscode => Self::VsCode,
+            ClientArg::Codex => Self::Codex,
+            ClientArg::Gemini => Self::Gemini,
+            ClientArg::Opencode => Self::OpenCode,
         }
     }
 }

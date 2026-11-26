@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! Adding SerialBot to the configuration files of MCP clients (Claude
-//! Desktop, Cursor, VS Code), shared by the app and the CLI.
+//! Desktop, Cursor, VS Code, Codex, Gemini CLI, opencode), shared by the
+//! app and the CLI.
 //!
-//! Only the `serialbot` entry is written: every other key, server and
-//! setting in the file is kept, in its order. A file that is not plain JSON
-//! (VS Code allows comments) is left alone and reported, so the caller can
-//! show the entry for the user to paste instead.
+//! Only the `serialbot` entry is written: every other key, server, setting
+//! and (in Codex's TOML) comment in the file is kept, in its order. A JSON
+//! file that is not plain JSON (VS Code and opencode allow comments) is left
+//! alone and reported, so the caller can show the entry for the user to
+//! paste instead.
 
 use std::path::{Path, PathBuf};
 
@@ -25,6 +27,14 @@ pub enum Client {
     Cursor,
     /// VS Code's user `mcp.json`; reaches the HTTP server with the token.
     VsCode,
+    /// Codex (CLI and IDE extension): `~/.codex/config.toml`, HTTP.
+    Codex,
+    /// Gemini CLI: `~/.gemini/settings.json`, HTTP.
+    Gemini,
+    /// opencode: `~/.config/opencode/opencode.json`, HTTP. Servers go under
+    /// `mcp.servers`, or directly under `mcp` in a file that already lists
+    /// them that way (opencode before its V2 config).
+    OpenCode,
 }
 
 /// Where the user's configuration lives: the system's config directory
@@ -91,7 +101,14 @@ pub struct Installed {
 
 impl Client {
     /// Every client, in the order they are offered.
-    pub const ALL: [Client; 3] = [Client::ClaudeDesktop, Client::Cursor, Client::VsCode];
+    pub const ALL: [Client; 6] = [
+        Client::ClaudeDesktop,
+        Client::Cursor,
+        Client::VsCode,
+        Client::Codex,
+        Client::Gemini,
+        Client::OpenCode,
+    ];
 
     /// The id used on the command line and between the app's UI and backend.
     pub fn id(self) -> &'static str {
@@ -99,6 +116,9 @@ impl Client {
             Client::ClaudeDesktop => "claude-desktop",
             Client::Cursor => "cursor",
             Client::VsCode => "vscode",
+            Client::Codex => "codex",
+            Client::Gemini => "gemini",
+            Client::OpenCode => "opencode",
         }
     }
 
@@ -108,6 +128,9 @@ impl Client {
             Client::ClaudeDesktop => "Claude Desktop",
             Client::Cursor => "Cursor",
             Client::VsCode => "VS Code",
+            Client::Codex => "Codex",
+            Client::Gemini => "Gemini CLI",
+            Client::OpenCode => "opencode",
         }
     }
 
@@ -127,14 +150,34 @@ impl Client {
                 .join("claude_desktop_config.json"),
             Client::Cursor => dirs.home.join(".cursor").join("mcp.json"),
             Client::VsCode => dirs.config.join("Code").join("User").join("mcp.json"),
+            Client::Codex => dirs.home.join(".codex").join("config.toml"),
+            Client::Gemini => dirs.home.join(".gemini").join("settings.json"),
+            Client::OpenCode => dirs
+                .home
+                .join(".config")
+                .join("opencode")
+                .join("opencode.json"),
         }
     }
 
-    /// The key that holds the servers.
-    fn servers_key(self) -> &'static str {
+    /// The keys leading to the servers in `root` (a JSON client's file).
+    fn servers_path(self, root: &Map<String, Value>) -> &'static [&'static str] {
         match self {
-            Client::VsCode => "servers",
-            Client::ClaudeDesktop | Client::Cursor => "mcpServers",
+            Client::VsCode => &["servers"],
+            Client::OpenCode => {
+                // Before V2, opencode listed servers directly under `mcp`.
+                let old = root
+                    .get("mcp")
+                    .and_then(Value::as_object)
+                    .is_some_and(|mcp| {
+                        !mcp.contains_key("servers")
+                            && mcp.values().any(|v| v.get("type").is_some())
+                    });
+                if old { &["mcp"] } else { &["mcp", "servers"] }
+            }
+            Client::ClaudeDesktop | Client::Cursor | Client::Gemini | Client::Codex => {
+                &["mcpServers"]
+            }
         }
     }
 
@@ -150,6 +193,18 @@ impl Client {
             Client::VsCode => json!({
                 "type": "http",
                 "url": server.url,
+                "headers": { "Authorization": auth },
+            }),
+            Client::Codex => {
+                json!({ "url": server.url, "http_headers": { "Authorization": auth } })
+            }
+            Client::Gemini => {
+                json!({ "httpUrl": server.url, "headers": { "Authorization": auth } })
+            }
+            Client::OpenCode => json!({
+                "type": "remote",
+                "url": server.url,
+                "oauth": false,
                 "headers": { "Authorization": auth },
             }),
         })
@@ -174,6 +229,9 @@ pub fn merge(
         path: path.display().to_string(),
         reason,
     };
+    if client == Client::Codex {
+        return merge_toml(existing.unwrap_or_default(), entry).map_err(unreadable);
+    }
     let mut root = match existing.map(str::trim).filter(|t| !t.is_empty()) {
         Some(text) => serde_json::from_str::<Value>(text).map_err(|e| unreadable(e.to_string()))?,
         None => Value::Object(Map::new()),
@@ -181,18 +239,60 @@ pub fn merge(
     let Value::Object(top) = &mut root else {
         return Err(unreadable("the file is not a JSON object".to_owned()));
     };
-    let servers = top
-        .entry(client.servers_key())
-        .or_insert_with(|| Value::Object(Map::new()));
-    let Value::Object(servers) = servers else {
-        return Err(unreadable(format!(
-            "\"{}\" is not an object",
-            client.servers_key()
-        )));
-    };
+    let path_keys = client.servers_path(top);
+    let mut servers = top;
+    for key in path_keys {
+        let next = servers
+            .entry(*key)
+            .or_insert_with(|| Value::Object(Map::new()));
+        let Value::Object(next) = next else {
+            return Err(unreadable(format!("\"{key}\" is not an object")));
+        };
+        servers = next;
+    }
     servers.insert(ENTRY_NAME.to_owned(), entry.clone());
     let mut text = serde_json::to_string_pretty(&root).map_err(|e| unreadable(e.to_string()))?;
     text.push('\n');
+    Ok(text)
+}
+
+/// Codex's `config.toml` with `[mcp_servers.serialbot]` set from `entry`
+/// (strings, and tables of strings); comments and other tables are kept.
+fn merge_toml(existing: &str, entry: &Value) -> Result<String, String> {
+    use toml_edit::{DocumentMut, InlineTable, Item, Table, value};
+    let mut doc: DocumentMut = existing
+        .parse()
+        .map_err(|e: toml_edit::TomlError| e.to_string())?;
+    let servers = doc
+        .entry("mcp_servers")
+        .or_insert_with(|| {
+            let mut t = Table::new();
+            t.set_implicit(true);
+            Item::Table(t)
+        })
+        .as_table_like_mut()
+        .ok_or("\"mcp_servers\" is not a table")?;
+    let mut table = Table::new();
+    for (key, v) in entry.as_object().into_iter().flatten() {
+        match v {
+            Value::String(s) => {
+                table.insert(key, value(s.as_str()));
+            }
+            Value::Object(map) => {
+                let mut inline = InlineTable::new();
+                for (k, v) in map {
+                    inline.insert(k, v.as_str().unwrap_or_default().into());
+                }
+                table.insert(key, value(inline));
+            }
+            _ => {}
+        }
+    }
+    servers.insert(ENTRY_NAME, Item::Table(table));
+    let mut text = doc.to_string();
+    if !text.ends_with('\n') {
+        text.push('\n');
+    }
     Ok(text)
 }
 

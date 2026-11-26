@@ -210,3 +210,126 @@ fn packaged_apps_create_files_only_outside_the_config_directory() {
     assert!(!may_create(Client::ClaudeDesktop, &dirs, true));
     assert!(may_create(Client::Cursor, &dirs, true));
 }
+
+#[test]
+fn codex_gemini_and_opencode_paths_and_entries() {
+    let dirs = Dirs {
+        config: PathBuf::from("/c"),
+        home: PathBuf::from("/h"),
+    };
+    assert_eq!(
+        Client::Codex.config_path(&dirs),
+        Path::new("/h/.codex/config.toml")
+    );
+    assert_eq!(
+        Client::Gemini.config_path(&dirs),
+        Path::new("/h/.gemini/settings.json")
+    );
+    assert_eq!(
+        Client::OpenCode.config_path(&dirs),
+        Path::new("/h/.config/opencode/opencode.json")
+    );
+    // None of them is under the config directory: a packaged app may create them.
+    for c in [Client::Codex, Client::Gemini, Client::OpenCode] {
+        assert!(may_create(c, &dirs, true), "{c:?}");
+    }
+    let s = server();
+    let gemini: Value = serde_json::from_str(&Client::Gemini.snippet(&s).unwrap()).unwrap();
+    assert_eq!(
+        gemini,
+        json!({ "mcpServers": { "serialbot": {
+            "httpUrl": s.url, "headers": { "Authorization": "Bearer tok" }
+        } } })
+    );
+    let opencode: Value = serde_json::from_str(&Client::OpenCode.snippet(&s).unwrap()).unwrap();
+    assert_eq!(
+        opencode["mcp"]["servers"]["serialbot"],
+        json!({
+            "type": "remote", "url": s.url, "oauth": false,
+            "headers": { "Authorization": "Bearer tok" }
+        })
+    );
+    assert_eq!(
+        Client::Codex.snippet(&s).unwrap(),
+        "[mcp_servers.serialbot]\nurl = \"http://127.0.0.1:9123/mcp\"\nhttp_headers = { Authorization = \"Bearer tok\" }\n"
+    );
+}
+
+#[test]
+fn opencode_keeps_the_layout_its_file_already_uses() {
+    let entry = json!({ "type": "remote" });
+    let v1 = r#"{ "mcp": { "other": { "type": "local", "command": ["x"] } } }"#;
+    let text = merge(Some(v1), Client::OpenCode, &entry, Path::new("f")).unwrap();
+    let value: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(value["mcp"]["serialbot"], entry);
+    assert!(value["mcp"].get("servers").is_none());
+
+    let v2 = r#"{ "mcp": { "servers": { "other": { "type": "local" } } }, "theme": "x" }"#;
+    let text = merge(Some(v2), Client::OpenCode, &entry, Path::new("f")).unwrap();
+    let value: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(value["mcp"]["servers"]["serialbot"], entry);
+    assert_eq!(value["mcp"]["servers"]["other"]["type"], "local");
+    assert_eq!(value["theme"], "x");
+
+    // An "mcp" without servers in either layout: the current one.
+    let empty = r#"{ "mcp": {} }"#;
+    let value: Value = serde_json::from_str(
+        &merge(Some(empty), Client::OpenCode, &entry, Path::new("f")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(value["mcp"]["servers"]["serialbot"], entry);
+}
+
+#[test]
+fn codex_toml_keeps_comments_and_other_servers() {
+    let existing = "# my settings\nmodel = \"o4\"\n\n[mcp_servers.other]\ncommand = \"x\" # keep me\n\n[profiles.fast]\nmodel = \"mini\"\n";
+    let entry = Client::Codex.entry(&server()).unwrap();
+    let text = merge(Some(existing), Client::Codex, &entry, Path::new("f")).unwrap();
+    assert!(
+        text.starts_with("# my settings\nmodel = \"o4\"\n"),
+        "{text}"
+    );
+    assert!(text.contains("command = \"x\" # keep me"), "{text}");
+    assert!(text.contains("[profiles.fast]"), "{text}");
+    let parsed: toml_edit::DocumentMut = text.parse().unwrap();
+    assert_eq!(
+        parsed["mcp_servers"]["serialbot"]["url"].as_str(),
+        Some("http://127.0.0.1:9123/mcp")
+    );
+    assert_eq!(
+        parsed["mcp_servers"]["serialbot"]["http_headers"]["Authorization"].as_str(),
+        Some("Bearer tok")
+    );
+    // Writing it again replaces the entry rather than adding another.
+    let again = merge(Some(&text), Client::Codex, &entry, Path::new("f")).unwrap();
+    assert_eq!(again, text);
+
+    for bad in ["model = ", "mcp_servers = 3\n"] {
+        let err = merge(
+            Some(bad),
+            Client::Codex,
+            &entry,
+            Path::new("/x/config.toml"),
+        )
+        .unwrap_err();
+        assert!(matches!(err, Error::Unreadable { .. }), "{bad}: {err:?}");
+    }
+}
+
+#[test]
+fn install_writes_codex_toml() {
+    let temp = Temp::new("codex");
+    let dirs = temp.dirs();
+    let done = install(Client::Codex, &server(), &dirs, true).unwrap();
+    assert_eq!(done.path, dirs.home.join(".codex/config.toml"));
+    assert!(
+        std::fs::read_to_string(&done.path)
+            .unwrap()
+            .contains("[mcp_servers.serialbot]")
+    );
+    assert!(
+        !install(Client::Codex, &server(), &dirs, true)
+            .unwrap()
+            .changed
+    );
+}

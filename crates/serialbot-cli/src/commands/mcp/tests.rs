@@ -343,3 +343,20 @@ fn install_prints_the_entry_when_it_cannot_write() {
     assert!(printed.out.contains("\"type\": \"http\""), "{printed:?}");
     assert_eq!(std::fs::read_to_string(&path).unwrap(), "{ // comments\n}");
 }
+
+#[test]
+fn install_knows_codex_gemini_and_opencode() {
+    let fixture = Fixture::new();
+    let dirs = fixture.client_dirs();
+    for (arg, client) in [
+        ("codex", McpClient::Codex),
+        ("gemini", McpClient::Gemini),
+        ("opencode", McpClient::OpenCode),
+    ] {
+        let ran = fixture.run(&["mcp", "install", arg]);
+        assert_eq!(ran.code, 0, "{ran:?}");
+        assert!(ran.out.contains(client.name()), "{ran:?}");
+        let text = std::fs::read_to_string(client.config_path(&dirs)).unwrap();
+        assert!(text.contains("serialbot"), "{arg}: {text}");
+    }
+}
