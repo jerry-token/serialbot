@@ -20,6 +20,9 @@ const CLIENTS: { id: McpClientId; name: string }[] = [
   { id: "claude-desktop", name: "Claude Desktop" },
   { id: "cursor", name: "Cursor" },
   { id: "vscode", name: "VS Code" },
+  { id: "codex", name: "Codex" },
+  { id: "gemini", name: "Gemini CLI" },
+  { id: "opencode", name: "opencode" },
 ];
 
 export function McpPanel({ t, status, onApply, onRegenerate, copy, onInstall }: Props) {

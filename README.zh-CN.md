@@ -165,7 +165,7 @@ SerialBot 补上的就是这一环，让 Agent 直接面对设备：
 3. 在 Claude Code 里直接说：*「列出串口，打开 ESP32 那个口，发送 `version` 看看固件版本」* 🎉
 4. ✅ AI 打开串口或发送数据前，SerialBot 会先弹窗问你。选 **本会话都允许** 后，这个串口就不再询问；也可以在 AI 页取消勾选「AI 发送数据或改动串口前先问我」。
 
-**Claude Desktop、Cursor、VS Code**：在 AI 页「把 SerialBot 添加到」下点对应的按钮，然后重启该客户端。只会写入 `serialbot` 这一项，文件里其它内容保持不变，原文件会备份。如果文件改不了（VS Code 允许在里面写注释），页面会显示要手动粘贴的内容。命令行：`serialbot-cli mcp install cursor`（或 `claude-desktop`、`vscode`）。
+**Claude Desktop、Cursor、VS Code、Codex、Gemini CLI、opencode**：在 AI 页「把 SerialBot 添加到」下点对应的按钮，然后重启该客户端。只会写入 `serialbot` 这一项，文件里其它内容保持不变，原文件会备份。如果文件改不了（VS Code 允许在里面写注释），页面会显示要手动粘贴的内容。命令行：`serialbot-cli mcp install cursor`（或 `claude-desktop`、`vscode`、`codex`、`gemini`、`opencode`）。
 
 手动配置 Claude Desktop（以及其他只支持 stdio 的客户端）：把 AI 页上的第二段配置复制到 `claude_desktop_config.json`。它运行 `serialbot mcp`，一个连接到正在运行的 SerialBot 的小桥接程序，所以需要先打开 SerialBot 并启用 MCP 服务：
 
