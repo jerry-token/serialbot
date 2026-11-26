@@ -403,6 +403,10 @@ main > section.hero {
   margin: 0;
 }
 
+.gallery picture {
+  display: block;
+}
+
 .gallery img {
   display: block;
   width: 100%;

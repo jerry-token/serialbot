@@ -1,7 +1,8 @@
 {
  "html_lang": "zh-CN",
- "title": "SerialBot：嵌入式硬件的验证闭环",
- "description": "编码 Agent 靠自己验证结果赢得信任。SerialBot 把串口交给 Agent，让它自己烧录、看日志、确认结果，每个改动都由你确认。",
+ "title": "SerialBot：AI 串口调试助手，内置 MCP Server（UART / ESP32 / STM32）",
+ "description": "开源跨平台串口调试助手，内置 MCP Server：让 AI Agent 读取 UART 日志、调试 ESP32/STM32 开发板，每次发送都由你确认。支持 Windows、macOS、Linux。",
+ "og_locale": "zh_CN",
  "home": "zh/",
  "nav_label": "目录",
  "nav_why": "初衷",

@@ -6,8 +6,25 @@
 <title>{{title}}</title>
 <meta name="description" content="{{description}}">
 <link rel="icon" href="{{root}}images/icon.png">
-<link rel="alternate" hreflang="en" href="https://serialbot.aiany.cc/">
-<link rel="alternate" hreflang="zh" href="https://serialbot.aiany.cc/zh/">
+<link rel="canonical" href="{{canonical}}">
+<link rel="alternate" hreflang="en" href="{{url_en}}">
+<link rel="alternate" hreflang="zh-Hans" href="{{url_zh}}">
+<link rel="alternate" hreflang="x-default" href="{{url_en}}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SerialBot">
+<meta property="og:locale" content="{{og_locale}}">
+<meta property="og:url" content="{{canonical}}">
+<meta property="og:title" content="{{title}}">
+<meta property="og:description" content="{{description}}">
+<meta property="og:image" content="{{site_url}}/images/windows.png">
+<meta property="og:image:width" content="1496">
+<meta property="og:image:height" content="926">
+<meta property="og:image:alt" content="{{shot_windows}}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{title}}">
+<meta name="twitter:description" content="{{description}}">
+<meta name="twitter:image" content="{{site_url}}/images/windows.png">
+{{jsonld}}
 <link rel="preload" href="{{root}}fonts/archivo.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="{{root}}style.css">
 </head>
@@ -78,10 +95,10 @@
 <section id="screens" class="screens">
   <h2>{{screens_title}}</h2>
   <div class="gallery">
-    <figure><img src="{{root}}images/terminal-dark.png" width="1000" height="700" alt="{{shot_terminal}}" loading="lazy"><figcaption>{{shot_terminal}}</figcaption></figure>
-    <figure><img src="{{root}}images/windows.png" width="1496" height="926" alt="{{shot_windows}}" loading="lazy"><figcaption>{{shot_windows}}</figcaption></figure>
-    <figure><img src="{{root}}images/plot-dark.png" width="1000" height="700" alt="{{shot_plot}}" loading="lazy"><figcaption>{{shot_plot}}</figcaption></figure>
-    <figure><img src="{{root}}images/tty-dark.png" width="1000" height="700" alt="{{shot_tty}}" loading="lazy"><figcaption>{{shot_tty}}</figcaption></figure>
+    <figure><picture><source srcset="{{root}}images/terminal-dark.webp" type="image/webp"><img src="{{root}}images/terminal-dark.png" width="1000" height="700" alt="{{shot_terminal}}" loading="lazy"></picture><figcaption>{{shot_terminal}}</figcaption></figure>
+    <figure><picture><source srcset="{{root}}images/windows.webp" type="image/webp"><img src="{{root}}images/windows.png" width="1496" height="926" alt="{{shot_windows}}" loading="lazy"></picture><figcaption>{{shot_windows}}</figcaption></figure>
+    <figure><picture><source srcset="{{root}}images/plot-dark.webp" type="image/webp"><img src="{{root}}images/plot-dark.png" width="1000" height="700" alt="{{shot_plot}}" loading="lazy"></picture><figcaption>{{shot_plot}}</figcaption></figure>
+    <figure><picture><source srcset="{{root}}images/tty-dark.webp" type="image/webp"><img src="{{root}}images/tty-dark.png" width="1000" height="700" alt="{{shot_tty}}" loading="lazy"></picture><figcaption>{{shot_tty}}</figcaption></figure>
   </div>
 </section>
 

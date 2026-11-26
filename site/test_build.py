@@ -4,6 +4,7 @@
 
 import json
 import re
+import xml.etree.ElementTree as ET
 import tempfile
 import unittest
 from pathlib import Path
@@ -82,6 +83,91 @@ class BuildTest(unittest.TestCase):
         svg = build.uart_svg(b"AT")
         self.assertEqual(svg.count('class="frame"'), 2)
         self.assertIn(">0x54<", svg)
+
+    def test_each_page_names_itself_canonical_and_its_translations(self):
+        expected = {
+            self.pages["en"]: "https://serialbot.aiany.cc/",
+            self.pages["zh"]: "https://serialbot.aiany.cc/zh/",
+            self.privacy["en"]: "https://serialbot.aiany.cc/privacy/",
+            self.privacy["zh"]: "https://serialbot.aiany.cc/zh/privacy/",
+        }
+        for page, url in expected.items():
+            text = page.read_text(encoding="utf-8")
+            self.assertEqual(re.findall(r'rel="canonical" href="([^"]+)"', text), [url])
+            self.assertIn(f'<meta property="og:url" content="{url}">', text)
+            langs = dict(
+                (code, href) for code, href in re.findall(r'hreflang="([^"]+)" href="([^"]+)"', text)
+            )
+            self.assertEqual(set(langs), {"en", "zh-Hans", "x-default"})
+            self.assertEqual(langs["x-default"], langs["en"])
+            self.assertIn(url, langs.values())
+
+    def test_titles_and_descriptions_carry_the_search_terms(self):
+        for lang, page in self.pages.items():
+            text = page.read_text(encoding="utf-8")
+            title = re.search(r"<title>(.*?)</title>", text).group(1)
+            description = re.search(r'<meta name="description" content="([^"]+)"', text).group(1)
+            self.assertIn("MCP", title)
+            self.assertIn("UART", title)
+            for word in ("MCP", "ESP32", "STM32"):
+                self.assertIn(word, description, lang)
+            self.assertLessEqual(len(description), 160 if lang == "en" else 100, lang)
+            self.assertIn('name="twitter:card" content="summary_large_image"', text)
+            image = re.search(r'property="og:image" content="([^"]+)"', text).group(1)
+            self.assertTrue((self.out / image.removeprefix("https://serialbot.aiany.cc/")).exists())
+
+    def test_home_pages_describe_the_app_as_structured_data(self):
+        for lang, page in self.pages.items():
+            text = page.read_text(encoding="utf-8")
+            blocks = re.findall(r'<script type="application/ld\+json">(.*?)</script>', text, re.S)
+            self.assertEqual(len(blocks), 1, lang)
+            data = json.loads(blocks[0])
+            self.assertEqual(data["@type"], "SoftwareApplication")
+            self.assertEqual(data["name"], "SerialBot")
+            self.assertEqual(data["offers"]["price"], "0")
+            self.assertIn("Linux", data["operatingSystem"])
+
+    def test_json_ld_cannot_close_its_script_tag(self):
+        text = build.json_ld({"description": "</script><b>", "html_lang": "en"}, "en")
+        self.assertEqual(text.count("</script>"), 1)
+        self.assertEqual(json.loads(text.split(">", 1)[1].rsplit("<", 1)[0])["description"], "</script><b>")
+
+    def test_sitemap_and_robots(self):
+        ns = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9", "x": "http://www.w3.org/1999/xhtml"}
+        root = ET.parse(self.out / "sitemap.xml").getroot()
+        locs = [url.find("s:loc", ns).text for url in root.findall("s:url", ns)]
+        self.assertEqual(
+            sorted(locs),
+            sorted(
+                f"https://serialbot.aiany.cc/{p}"
+                for p in ("", "zh/", "privacy/", "zh/privacy/")
+            ),
+        )
+        for url in root.findall("s:url", ns):
+            self.assertEqual(len(url.findall("x:link", ns)), 3)
+        for loc in locs:
+            path = loc.removeprefix("https://serialbot.aiany.cc/")
+            self.assertTrue((self.out / path / "index.html").exists(), loc)
+        robots = (self.out / "robots.txt").read_text()
+        self.assertIn("Sitemap: https://serialbot.aiany.cc/sitemap.xml", robots)
+        self.assertNotIn("Disallow: /\n", robots)
+
+    def test_screenshots_come_as_webp_with_a_png_fallback_and_alt_text(self):
+        for lang, page in self.pages.items():
+            text = page.read_text(encoding="utf-8")
+            pictures = re.findall(r"<picture>(.*?)</picture>", text)
+            self.assertEqual(len(pictures), 4, lang)
+            for picture in pictures:
+                webp = re.search(r'srcset="([^"]+\.webp)"', picture).group(1)
+                png = re.search(r'<img src="([^"]+\.png)"', picture).group(1)
+                self.assertEqual(webp.removesuffix(".webp"), png.removesuffix(".png"))
+                self.assertTrue((page.parent / webp).resolve().exists(), webp)
+                self.assertRegex(picture, r'alt="[^"]{10,}"')
+
+    def test_hero_byte_labels_are_hidden_from_screen_readers(self):
+        svg = build.uart_svg(b"AT")
+        self.assertIn('role="img"', svg)
+        self.assertEqual(svg.count('<g class="frame" aria-hidden="true">'), 2)
 
     def test_missing_strings_are_reported(self):
         with self.assertRaises(KeyError):
