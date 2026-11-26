@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 use serde::Serialize;
 use serialbot_core::SessionManager;
+use serialbot_mcp::clients::{self, Client};
 use serialbot_mcp::server::RunningServer;
 pub use serialbot_mcp::server::{PORT_ATTEMPTS, lan_address};
 use serialbot_mcp::{PortLister, SerialTools};
@@ -20,6 +21,25 @@ use tokio::sync::Mutex;
 
 use crate::approval::Approvals;
 use crate::settings::{self, McpSettings};
+
+/// What adding SerialBot to an MCP client did (see
+/// [`McpController::install_client`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientInstall {
+    /// The client's product name.
+    pub client: String,
+    /// Its configuration file.
+    pub path: String,
+    /// Where the previous content was saved, if the file changed.
+    pub backup: Option<String>,
+    /// False when the file already held the entry.
+    pub changed: bool,
+    /// Why nothing was written, if so.
+    pub error: Option<String>,
+    /// The entry to add by hand when nothing was written.
+    pub snippet: Option<String>,
+}
 
 /// What the UI shows about the MCP server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -173,6 +193,56 @@ impl McpController {
         .await
     }
 
+    /// Writes SerialBot into the configuration file of the client `id`
+    /// (`claude-desktop`, `cursor`, `vscode`; see
+    /// [`serialbot_mcp::clients`]). HTTP clients get the address the
+    /// server runs on (the configured port when it is off) and the token;
+    /// Claude Desktop gets `stdio_command` with `mcp`. `packaged` (an MSIX
+    /// install) keeps it from creating files Windows would hide from the
+    /// client. A file that cannot be changed is reported with the entry to
+    /// add by hand; only an unknown id is an error.
+    pub async fn install_client(
+        &self,
+        id: &str,
+        dirs: &clients::Dirs,
+        stdio_command: Option<String>,
+        packaged: bool,
+    ) -> Result<ClientInstall, String> {
+        let client = Client::parse(id).ok_or_else(|| format!("unknown MCP client {id}"))?;
+        let status = self.status().await;
+        let server = clients::Server {
+            url: status.url.unwrap_or_else(|| {
+                format!(
+                    "http://127.0.0.1:{}{}",
+                    status.settings.port,
+                    serialbot_mcp::MCP_PATH
+                )
+            }),
+            token: status.settings.token,
+            stdio: stdio_command.map(|c| (c, vec!["mcp".to_owned()])),
+        };
+        let path = client.config_path(dirs).display().to_string();
+        let create = clients::may_create(client, dirs, packaged);
+        Ok(match clients::install(client, &server, dirs, create) {
+            Ok(done) => ClientInstall {
+                client: client.name().to_owned(),
+                path,
+                backup: done.backup.map(|b| b.display().to_string()),
+                changed: done.changed,
+                error: None,
+                snippet: None,
+            },
+            Err(e) => ClientInstall {
+                client: client.name().to_owned(),
+                path,
+                backup: None,
+                changed: false,
+                error: Some(e.to_string()),
+                snippet: client.snippet(&server).ok(),
+            },
+        })
+    }
+
     /// Stops the server (at app exit). Settings are unchanged.
     pub async fn stop(&self) {
         Self::stop_running(&mut *self.inner.lock().await).await;
@@ -309,6 +379,68 @@ mod tests {
             confirm: true,
             listen: Listen::Local,
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn adds_itself_to_mcp_clients() {
+        let dir = TempDir::new("install-clients");
+        let dirs = clients::Dirs {
+            config: dir.0.join("config"),
+            home: dir.0.join("home"),
+        };
+        let c = controller(None);
+        let token = c.status().await.settings.token;
+        let port = c.status().await.settings.port;
+
+        // Off: the configured port is used.
+        let cursor = c
+            .install_client("cursor", &dirs, None, false)
+            .await
+            .unwrap();
+        assert_eq!(cursor.client, "Cursor");
+        assert!(cursor.changed && cursor.error.is_none(), "{cursor:?}");
+        let text = std::fs::read_to_string(&cursor.path).unwrap();
+        assert!(
+            text.contains(&format!("http://127.0.0.1:{port}/mcp")),
+            "{text}"
+        );
+        assert!(text.contains(&format!("Bearer {token}")));
+        assert!(
+            !c.install_client("cursor", &dirs, None, false)
+                .await
+                .unwrap()
+                .changed
+        );
+
+        // Claude Desktop needs the launcher.
+        let none = c
+            .install_client("claude-desktop", &dirs, None, false)
+            .await
+            .unwrap();
+        assert!(none.error.is_some() && none.snippet.is_none(), "{none:?}");
+        let desktop = c
+            .install_client(
+                "claude-desktop",
+                &dirs,
+                Some("/opt/SerialBot".into()),
+                false,
+            )
+            .await
+            .unwrap();
+        assert!(desktop.changed, "{desktop:?}");
+        assert!(
+            std::fs::read_to_string(&desktop.path)
+                .unwrap()
+                .contains("/opt/SerialBot")
+        );
+
+        // Packaged: no new file under the config directory, the entry to paste instead.
+        let vscode = c.install_client("vscode", &dirs, None, true).await.unwrap();
+        assert!(!vscode.changed && vscode.error.is_some(), "{vscode:?}");
+        assert!(vscode.snippet.unwrap().contains("\"servers\""));
+        assert!(!std::path::Path::new(&vscode.path).exists());
+
+        assert!(c.install_client("zed", &dirs, None, false).await.is_err());
     }
 
     #[tokio::test(flavor = "multi_thread")]

@@ -15,6 +15,8 @@ import type {
   Backend,
   LogChunk,
   LogEntry,
+  ClientInstall,
+  McpClientId,
   McpSettings,
   McpStatus,
   OpenRequest,
@@ -502,6 +504,23 @@ class FakeBackend implements Backend {
   agentAsks(request: Omit<ApprovalRequest, "id">) {
     this.approvals = [...this.approvals, { id: this.approvals.length + 1, ...request }];
     for (const l of this.approvalListeners) l(this.approvals);
+  }
+
+  /** What mcpInstallClient answers next; null: it rejects. */
+  installResult: ClientInstall | null = {
+    client: "Cursor",
+    path: "/home/j/.cursor/mcp.json",
+    backup: "/home/j/.cursor/mcp.json.serialbot-backup",
+    changed: true,
+    error: null,
+    snippet: null,
+  };
+  installed: string[] = [];
+
+  async mcpInstallClient(client: McpClientId) {
+    this.installed.push(client);
+    if (!this.installResult) throw "no home directory";
+    return this.installResult;
   }
 
   async mcpRegenerateToken() {
@@ -2565,6 +2584,40 @@ describe("MCP panel", () => {
     // The status bar entry leads back to the AI page.
     await user.click(screen.getByRole("button", { name: "MCP :9633" }));
     expect(screen.getByRole("region", { name: /MCP server/ })).toBeInTheDocument();
+  });
+
+  it("adds itself to MCP clients, or shows the entry to add by hand", async () => {
+    const { backend, user, copy } = setup();
+    const panel = await openPanel(user);
+    await user.click(within(panel).getByRole("button", { name: "Cursor" }));
+    expect(backend.installed).toEqual(["cursor"]);
+    expect(
+      await within(panel).findByText(
+        /Added to Cursor \(\/home\/j\/\.cursor\/mcp\.json\)\. Restart Cursor to use it\. The previous file is saved as/,
+      ),
+    ).toBeInTheDocument();
+
+    backend.installResult = {
+      client: "VS Code",
+      path: "/c/Code/User/mcp.json",
+      backup: null,
+      changed: false,
+      error: "mcp.json is not plain JSON",
+      snippet: '{ "servers": {} }',
+    };
+    await user.click(within(panel).getByRole("button", { name: "VS Code" }));
+    expect(await within(panel).findByText("mcp.json is not plain JSON")).toBeInTheDocument();
+    expect(within(panel).getByText("Add this to VS Code's settings by hand:")).toBeInTheDocument();
+    await user.click(within(panel).getByRole("button", { name: "Copy VS Code config" }));
+    expect(copy).toHaveBeenCalledWith('{ "servers": {} }');
+
+    backend.installResult = { ...backend.installResult, error: null, snippet: null };
+    await user.click(within(panel).getByRole("button", { name: "Claude Desktop" }));
+    expect(await within(panel).findByText("VS Code is already set up.")).toBeInTheDocument();
+
+    backend.installResult = null;
+    await user.click(within(panel).getByRole("button", { name: "Claude Desktop" }));
+    expect(await within(panel).findByText("no home directory")).toBeInTheDocument();
   });
 
   it("saves port and token, and regenerates the token", async () => {

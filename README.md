@@ -165,7 +165,9 @@ Get the file for your system from [Releases](https://github.com/jerry-token/seri
 3. Ask Claude Code: *"List the serial ports, open the ESP32 one and send `version`."* 🎉
 4. ✅ SerialBot asks before the agent opens the port or sends anything. Pick **Allow for this session** to stop being asked for that port, or untick "Ask before AI agents send data or change a port" on the AI page.
 
-**Claude Desktop** (and other clients that only start stdio servers): copy the second snippet on the AI page into `claude_desktop_config.json`. It runs `serialbot mcp`, a small bridge to the running app, so SerialBot must be open with the MCP server on:
+**Claude Desktop, Cursor, VS Code**: on the AI page, press the client's button under *Add SerialBot to* and restart the client. Only the `serialbot` entry is written; the rest of the file is kept and the old file is backed up. If the file cannot be changed (VS Code allows comments in it), the page shows the entry to paste. From a terminal: `serialbot-cli mcp install cursor` (or `claude-desktop`, `vscode`).
+
+By hand, for Claude Desktop (and other clients that only start stdio servers): copy the second snippet on the AI page into `claude_desktop_config.json`. It runs `serialbot mcp`, a small bridge to the running app, so SerialBot must be open with the MCP server on:
 
 ```json
 { "mcpServers": { "serialbot": { "command": "/Applications/SerialBot.app/Contents/MacOS/serialbot", "args": ["mcp"] } } }

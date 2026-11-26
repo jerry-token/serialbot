@@ -1279,6 +1279,7 @@ export function App({
                 onApply={(s: McpSettings) => void mcpCall(() => backend.mcpApply(s))}
                 onRegenerate={() => void mcpCall(() => backend.mcpRegenerateToken())}
                 copy={copy}
+                onInstall={(client) => backend.mcpInstallClient(client)}
               />
             )}
             <p className="muted">{t.aiAssistantSoon}</p>

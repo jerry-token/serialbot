@@ -29,6 +29,7 @@
 pub mod approval;
 mod auth;
 pub mod bridge;
+pub mod clients;
 pub mod guard;
 mod payload;
 pub mod server;

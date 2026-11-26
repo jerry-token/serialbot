@@ -84,7 +84,7 @@ pub struct CompletionsArgs {
     pub shell: clap_complete::Shell,
 }
 
-/// `mcp serve` or `mcp stdio`.
+/// `mcp serve`, `mcp stdio` or `mcp install`.
 #[derive(Debug, Args)]
 pub struct McpArgs {
     /// Which.
@@ -99,6 +99,40 @@ pub enum McpCommand {
     Serve(ServeArgs),
     /// Bridge stdio to a running server.
     Stdio,
+    /// Add SerialBot to an MCP client's settings.
+    Install(InstallArgs),
+}
+
+/// Options of `mcp install`.
+#[derive(Debug, Args)]
+pub struct InstallArgs {
+    /// Which client.
+    #[arg(value_enum)]
+    pub client: ClientArg,
+    /// Print the entry instead of writing it.
+    #[arg(long)]
+    pub print: bool,
+}
+
+/// The clients `mcp install` knows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum ClientArg {
+    /// Claude Desktop (starts `mcp stdio`).
+    ClaudeDesktop,
+    /// Cursor (`~/.cursor/mcp.json`).
+    Cursor,
+    /// VS Code (the user `mcp.json`).
+    Vscode,
+}
+
+impl From<ClientArg> for serialbot_mcp::clients::Client {
+    fn from(arg: ClientArg) -> Self {
+        match arg {
+            ClientArg::ClaudeDesktop => Self::ClaudeDesktop,
+            ClientArg::Cursor => Self::Cursor,
+            ClientArg::Vscode => Self::VsCode,
+        }
+    }
 }
 
 /// Options of `mcp serve`.

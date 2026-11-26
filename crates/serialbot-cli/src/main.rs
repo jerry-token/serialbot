@@ -42,6 +42,9 @@ fn main() {
         stdin: Some(Box::new(std::io::stdin())),
         interactive,
         config_dir: serialbot_cli::config::config_dir(),
+        client_dirs: dirs::config_dir()
+            .zip(dirs::home_dir())
+            .map(|(config, home)| serialbot_mcp::clients::Dirs { config, home }),
     };
     let code = run(std::env::args_os(), &mut ctx);
     manager.close_all();

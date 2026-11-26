@@ -314,6 +314,24 @@ mod ipc {
     }
 
     #[tauri::command]
+    pub(crate) async fn mcp_install_client(
+        mcp: tauri::State<'_, McpController>,
+        client: String,
+    ) -> Result<crate::mcp::ClientInstall, String> {
+        let dirs = dirs::config_dir()
+            .zip(dirs::home_dir())
+            .map(|(config, home)| serialbot_mcp::clients::Dirs { config, home })
+            .ok_or("this system has no home or configuration directory")?;
+        mcp.install_client(
+            &client,
+            &dirs,
+            crate::cli::launcher(),
+            crate::cli::packaged(),
+        )
+        .await
+    }
+
+    #[tauri::command]
     pub(crate) async fn mcp_regenerate_token(
         mcp: tauri::State<'_, McpController>,
     ) -> Result<McpStatus, String> {
@@ -478,6 +496,7 @@ pub fn run() -> Result<(), tauri::Error> {
             ipc::mcp_status,
             ipc::mcp_apply,
             ipc::mcp_regenerate_token,
+            ipc::mcp_install_client,
             ipc::pending_approvals,
             ipc::answer_approval
         ])

@@ -13,6 +13,8 @@ use serde_json::{Value, json};
 use super::targets;
 use crate::config::CliConfig;
 use crate::testing::{Fixture, Ran};
+use serialbot_mcp::clients::Client as McpClient;
+use serialbot_mcp::{DEFAULT_PORT, MCP_PATH};
 
 const TOKEN: &str = "cli-test-token-0123456789";
 
@@ -267,4 +269,77 @@ fn zh_texts() {
     let ran = fixture.run(&["mcp", "serve"]);
     assert!(ran.err.contains("需要终端"), "{}", ran.err);
     assert!(fixture.run(&["mcp", "--help"]).out.contains("MCP 服务"));
+}
+
+#[test]
+fn install_writes_each_client_with_the_cli_token() {
+    let fixture = Fixture::new();
+    let dirs = fixture.client_dirs();
+
+    let cursor = fixture.run(&["mcp", "install", "cursor"]);
+    assert_eq!(cursor.code, 0, "{cursor:?}");
+    let token = CliConfig::load(&fixture.config_dir)
+        .unwrap()
+        .mcp_token
+        .unwrap();
+    let path = McpClient::Cursor.config_path(&dirs);
+    assert!(
+        cursor
+            .out
+            .contains(&format!("Added SerialBot to Cursor: {}", path.display()))
+    );
+    assert!(cursor.err.contains("mcp serve"), "{cursor:?}");
+    let value: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(
+        value["mcpServers"]["serialbot"]["headers"]["Authorization"],
+        format!("Bearer {token}")
+    );
+    assert_eq!(
+        value["mcpServers"]["serialbot"]["url"],
+        format!("http://127.0.0.1:{DEFAULT_PORT}{MCP_PATH}")
+    );
+
+    // Again: nothing to change.
+    let again = fixture.run(&["mcp", "install", "cursor"]);
+    assert!(again.out.contains("already set up"), "{again:?}");
+
+    // Claude Desktop starts this program's stdio bridge; the old file is backed up.
+    let claude = McpClient::ClaudeDesktop.config_path(&dirs);
+    std::fs::create_dir_all(claude.parent().unwrap()).unwrap();
+    std::fs::write(
+        &claude,
+        "{\"mcpServers\": {\"other\": {\"command\": \"x\"}}}",
+    )
+    .unwrap();
+    let desktop = fixture.run(&["mcp", "install", "claude-desktop"]);
+    assert_eq!(desktop.code, 0, "{desktop:?}");
+    assert!(
+        desktop.err.contains("previous file saved as"),
+        "{desktop:?}"
+    );
+    assert!(!desktop.err.contains("mcp serve"), "{desktop:?}");
+    let value: Value = serde_json::from_str(&std::fs::read_to_string(&claude).unwrap()).unwrap();
+    assert_eq!(value["mcpServers"]["other"]["command"], "x");
+    assert_eq!(
+        value["mcpServers"]["serialbot"]["args"],
+        json!(["mcp", "stdio"])
+    );
+}
+
+#[test]
+fn install_prints_the_entry_when_it_cannot_write() {
+    let fixture = Fixture::new();
+    let path = McpClient::VsCode.config_path(&fixture.client_dirs());
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, "{ // comments\n}").unwrap();
+    let ran = fixture.run(&["mcp", "install", "vscode"]);
+    assert_eq!(ran.code, 2, "{ran:?}");
+    assert!(ran.err.contains("by hand"), "{ran:?}");
+    assert!(ran.out.contains("\"servers\""), "{ran:?}");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "{ // comments\n}");
+
+    let printed = fixture.run(&["mcp", "install", "vscode", "--print"]);
+    assert_eq!(printed.code, 0, "{printed:?}");
+    assert!(printed.out.contains("\"type\": \"http\""), "{printed:?}");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "{ // comments\n}");
 }
