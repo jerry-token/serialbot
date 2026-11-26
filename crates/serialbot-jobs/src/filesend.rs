@@ -460,16 +460,23 @@ mod tests {
         assert_eq!(jobs.status(1), FileSendStatus::default());
     }
 
-    /// A device that starts XMODEM with `C` and ACKs every block and the
+    /// A device that asks for XMODEM with `C` until data comes and ACKs every block and the
     /// EOT; returns everything it received when the EOT came.
     fn xmodem_device(d: MockDevice) -> std::thread::JoinHandle<Vec<u8>> {
         std::thread::spawn(move || {
-            d.send(b"C");
             let mut got = Vec::new();
             let deadline = Instant::now() + Duration::from_secs(10);
+            let mut last_c: Option<Instant> = None;
             while Instant::now() < deadline {
                 let bytes = d.take_written();
                 if bytes.is_empty() {
+                    // Like a bootloader: C again and again until data comes.
+                    if got.is_empty()
+                        && last_c.is_none_or(|t| t.elapsed() > Duration::from_millis(50))
+                    {
+                        d.send(b"C");
+                        last_c = Some(Instant::now());
+                    }
                     std::thread::sleep(Duration::from_millis(2));
                     continue;
                 }

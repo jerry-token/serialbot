@@ -419,7 +419,7 @@ mod tests {
         );
     }
 
-    /// A bootloader on `port`: starts with `C` once the port is open, ACKs
+    /// A bootloader on `port`: sends `C` until data comes, ACKs
     /// every block and the EOT; returns the blocks' bytes.
     fn bootloader(f: &Fixture, port: &'static str) -> std::thread::JoinHandle<Vec<u8>> {
         let devices = std::sync::Arc::clone(&f.devices);
@@ -432,11 +432,18 @@ mod tests {
                 assert!(std::time::Instant::now() < deadline, "never opened");
                 std::thread::sleep(Duration::from_millis(1));
             };
-            device.send(b"C");
             let mut got = Vec::new();
+            let mut last_c: Option<std::time::Instant> = None;
             while std::time::Instant::now() < deadline {
                 let bytes = device.take_written();
                 if bytes.is_empty() {
+                    // Like a bootloader: C again and again until data comes.
+                    if got.is_empty()
+                        && last_c.is_none_or(|t| t.elapsed() > Duration::from_millis(50))
+                    {
+                        device.send(b"C");
+                        last_c = Some(std::time::Instant::now());
+                    }
                     std::thread::sleep(Duration::from_millis(1));
                     continue;
                 }
