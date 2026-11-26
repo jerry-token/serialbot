@@ -1158,8 +1158,13 @@ export function App({
                       data={activeView.plot}
                       createChart={createChart}
                       theme={chartTheme ?? chartThemeFromCss(document.documentElement.style)}
-                      emptyText={t.plotEmpty}
+                      emptyText={{ text: t.plotEmpty, justfloat: t.plotEmptyJustFloat }}
                       label={t.plotLabel(active.alias ?? active.port)}
+                      formatLabel={t.plotFormat}
+                      formatNames={{ text: t.plotFormatText, justfloat: t.plotFormatJustFloat }}
+                      onFormat={(format) =>
+                        activeView.plot?.setFormat(format, activeView.terminal.receivedChunks())
+                      }
                       onError={setError}
                     />
                   )}

@@ -468,6 +468,24 @@ fn the_waveform_per_session() {
 }
 
 #[test]
+fn the_waveform_reads_vofa_justfloat_frames() {
+    let mut r = Rig::new(&["mock0"], 120, 30);
+    r.type_line("/plot justfloat");
+    assert!(r.tui.panes[0].plot_shown);
+    assert_eq!(r.tui.panes[0].plot.format, Format::JustFloat);
+    let mut frame = Vec::new();
+    for v in [1.5_f32, -2.0] {
+        frame.extend_from_slice(&v.to_le_bytes());
+    }
+    frame.extend_from_slice(&super::super::plot::JUSTFLOAT_TAIL);
+    r.device("mock0").send(&frame);
+    r.until_shows("• ch1 1.5");
+    assert!(r.screen().contains("× ch2 -2"), "{}", r.screen());
+    r.type_line("/plot auto");
+    assert_eq!(r.tui.panes[0].plot.format, Format::Text);
+}
+
+#[test]
 fn plot_patterns_from_the_command_line() {
     let f = Fixture::new();
     let tui = start(
@@ -478,6 +496,11 @@ fn plot_patterns_from_the_command_line() {
     );
     assert!(tui.panes[0].plot_shown);
     assert_eq!(tui.panes[0].plot.patterns.len(), 2);
+    assert_eq!(tui.panes[0].plot.format, Format::Text);
+    let tui = start(&f, &["--plot", "justfloat", "mock1"], false, Lang::En);
+    assert!(tui.panes[0].plot_shown);
+    assert_eq!(tui.panes[0].plot.format, Format::JustFloat);
+    assert!(tui.panes[0].plot.patterns.is_empty());
     let line = vec!["serialbot-cli", "tui", "--plot", "(", "mock1"];
     let Command::Tui(args) = Cli::try_parse_from(line).unwrap().command else {
         panic!("not tui");

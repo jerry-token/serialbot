@@ -29,7 +29,7 @@ use crate::output::Output;
 use crate::term::console::{Flow, Settings};
 use crate::tui::ai::Ai;
 use crate::tui::app::{Groups, Options, Tui};
-use crate::tui::plot::Pattern;
+use crate::tui::plot::{Format, Pattern};
 use crate::tui::view;
 use crate::{Failure, PortLister};
 use serialbot_mcp::server::Listen;
@@ -78,12 +78,15 @@ pub fn prepare(args: &TuiArgs, manager: &Arc<SessionManager>, env: &Env) -> Resu
         ParityArg::Odd => 'O',
         ParityArg::Even => 'E',
     };
-    let plot = args
-        .plot
-        .iter()
-        .map(|spec| Pattern::parse(spec))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| Failure::new(Exit::Usage, e))?;
+    // `--plot justfloat` (or `text`) picks the format; anything else is a pattern.
+    let mut plot_format = Format::Text;
+    let mut plot = Vec::new();
+    for spec in &args.plot {
+        match Format::parse(spec) {
+            Some(format) => plot_format = format,
+            None => plot.push(Pattern::parse(spec).map_err(|e| Failure::new(Exit::Usage, e))?),
+        }
+    }
     let options = Options {
         port: args.port(""),
         console: Settings {
@@ -103,6 +106,7 @@ pub fn prepare(args: &TuiArgs, manager: &Arc<SessionManager>, env: &Env) -> Resu
         hex: args.hex,
         time: args.time,
         plot,
+        plot_format,
     };
     let mut tui = Tui::new(Arc::clone(manager), options);
     if let Some(file) = &args.groups {

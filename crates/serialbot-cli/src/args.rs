@@ -390,8 +390,8 @@ pub struct TuiArgs {
     /// Start each line with the time.
     #[arg(long)]
     pub time: bool,
-    /// Waveform patterns.
-    #[arg(long, value_name = "[NAME=]REGEX")]
+    /// Waveform patterns, or `justfloat` for VOFA+ binary frames.
+    #[arg(long, value_name = "[NAME=]REGEX|justfloat")]
     pub plot: Vec<String>,
     /// The app's command groups to show.
     #[arg(long, value_name = "FILE")]

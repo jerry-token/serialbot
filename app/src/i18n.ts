@@ -51,6 +51,11 @@ const en = {
   plotHint: "Plot numbers from received lines: name=value pairs, or numbers separated by commas",
   plotEmpty: "No numbers yet. Lines like temp=23.6 hum=41 or 1.2, 3.4 are plotted as they arrive.",
   plotLabel: (name: string) => `Plot of the numbers from ${name}`,
+  plotFormat: "Format",
+  plotFormatText: "Text: name=value, CSV, VOFA+ FireWater",
+  plotFormatJustFloat: "VOFA+ JustFloat (binary)",
+  plotEmptyJustFloat:
+    "No frames yet. JustFloat frames (little-endian float32 values, then 00 00 80 7F) are plotted as they arrive.",
   tty: "TTY",
   ttyHint:
     "Terminal mode: a full terminal (cursor, colors, full-screen programs); " +
@@ -345,6 +350,10 @@ const zh: Strings = {
   plotHint: "把接收到的数值画成曲线：name=value 形式，或用逗号分隔的数字",
   plotEmpty: "还没有数值。像 temp=23.6 hum=41 或 1.2, 3.4 这样的行，收到后会实时画出来。",
   plotLabel: (name: string) => `${name} 的数值曲线`,
+  plotFormat: "格式",
+  plotFormatText: "文本：name=value、CSV、VOFA+ FireWater",
+  plotFormatJustFloat: "VOFA+ JustFloat（二进制）",
+  plotEmptyJustFloat: "还没有数据帧。JustFloat 帧（小端 float32 数值，后跟 00 00 80 7F）收到后会实时画出来。",
   tty: "TTY",
   ttyHint: "终端模式：完整的终端（光标、颜色、全屏程序），按键直接发给设备",
   ttyLabel: (name: string) => `${name} 的终端`,

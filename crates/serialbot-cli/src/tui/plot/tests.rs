@@ -158,3 +158,88 @@ fn flat_empty_and_tiny_plots() {
     render(&plot, buf.area, &mut buf, true);
     assert!(buf.content.iter().all(|c| c.symbol() == " "));
 }
+
+#[test]
+fn vofa_firewater_lines_are_channels_whatever_the_prefix() {
+    assert_eq!(
+        auto_sample("samples:1.5,-2,3e1"),
+        [
+            ("ch1".to_owned(), 1.5),
+            ("ch2".to_owned(), -2.0),
+            ("ch3".to_owned(), 30.0)
+        ]
+    );
+    assert_eq!(
+        auto_sample("  data : 4 , 5,"),
+        [("ch1".to_owned(), 4.0), ("ch2".to_owned(), 5.0)]
+    );
+    // One value is still a pair, and pairs are not FireWater.
+    assert_eq!(auto_sample("temp:21.5"), [("temp".to_owned(), 21.5)]);
+    assert_eq!(
+        auto_sample("x: 1, y: 2"),
+        [("x".to_owned(), 1.0), ("y".to_owned(), 2.0)]
+    );
+    assert!(auto_sample("log: started, ok").is_empty());
+}
+
+fn frame(values: &[f32]) -> Vec<u8> {
+    let mut bytes: Vec<u8> = values.iter().flat_map(|v| v.to_le_bytes()).collect();
+    bytes.extend_from_slice(&JUSTFLOAT_TAIL);
+    bytes
+}
+
+#[test]
+fn justfloat_frames_become_samples_across_chunks() {
+    let mut plot = Plot::just_float();
+    let mut bytes = frame(&[1.0, 2.5, -3.0]);
+    bytes.extend(frame(&[4.0, 5.0, 6.0]));
+    let (first, rest) = bytes.split_at(7);
+    plot.push(first);
+    assert_eq!(plot.samples, 0);
+    plot.push(rest);
+    assert_eq!(plot.samples, 2);
+    assert_eq!(names(&plot), ["ch1", "ch2", "ch3"]);
+    assert_eq!(plot.series[1].values, [Some(2.5), Some(5.0)]);
+    // Text is not read as lines in this format.
+    plot.push(b"temp=1\n");
+    assert_eq!(plot.samples, 2);
+}
+
+#[test]
+fn bad_justfloat_frames_are_dropped_and_the_stream_resyncs() {
+    let mut plot = Plot::just_float();
+    // Not a multiple of four: dropped, the next frame still counts.
+    let mut bytes = vec![1, 2, 3];
+    bytes.extend_from_slice(&JUSTFLOAT_TAIL);
+    bytes.extend(frame(&[f32::NAN, 7.0]));
+    plot.push(&bytes);
+    assert_eq!(plot.samples, 1);
+    // NaN leaves a gap.
+    assert_eq!(names(&plot), ["ch2"]);
+    assert_eq!(plot.series[0].values, [Some(7.0)]);
+    // An empty frame or one with too many values is dropped.
+    plot.push(&JUSTFLOAT_TAIL);
+    plot.push(&frame(&[0.0; MAX_CHANNELS + 1]));
+    assert_eq!(plot.samples, 1);
+    // Noise without a tail does not pile up.
+    plot.push(&[0x55; 10_000]);
+    assert!(plot.pending.len() < MAX_CHANNELS * 4 + 4);
+    plot.push(&frame(&[8.0]));
+    // The noise before it makes this one too long; the one after is clean.
+    plot.push(&frame(&[9.0]));
+    assert_eq!(plot.samples, 2);
+    assert_eq!(names(&plot), ["ch2", "ch1"]);
+    assert_eq!(plot.series[1].latest(), Some(9.0));
+}
+
+#[test]
+fn formats_are_named_as_the_command_line_names_them() {
+    assert_eq!(Format::parse("JustFloat"), Some(Format::JustFloat));
+    assert_eq!(Format::parse("text"), Some(Format::Text));
+    assert_eq!(Format::parse("auto"), Some(Format::Text));
+    assert_eq!(Format::parse("temp=(\\d+)"), None);
+    assert_eq!(
+        Plot::new(Vec::new()).with_format(Format::JustFloat).format,
+        Format::JustFloat
+    );
+}

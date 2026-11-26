@@ -2165,6 +2165,33 @@ describe("Plot view", () => {
     await waitFor(() => expect(FakeChart.last?.series).toEqual([["temp", [22]]]));
   });
 
+  it("switches the plot to VOFA+ JustFloat frames and back", async () => {
+    const { backend, user } = setupPlot();
+    await openPort(user);
+    act(() => backend.receiveAt(1, "temp=20\r\n", 1_000_000));
+    await user.click(plotToggle());
+    await waitFor(() => expect(names()).toEqual(["temp"]));
+
+    const format = screen.getByRole("combobox", { name: "Format" });
+    await user.selectOptions(format, "VOFA+ JustFloat (binary)");
+    await waitFor(() => expect(names()).toEqual([]));
+    expect(screen.getByText(/No frames yet/)).toBeInTheDocument();
+    // 1.5 and -2 as little-endian float32, then the tail. The text received
+    // before spoils the first frame; the second is clean.
+    const frame = [0, 0, 0xc0, 0x3f, 0, 0, 0, 0xc0, 0x00, 0x00, 0x80, 0x7f];
+    act(() => backend.receiveBytes(1, [...frame, ...frame]));
+    await waitFor(() =>
+      expect(FakeChart.last?.series).toEqual([
+        ["ch1", [1.5]],
+        ["ch2", [-2]],
+      ]),
+    );
+
+    // Back to text: the history is read again as lines.
+    await user.selectOptions(format, "Text: name=value, CSV, VOFA+ FireWater");
+    await waitFor(() => expect(names()).toEqual(["temp"]));
+  });
+
   it("reports a chart that cannot load, and drops one that loads too late", async () => {
     let finish: (c: Chart) => void = () => {};
     let broken = false;
