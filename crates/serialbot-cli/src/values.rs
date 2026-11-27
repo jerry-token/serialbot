@@ -2,40 +2,7 @@
 // Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! Parsers for option values: durations, line levels and checksums.
 
-use std::time::Duration;
-
-/// Parses `500ms`, `5s`, `1.5s` or `2m` (spaces and case ignored). A unit is
-/// required, except for `0`, so `--timeout 5` is not silently read as
-/// milliseconds or seconds.
-pub fn parse_duration(text: &str) -> Result<Duration, String> {
-    let t = text.trim().to_ascii_lowercase().replace(' ', "");
-    if t == "0" {
-        return Ok(Duration::ZERO);
-    }
-    let split = t
-        .find(|c: char| !(c.is_ascii_digit() || c == '.'))
-        .ok_or_else(|| format!("{text:?} needs a unit: ms, s or m (e.g. 500ms, 5s)"))?;
-    let (number, unit) = t.split_at(split);
-    let value: f64 = number
-        .parse()
-        .map_err(|_| format!("{text:?} is not a duration (e.g. 500ms, 5s, 2m)"))?;
-    let seconds = match unit {
-        "ms" => value / 1000.0,
-        "s" => value,
-        "m" | "min" => value * 60.0,
-        _ => return Err(format!("unknown unit {unit:?} in {text:?}: use ms, s or m")),
-    };
-    Duration::try_from_secs_f64(seconds).map_err(|_| format!("{text:?} is out of range"))
-}
-
-/// Parses a line level: `1`/`on`/`high`/`true` or `0`/`off`/`low`/`false`.
-pub fn parse_level(text: &str) -> Result<bool, String> {
-    match text.trim().to_ascii_lowercase().as_str() {
-        "1" | "on" | "high" | "true" => Ok(true),
-        "0" | "off" | "low" | "false" => Ok(false),
-        _ => Err(format!("{text:?} is not a line level: use 1/on or 0/off")),
-    }
-}
+pub use serialbot_jobs::script::{parse_duration, parse_level};
 
 /// A checksum appended to sent data; the same set as the desktop app's
 /// send box, with the same byte order.
@@ -138,6 +105,8 @@ fn crc32(data: &[u8]) -> u32 {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
 
     #[test]

@@ -2,8 +2,8 @@
 // Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! `run`: a script (see [`crate::script`]) on one open of the port.
 
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
 
 use serialbot_core::SessionManager;
 use serialbot_core::log::{Cursor, Direction, EntryKind};
@@ -14,13 +14,16 @@ use crate::args::RunArgs;
 use crate::commands::send::open;
 use crate::exit::Exit;
 use crate::output::{Output, Style};
-use crate::script::{self, Progress, Stop};
+use crate::script::{self, Progress};
+use serialbot_jobs::sequence::{self, Options, Reason, SequenceStatus};
 
-/// Runs the script; each step is reported on standard error (`✓ 3 send
-/// AT`), received data goes to standard output with `--print`. Exit
-/// codes: 0 all steps done; 1 an `expect` timed out; 2 the script is
-/// invalid (checked before opening); 3 the port cannot be opened; 4 a
-/// step failed or the device went away; Ctrl+C stops it with 0.
+/// Runs the script (`--runs` times); each step is reported on standard
+/// error (`✓ 3 send AT`, with the run number when there are several runs,
+/// then the tally), received data goes to standard output with `--print`.
+/// Exit codes: 0 all steps done; 1 an `expect` timed out (in any run); 2
+/// the script is invalid (checked before opening); 3 the port cannot be
+/// opened; 4 a step failed or the device went away; Ctrl+C stops it with 0
+/// unless a run had failed.
 pub fn run(
     args: &RunArgs,
     manager: &SessionManager,
@@ -46,31 +49,93 @@ pub fn run(
     .map_err(|e| Failure::new(Exit::Usage, format!("{}: {e}", args.script.display())))?;
     let session = open(manager, &args.port, s)?;
     let mut printed = session.end();
-    let result = script::run(&session, &items, interrupted, &mut |p: &Progress| {
-        if args.print {
-            printed = print_received(&session, printed, out);
-        }
-        let mark = if p.stop.is_none() {
-            out.paint(Style::Dim, "✓")
-        } else {
-            out.paint(Style::Red, "✗")
-        };
-        out.error_note(&format!(
-            "{mark} {:>3}  {}  {}",
-            p.line,
-            p.source,
-            out.paint(Style::Dim, &format!("({} ms)", p.took.as_millis()))
-        ));
-    });
+    let options = Options {
+        runs: (args.runs > 0).then_some(args.runs),
+        stop_on_fail: !args.keep_going,
+        gap: args.gap.unwrap_or_default(),
+    };
+    let several = options.runs != Some(1);
+    let name = args.script.display().to_string();
+    let status = Mutex::new(SequenceStatus::default());
+    sequence::run_loops(
+        &session,
+        &name,
+        &items,
+        &options,
+        interrupted,
+        &status,
+        &mut |run, p: &Progress| {
+            if args.print {
+                printed = print_received(&session, printed, out);
+            }
+            let mark = if p.stop.is_none() {
+                out.paint(Style::Dim, "✓")
+            } else {
+                out.paint(Style::Red, "✗")
+            };
+            let run = if several {
+                out.paint(Style::Dim, &format!("#{run:<3} "))
+            } else {
+                String::new()
+            };
+            out.error_note(&format!(
+                "{mark} {run}{:>3}  {}  {}",
+                p.line,
+                p.source,
+                out.paint(Style::Dim, &format!("({} ms)", p.took.as_millis()))
+            ));
+        },
+    );
     let _ = manager.remove(session.id());
-    match result {
-        Ok(()) | Err(Stop::Interrupted) => Ok(()),
-        Err(Stop::Timeout) => Err(Failure::new(Exit::Timeout, s.no_match.to_owned())),
-        Err(Stop::Failed(why)) => Err(Failure::new(
+    let st = status
+        .into_inner()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if several {
+        out.error_note(&tally(&st, s));
+    }
+    if let Some(why) = &st.error {
+        return Err(Failure::new(
             Exit::Disconnected,
             format!("{} ({}): {why}", s.disconnected, args.port.port),
-        )),
+        ));
     }
+    if st.failed == 0 {
+        return Ok(());
+    }
+    let message = if several {
+        s.runs_failed
+            .replace("{failed}", &st.failed.to_string())
+            .replace("{done}", &st.done.to_string())
+    } else {
+        s.no_match.to_owned()
+    };
+    let timed_out = st.failures.iter().all(|f| f.reason == Reason::Timeout);
+    let code = if timed_out {
+        Exit::Timeout
+    } else {
+        Exit::Disconnected
+    };
+    Err(Failure::new(code, message))
+}
+
+/// The tally of several runs, and their times when some passed.
+fn tally(st: &SequenceStatus, s: &crate::i18n::Strings) -> String {
+    let mut text = s
+        .runs_tally
+        .replace("{done}", &st.done.to_string())
+        .replace("{passed}", &st.passed.to_string())
+        .replace("{failed}", &st.failed.to_string());
+    if let (Some(fastest), Some(slowest)) = (st.fastest_ms, st.slowest_ms) {
+        let average = st.passed_ms / u64::from(st.passed.max(1));
+        text.push('\n');
+        text.push_str(
+            &s.runs_times
+                .replace("{fastest}", &fastest.to_string())
+                .replace("{average}", &average.to_string())
+                .replace("{slowest}", &slowest.to_string()),
+        );
+    }
+    text
 }
 
 /// Writes received bytes after `from` and returns the new position.
@@ -247,5 +312,63 @@ mod tests {
         });
         let ran = f.run(&["run", "mock0", &script]);
         assert_eq!(ran.code, 0, "{}", ran.err);
+    }
+
+    #[test]
+    fn several_runs_number_their_steps_and_end_with_the_tally() {
+        let f = Fixture::new();
+        let dir = Dir::new("runs");
+        let script = dir.file("ping.txt", "send ping\nexpect OK\n");
+        let device = ok_device(&f, 3);
+        let ran = f.run(&["run", "mock0", &script, "--runs", "3", "--gap", "10ms"]);
+        assert_eq!(device.join().unwrap(), b"ping\r\nping\r\nping\r\n");
+        assert_eq!(ran.code, 0, "{}", ran.err);
+        assert!(ran.err.contains("✓ #3     1  send ping"), "{}", ran.err);
+        assert!(
+            ran.err.contains("runs: 3, passed: 3, failed: 0"),
+            "{}",
+            ran.err
+        );
+        assert!(ran.err.contains("ms on average"), "{}", ran.err);
+    }
+
+    #[test]
+    fn failed_runs_are_tallied_and_exit_with_1() {
+        let f = Fixture::new();
+        let dir = Dir::new("runs-fail");
+        let script = dir.file("never.txt", "timeout 20ms\nsend ping\nexpect never\n");
+        let ran = f.run(&["run", "mock0", &script, "--runs", "3", "--keep-going"]);
+        assert_eq!(ran.code, Exit::Timeout as u8, "{}", ran.err);
+        assert!(
+            ran.err.contains("runs: 3, passed: 0, failed: 3"),
+            "{}",
+            ran.err
+        );
+        assert!(ran.err.contains("3 of 3 runs failed"), "{}", ran.err);
+        assert!(!ran.err.contains("average"), "{}", ran.err);
+
+        // Without --keep-going the first failed run ends it.
+        let ran = f.run(&["run", "mock0", &script, "--runs", "3"]);
+        assert!(
+            ran.err.contains("runs: 1, passed: 0, failed: 1"),
+            "{}",
+            ran.err
+        );
+    }
+
+    #[test]
+    fn zero_runs_go_on_until_ctrl_c() {
+        let mut f = Fixture::new();
+        f.lang = crate::Lang::Zh;
+        let dir = Dir::new("runs-forever");
+        let script = dir.file("wait.txt", "wait 5ms\n");
+        let flag = std::sync::Arc::clone(&f.interrupted);
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(150));
+            flag.store(true, std::sync::atomic::Ordering::Relaxed);
+        });
+        let ran = f.run(&["run", "mock0", &script, "--runs", "0"]);
+        assert_eq!(ran.code, 0, "{}", ran.err);
+        assert!(ran.err.contains("失败：0"), "{}", ran.err);
     }
 }

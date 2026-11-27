@@ -562,6 +562,15 @@ pub struct RunArgs {
     /// Text encoding.
     #[arg(long, default_value = "utf-8")]
     pub encoding: String,
+    /// How many times to run the script; 0: until stopped.
+    #[arg(long, default_value_t = 1, value_name = "N")]
+    pub runs: u32,
+    /// Go on after a failed run.
+    #[arg(long)]
+    pub keep_going: bool,
+    /// The pause between runs.
+    #[arg(long, value_parser = parse_duration, value_name = "DURATION")]
+    pub gap: Option<Duration>,
 }
 
 /// Options of `signal`.

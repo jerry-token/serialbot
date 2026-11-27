@@ -2,8 +2,9 @@
 // Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 //! Background jobs that run on a session for as long as a front end wants
 //! them: sending a file in chunks ([`filesend`]), sending the same data on
-//! a timer ([`repeat`]), and saving or capturing the log to a file
-//! ([`export`]).
+//! a timer ([`repeat`]), saving or capturing the log to a file
+//! ([`export`]), and scripts, run once or over and over as test
+//! sequences ([`script`], [`sequence`]).
 //!
 //! Each job runs on its own thread, so the desktop app and the command-line
 //! tool stay responsive and can show progress or stop it. None of them
@@ -12,6 +13,8 @@
 pub mod export;
 pub mod filesend;
 pub mod repeat;
+pub mod script;
+pub mod sequence;
 pub mod xmodem;
 
 #[cfg(test)]
