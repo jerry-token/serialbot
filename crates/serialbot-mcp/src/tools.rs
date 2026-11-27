@@ -73,6 +73,7 @@ pub struct SerialTools {
     manager: Arc<SessionManager>,
     list_ports: Arc<PortLister>,
     guard: Arc<dyn Guard>,
+    protocols_dir: Option<std::path::PathBuf>,
     tool_router: ToolRouter<Self>,
 }
 
@@ -181,6 +182,13 @@ pub(crate) struct ReadArgs {
     /// How data is rendered (default text).
     #[serde(default)]
     pub format: Format,
+    /// Decode the data as messages of this protocol instead of returning
+    /// entries: "modbus-rtu", "slcan", or "user:<name>" for the user's
+    /// protocol files. Each frame has its fields and whether its checksum
+    /// is right. A message cut by the read budget comes back incomplete;
+    /// read from an earlier cursor or with a larger `max_bytes` to get it whole.
+    #[serde(default)]
+    pub decode: Option<String>,
 }
 
 /// Arguments of `io.wait_for`.
@@ -425,8 +433,11 @@ pub(crate) struct EntryOut {
 /// Result of `io.read`.
 #[derive(Debug, Serialize, JsonSchema)]
 pub(crate) struct ReadOut {
-    /// Entries in order.
+    /// Entries in order (empty with `decode`).
     pub entries: Vec<EntryOut>,
+    /// With `decode`: the messages in the data, in order.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frames: Option<Vec<FrameOut>>,
     /// Cursor for the next read.
     pub cursor: u64,
     /// Entries between the requested cursor and the oldest kept entry that
@@ -434,6 +445,71 @@ pub(crate) struct ReadOut {
     pub missed: u64,
     /// Whether more entries are already available after `cursor`.
     pub more: bool,
+}
+
+/// One decoded message.
+#[derive(Debug, Serialize, JsonSchema)]
+pub(crate) struct FrameOut {
+    /// When its first byte came (microseconds since the Unix epoch).
+    pub timestamp_us: u64,
+    /// "rx" (from the device) or "tx" (sent to it).
+    pub direction: &'static str,
+    /// Its bytes in hex.
+    pub bytes: String,
+    /// What kind of message it is.
+    pub name: String,
+    /// The fields that matter, in one line.
+    pub summary: String,
+    /// "ok", "badChecksum", "incomplete" or "unknown" (not this protocol).
+    pub status: &'static str,
+    /// Its fields in byte order.
+    pub fields: Vec<FieldOut>,
+}
+
+/// One field of a decoded message.
+#[derive(Debug, Serialize, JsonSchema)]
+pub(crate) struct FieldOut {
+    /// Its name.
+    pub name: String,
+    /// Its first byte in the message.
+    pub offset: usize,
+    /// How many bytes it takes.
+    pub len: usize,
+    /// Its value as a number, text, flag or list.
+    pub value: serde_json::Value,
+    /// Its value as people read it.
+    pub text: String,
+}
+
+fn frame_out(f: serialbot_decode::Frame) -> FrameOut {
+    use serialbot_decode::Status;
+    FrameOut {
+        timestamp_us: f.timestamp_us,
+        direction: match f.direction {
+            serialbot_decode::Direction::Rx => "rx",
+            serialbot_decode::Direction::Tx => "tx",
+        },
+        bytes: serialbot_decode::hex(&f.bytes),
+        name: f.name,
+        summary: f.summary,
+        status: match f.status {
+            Status::Ok => "ok",
+            Status::BadChecksum => "badChecksum",
+            Status::Incomplete => "incomplete",
+            Status::Unknown => "unknown",
+        },
+        fields: f
+            .fields
+            .into_iter()
+            .map(|x| FieldOut {
+                value: serde_json::to_value(&x.value).unwrap_or_default(),
+                name: x.name,
+                offset: x.offset,
+                len: x.len,
+                text: x.text,
+            })
+            .collect(),
+    }
 }
 
 /// Result of `log.mark`.
@@ -693,8 +769,17 @@ impl SerialTools {
             manager,
             list_ports,
             guard: Arc::new(AllowAll),
+            protocols_dir: None,
             tool_router: Self::tool_router() + Self::more_tools(),
         }
+    }
+
+    /// Lets `io.read` decode with the user's protocol files in `dir` too
+    /// (`decode: "user:<name>"`), besides the built-in protocols.
+    #[must_use]
+    pub fn with_protocols_dir(mut self, dir: std::path::PathBuf) -> Self {
+        self.protocols_dir = Some(dir);
+        self
     }
 
     /// Asks `guard` before every action that sends data, changes lines or
@@ -875,7 +960,7 @@ impl SerialTools {
 
     #[tool(
         name = "io.read",
-        description = "Read logged traffic (rx, tx and markers, with microsecond timestamps) from a cursor. Pass the returned cursor to the next read.",
+        description = "Read logged traffic (rx, tx and markers, with microsecond timestamps) from a cursor. Pass the returned cursor to the next read. With decode (\"modbus-rtu\", \"slcan\" or \"user:<name>\"), get the messages with their fields and checksum status instead.",
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     fn io_read(&self, Parameters(args): Parameters<ReadArgs>) -> Result<Json<ReadOut>, String> {
@@ -883,17 +968,47 @@ impl SerialTools {
         if budget == 0 || budget > MAX_READ_BYTES {
             return Err(format!("max_bytes must be between 1 and {MAX_READ_BYTES}"));
         }
+        let mut decoder = args
+            .decode
+            .as_deref()
+            .map(|spec| {
+                serialbot_decode::find_decoder(
+                    spec,
+                    self.protocols_dir.as_deref(),
+                    serialbot_decode::Lang::En,
+                )
+            })
+            .transpose()?
+            .map(|(_, d)| d);
         let session = self.session(&args.session)?;
         let result = session
             .read(Cursor(args.cursor), budget)
             .map_err(|e| e.to_string())?;
-        let entries = result
-            .entries
-            .into_iter()
-            .map(|e| entry_out(e, args.format))
-            .collect();
+        let mut frames = None;
+        let entries = if let Some(decoder) = &mut decoder {
+            let mut out = Vec::new();
+            for e in &result.entries {
+                if let EntryKind::Data { direction, bytes } = &e.kind {
+                    let direction = match direction {
+                        Direction::Rx => serialbot_decode::Direction::Rx,
+                        Direction::Tx => serialbot_decode::Direction::Tx,
+                    };
+                    decoder.feed(direction, e.timestamp_us, bytes, &mut out);
+                }
+            }
+            decoder.idle(u64::MAX, &mut out);
+            frames = Some(out.into_iter().map(frame_out).collect());
+            Vec::new()
+        } else {
+            result
+                .entries
+                .into_iter()
+                .map(|e| entry_out(e, args.format))
+                .collect()
+        };
         Ok(Json(ReadOut {
             entries,
+            frames,
             cursor: result.next.0,
             missed: result.missed,
             more: result.next < session.end(),
