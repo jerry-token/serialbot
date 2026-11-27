@@ -272,11 +272,11 @@ fn zh_texts() {
 }
 
 #[test]
-fn install_writes_each_client_with_the_cli_token() {
+fn config_prints_each_client_with_the_cli_token_and_writes_nothing() {
     let fixture = Fixture::new();
     let dirs = fixture.client_dirs();
 
-    let cursor = fixture.run(&["mcp", "install", "cursor"]);
+    let cursor = fixture.run(&["mcp", "config", "cursor"]);
     assert_eq!(cursor.code, 0, "{cursor:?}");
     let token = CliConfig::load(&fixture.config_dir)
         .unwrap()
@@ -285,11 +285,15 @@ fn install_writes_each_client_with_the_cli_token() {
     let path = McpClient::Cursor.config_path(&dirs);
     assert!(
         cursor
-            .out
-            .contains(&format!("Added SerialBot to Cursor: {}", path.display()))
+            .err
+            .contains(&format!("default file: {}", path.display())),
+        "{cursor:?}"
     );
+    assert!(cursor.err.contains("\"mcpServers\""), "{cursor:?}");
     assert!(cursor.err.contains("mcp serve"), "{cursor:?}");
-    let value: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    assert!(!path.exists());
+    // Standard output is the snippet alone.
+    let value: Value = serde_json::from_str(&cursor.out).unwrap();
     assert_eq!(
         value["mcpServers"]["serialbot"]["headers"]["Authorization"],
         format!("Bearer {token}")
@@ -299,64 +303,59 @@ fn install_writes_each_client_with_the_cli_token() {
         format!("http://127.0.0.1:{DEFAULT_PORT}{MCP_PATH}")
     );
 
-    // Again: nothing to change.
-    let again = fixture.run(&["mcp", "install", "cursor"]);
-    assert!(again.out.contains("already set up"), "{again:?}");
+    // The same token next time.
+    let again = fixture.run(&["mcp", "config", "cursor"]);
+    assert_eq!(again.out, cursor.out);
 
-    // Claude Desktop starts this program's stdio bridge; the old file is backed up.
-    let claude = McpClient::ClaudeDesktop.config_path(&dirs);
-    std::fs::create_dir_all(claude.parent().unwrap()).unwrap();
-    std::fs::write(
-        &claude,
-        "{\"mcpServers\": {\"other\": {\"command\": \"x\"}}}",
-    )
-    .unwrap();
-    let desktop = fixture.run(&["mcp", "install", "claude-desktop"]);
+    // Claude Desktop starts this program's stdio bridge.
+    let desktop = fixture.run(&["mcp", "config", "claude-desktop"]);
     assert_eq!(desktop.code, 0, "{desktop:?}");
-    assert!(
-        desktop.err.contains("previous file saved as"),
-        "{desktop:?}"
-    );
     assert!(!desktop.err.contains("mcp serve"), "{desktop:?}");
-    let value: Value = serde_json::from_str(&std::fs::read_to_string(&claude).unwrap()).unwrap();
-    assert_eq!(value["mcpServers"]["other"]["command"], "x");
+    let value: Value = serde_json::from_str(&desktop.out).unwrap();
     assert_eq!(
         value["mcpServers"]["serialbot"]["args"],
         json!(["mcp", "stdio"])
     );
+    assert!(!McpClient::ClaudeDesktop.config_path(&dirs).exists());
 }
 
 #[test]
-fn install_prints_the_entry_when_it_cannot_write() {
+fn config_knows_every_client() {
     let fixture = Fixture::new();
-    let path = McpClient::VsCode.config_path(&fixture.client_dirs());
-    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    std::fs::write(&path, "{ // comments\n}").unwrap();
-    let ran = fixture.run(&["mcp", "install", "vscode"]);
-    assert_eq!(ran.code, 2, "{ran:?}");
-    assert!(ran.err.contains("by hand"), "{ran:?}");
-    assert!(ran.out.contains("\"servers\""), "{ran:?}");
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), "{ // comments\n}");
-
-    let printed = fixture.run(&["mcp", "install", "vscode", "--print"]);
-    assert_eq!(printed.code, 0, "{printed:?}");
-    assert!(printed.out.contains("\"type\": \"http\""), "{printed:?}");
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), "{ // comments\n}");
-}
-
-#[test]
-fn install_knows_codex_gemini_and_opencode() {
-    let fixture = Fixture::new();
-    let dirs = fixture.client_dirs();
     for (arg, client) in [
+        ("vscode", McpClient::VsCode),
         ("codex", McpClient::Codex),
         ("gemini", McpClient::Gemini),
         ("opencode", McpClient::OpenCode),
     ] {
-        let ran = fixture.run(&["mcp", "install", arg]);
+        let ran = fixture.run(&["mcp", "config", arg]);
         assert_eq!(ran.code, 0, "{ran:?}");
-        assert!(ran.out.contains(client.name()), "{ran:?}");
-        let text = std::fs::read_to_string(client.config_path(&dirs)).unwrap();
-        assert!(text.contains("serialbot"), "{arg}: {text}");
+        assert!(ran.out.contains("serialbot"), "{arg}: {ran:?}");
+        assert!(ran.err.contains(client.section()), "{arg}: {ran:?}");
     }
+    let codex = fixture.run(&["mcp", "config", "codex"]);
+    assert!(
+        codex.out.starts_with("[mcp_servers.serialbot]"),
+        "{codex:?}"
+    );
+    assert!(fixture.run(&["mcp", "config", "zed"]).code != 0);
+}
+
+#[test]
+fn config_without_home_still_prints() {
+    let mut fixture = Fixture::new();
+    fixture.no_client_dirs = true;
+    let ran = fixture.run(&["mcp", "config", "gemini"]);
+    assert_eq!(ran.code, 0, "{ran:?}");
+    assert!(!ran.err.contains("default file"), "{ran:?}");
+    assert!(ran.out.contains("httpUrl"), "{ran:?}");
+}
+
+#[test]
+fn config_in_chinese() {
+    let mut fixture = Fixture::new();
+    fixture.lang = crate::Lang::Zh;
+    let ran = fixture.run(&["mcp", "config", "vscode"]);
+    assert!(ran.err.contains("默认文件："), "{ran:?}");
+    assert!(ran.err.contains("\"servers\""), "{ran:?}");
 }

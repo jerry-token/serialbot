@@ -92,6 +92,18 @@ const fake: Record<string, unknown> = {
   captureStatus: async () => ({ running: false }),
   repeatStatus: async () => ({ running: false, sent: 0 }),
   pendingApprovals: async () => [],
+  // A long path and snippet, so the layout test sees them in a small window.
+  mcpClientConfig: async () => ({
+    client: "Claude Desktop",
+    path: "C:\\Users\\someone-with-a-long-name\\AppData\\Roaming\\Claude\\claude_desktop_config.json",
+    section: "mcpServers",
+    snippet: JSON.stringify(
+      { mcpServers: { serialbot: { command: "C:\\Program Files\\SerialBot\\serialbot.exe", args: ["mcp"] } } },
+      null,
+      2,
+    ),
+    error: null,
+  }),
 };
 
 // Anything not listed: event subscriptions do nothing, other calls resolve to null.

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
 import { useEffect, useState } from "react";
-import type { ClientInstall, McpClientId, McpSettings, McpStatus } from "../api";
+import type { ClientConfig, McpClientId, McpSettings, McpStatus } from "../api";
 import { claudeCommand, claudeDesktopConfig } from "../api";
 import type { Strings } from "../i18n";
 
@@ -12,8 +12,8 @@ interface Props {
   onRegenerate: () => void;
   /** Copies text to the clipboard; rejects if not allowed. */
   copy: (text: string) => Promise<void>;
-  /** Writes SerialBot into a client's settings file. */
-  onInstall: (client: McpClientId) => Promise<ClientInstall>;
+  /** The settings to copy into a client's file. */
+  onClientConfig: (client: McpClientId) => Promise<ClientConfig>;
 }
 
 const CLIENTS: { id: McpClientId; name: string }[] = [
@@ -25,8 +25,9 @@ const CLIENTS: { id: McpClientId; name: string }[] = [
   { id: "opencode", name: "opencode" },
 ];
 
-export function McpPanel({ t, status, onApply, onRegenerate, copy, onInstall }: Props) {
-  const [installed, setInstalled] = useState<ClientInstall | null>(null);
+export function McpPanel({ t, status, onApply, onRegenerate, copy, onClientConfig }: Props) {
+  const [client, setClient] = useState<McpClientId | null>(null);
+  const [config, setConfig] = useState<ClientConfig | null>(null);
   const [port, setPort] = useState(String(status.settings.port));
   const [token, setToken] = useState(status.settings.token);
   const [note, setNote] = useState<string | null>(null);
@@ -147,44 +148,38 @@ export function McpPanel({ t, status, onApply, onRegenerate, copy, onInstall }: 
         </div>
       )}
       <div className="row mcp-clients">
-        <span className="muted">{t.mcpAddTo}</span>
+        <span className="muted">{t.mcpConfigFor}</span>
         {CLIENTS.map((c) => (
           <button
             key={c.id}
             type="button"
+            aria-pressed={client === c.id}
             onClick={() => {
               setNote(null);
-              onInstall(c.id).then(setInstalled, (e: unknown) => setNote(String(e)));
+              setClient(c.id);
+              setConfig(null);
+              onClientConfig(c.id).then(setConfig, (e: unknown) => setNote(String(e)));
             }}
           >
             {c.name}
           </button>
         ))}
       </div>
-      {installed && !installed.error && (
-        <p className="ok">
-          {installed.changed
-            ? t.mcpAdded(installed.client, installed.path)
-            : t.mcpAlreadyAdded(installed.client)}
-          {installed.backup && ` ${t.mcpBackup(installed.backup)}`}
-        </p>
-      )}
-      {installed?.error && (
+      {config?.error && <p className="error">{config.error}</p>}
+      {config?.snippet && (
         <>
-          <p className="error">{installed.error}</p>
-          {installed.snippet && (
-            <div className="row">
-              <span className="muted">{t.mcpAddByHand(installed.client)}</span>
-              <pre className="grow config">{installed.snippet}</pre>
-              <button
-                type="button"
-                aria-label={t.copyClientConfig(installed.client)}
-                onClick={() => copyNote(installed.snippet ?? "")}
-              >
-                {t.copy}
-              </button>
-            </div>
-          )}
+          {config.path && <p className="muted path">{t.mcpDefaultPath(config.path)}</p>}
+          <p className="muted">{t.mcpConfigHint(config.client, config.section)}</p>
+          <div className="row">
+            <pre className="grow config">{config.snippet}</pre>
+            <button
+              type="button"
+              aria-label={t.copyClientConfig(config.client)}
+              onClick={() => copyNote(config.snippet ?? "")}
+            >
+              {t.copy}
+            </button>
+          </div>
         </>
       )}
       {desktop && (

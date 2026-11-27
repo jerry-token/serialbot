@@ -84,7 +84,7 @@ pub struct CompletionsArgs {
     pub shell: clap_complete::Shell,
 }
 
-/// `mcp serve`, `mcp stdio` or `mcp install`.
+/// `mcp serve`, `mcp stdio` or `mcp config`.
 #[derive(Debug, Args)]
 pub struct McpArgs {
     /// Which.
@@ -99,22 +99,19 @@ pub enum McpCommand {
     Serve(ServeArgs),
     /// Bridge stdio to a running server.
     Stdio,
-    /// Add SerialBot to an MCP client's settings.
-    Install(InstallArgs),
+    /// Print the settings that connect an MCP client.
+    Config(ConfigArgs),
 }
 
-/// Options of `mcp install`.
+/// Options of `mcp config`.
 #[derive(Debug, Args)]
-pub struct InstallArgs {
+pub struct ConfigArgs {
     /// Which client.
     #[arg(value_enum)]
     pub client: ClientArg,
-    /// Print the entry instead of writing it.
-    #[arg(long)]
-    pub print: bool,
 }
 
-/// The clients `mcp install` knows.
+/// The clients `mcp config` knows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum ClientArg {
     /// Claude Desktop (starts `mcp stdio`).

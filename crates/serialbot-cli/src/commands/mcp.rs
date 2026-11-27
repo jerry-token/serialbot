@@ -20,12 +20,12 @@ use std::time::Duration;
 
 use serialbot_core::SessionManager;
 use serialbot_mcp::approval::{ApprovalRequest, Approvals, Decision};
-use serialbot_mcp::clients::{self, Client, Dirs, Server};
+use serialbot_mcp::clients::{Client, Dirs, Server};
 use serialbot_mcp::guard::{Action, AllowAll, Approval, Guard};
 use serialbot_mcp::server::{Listen, PORT_ATTEMPTS, RunningServer};
 use serialbot_mcp::{DEFAULT_PORT, MCP_PATH, SerialTools, generate_token};
 
-use crate::args::{Approve, InstallArgs, ServeArgs};
+use crate::args::{Approve, ConfigArgs, ServeArgs};
 use crate::config::{self, CliConfig};
 use crate::exit::Exit;
 use crate::output::{Output, Style};
@@ -287,14 +287,15 @@ pub fn token(explicit: Option<&str>, port: u16, dir: Option<&Path>) -> Result<St
     Ok(token)
 }
 
-/// `mcp install`: writes SerialBot into an MCP client's settings. Claude
-/// Desktop gets this program with `mcp stdio`; Cursor and VS Code get
-/// `mcp serve`'s address (the port in `cli.json`, else the default) and
-/// token (made and saved now if there is none yet). A file that cannot be
-/// changed fails with the entry printed for adding by hand; `--print` only
-/// prints it.
-pub fn install(
-    args: &InstallArgs,
+/// `mcp config`: prints the settings that connect an MCP client, for the
+/// user to copy into the file their client uses; nothing is written but
+/// `cli.json` when it has no token yet. Claude Desktop gets this program
+/// with `mcp stdio`; the others get `mcp serve`'s address (the port in
+/// `cli.json`, else the default) and token. The snippet goes to standard
+/// output (so it can be redirected); the default file (when `dirs` is
+/// known) and how to add the entry go to standard error.
+pub fn config(
+    args: &ConfigArgs,
     dirs: Option<&Dirs>,
     config_dir: Option<&Path>,
     out: &mut Output<'_>,
@@ -313,44 +314,23 @@ pub fn install(
         token,
         stdio: Some((exe, vec!["mcp".to_owned(), "stdio".to_owned()])),
     };
-    let usage = |e: String| Failure::new(Exit::Usage, e);
-    if args.print {
-        out.line(
-            client
-                .snippet(&server)
-                .map_err(|e| usage(e.to_string()))?
-                .trim_end(),
-        );
-        return Ok(());
+    let snippet = client
+        .snippet(&server)
+        .map_err(|e| Failure::new(Exit::Usage, e.to_string()))?;
+    if let Some(dirs) = dirs {
+        out.error_note(&format!(
+            "{} {} {}",
+            m.default_file,
+            client.config_path(dirs).display(),
+            m.maybe_elsewhere
+        ));
     }
-    let dirs = dirs.ok_or_else(|| usage(m.no_dirs.to_owned()))?;
-    match clients::install(client, &server, dirs, true) {
-        Ok(done) => {
-            let path = done.path.display();
-            if done.changed {
-                out.line(&format!("{} {}: {path}", m.installed, client.name()));
-            } else {
-                out.line(&format!("{} {}: {path}", m.unchanged, client.name()));
-            }
-            if let Some(backup) = &done.backup {
-                out.error_note(&format!("{} {}", m.backup, backup.display()));
-            }
-            if done.changed {
-                out.error_note(m.restart);
-            }
-            if client != Client::ClaudeDesktop {
-                out.error_note(m.needs_serve);
-            }
-            Ok(())
-        }
-        Err(e) => {
-            out.error_note(m.by_hand);
-            if let Ok(snippet) = client.snippet(&server) {
-                out.line(snippet.trim_end());
-            }
-            Err(usage(e.to_string()))
-        }
+    out.error_note(&m.add_inside.replace("{section}", client.section()));
+    if client != Client::ClaudeDesktop {
+        out.error_note(m.needs_serve);
     }
+    out.line(snippet.trim_end());
+    Ok(())
 }
 
 /// Reads typed lines on their own thread (reading blocks).

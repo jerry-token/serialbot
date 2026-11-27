@@ -22,23 +22,22 @@ use tokio::sync::Mutex;
 use crate::approval::Approvals;
 use crate::settings::{self, McpSettings};
 
-/// What adding SerialBot to an MCP client did (see
-/// [`McpController::install_client`]).
+/// The settings that connect an MCP client to SerialBot, for the user to
+/// copy (see [`McpController::client_config`]).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ClientInstall {
+pub struct ClientConfig {
     /// The client's product name.
     pub client: String,
-    /// Its configuration file.
-    pub path: String,
-    /// Where the previous content was saved, if the file changed.
-    pub backup: Option<String>,
-    /// False when the file already held the entry.
-    pub changed: bool,
-    /// Why nothing was written, if so.
-    pub error: Option<String>,
-    /// The entry to add by hand when nothing was written.
+    /// The file the client reads by default, if this system has the
+    /// directories it is under.
+    pub path: Option<String>,
+    /// Where the servers sit in that file (`mcpServers`, `[mcp_servers]`…).
+    pub section: String,
+    /// A whole file holding only the `serialbot` entry; `None` with `error`.
     pub snippet: Option<String>,
+    /// Why there is no snippet.
+    pub error: Option<String>,
 }
 
 /// What the UI shows about the MCP server.
@@ -193,21 +192,19 @@ impl McpController {
         .await
     }
 
-    /// Writes SerialBot into the configuration file of the client `id`
-    /// (`claude-desktop`, `cursor`, `vscode`; see
-    /// [`serialbot_mcp::clients`]). HTTP clients get the address the
-    /// server runs on (the configured port when it is off) and the token;
-    /// Claude Desktop gets `stdio_command` with `mcp`. `packaged` (an MSIX
-    /// install) keeps it from creating files Windows would hide from the
-    /// client. A file that cannot be changed is reported with the entry to
-    /// add by hand; only an unknown id is an error.
-    pub async fn install_client(
+    /// The settings for the client `id` (`claude-desktop`, `cursor`,
+    /// `vscode`, `codex`, `gemini`, `opencode`; see
+    /// [`serialbot_mcp::clients`]). Nothing is written: the user copies the
+    /// snippet into the file their client uses. HTTP clients get the
+    /// address the server runs on (the configured port when it is off) and
+    /// the token; Claude Desktop gets `stdio_command` with `mcp`, and an
+    /// `error` instead when there is none. Only an unknown id is an error.
+    pub async fn client_config(
         &self,
         id: &str,
-        dirs: &clients::Dirs,
+        dirs: Option<&clients::Dirs>,
         stdio_command: Option<String>,
-        packaged: bool,
-    ) -> Result<ClientInstall, String> {
+    ) -> Result<ClientConfig, String> {
         let client = Client::parse(id).ok_or_else(|| format!("unknown MCP client {id}"))?;
         let status = self.status().await;
         let server = clients::Server {
@@ -221,25 +218,16 @@ impl McpController {
             token: status.settings.token,
             stdio: stdio_command.map(|c| (c, vec!["mcp".to_owned()])),
         };
-        let path = client.config_path(dirs).display().to_string();
-        let create = clients::may_create(client, dirs, packaged);
-        Ok(match clients::install(client, &server, dirs, create) {
-            Ok(done) => ClientInstall {
-                client: client.name().to_owned(),
-                path,
-                backup: done.backup.map(|b| b.display().to_string()),
-                changed: done.changed,
-                error: None,
-                snippet: None,
-            },
-            Err(e) => ClientInstall {
-                client: client.name().to_owned(),
-                path,
-                backup: None,
-                changed: false,
-                error: Some(e.to_string()),
-                snippet: client.snippet(&server).ok(),
-            },
+        let (snippet, error) = match client.snippet(&server) {
+            Ok(s) => (Some(s), None),
+            Err(e) => (None, Some(e.to_string())),
+        };
+        Ok(ClientConfig {
+            client: client.name().to_owned(),
+            path: dirs.map(|d| client.config_path(d).display().to_string()),
+            section: client.section().to_owned(),
+            snippet,
+            error,
         })
     }
 
@@ -382,8 +370,8 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn adds_itself_to_mcp_clients() {
-        let dir = TempDir::new("install-clients");
+    async fn shows_settings_for_mcp_clients_without_writing() {
+        let dir = TempDir::new("client-config");
         let dirs = clients::Dirs {
             config: dir.0.join("config"),
             home: dir.0.join("home"),
@@ -393,54 +381,41 @@ mod tests {
         let port = c.status().await.settings.port;
 
         // Off: the configured port is used.
-        let cursor = c
-            .install_client("cursor", &dirs, None, false)
-            .await
-            .unwrap();
+        let cursor = c.client_config("cursor", Some(&dirs), None).await.unwrap();
         assert_eq!(cursor.client, "Cursor");
-        assert!(cursor.changed && cursor.error.is_none(), "{cursor:?}");
-        let text = std::fs::read_to_string(&cursor.path).unwrap();
+        assert_eq!(cursor.section, "mcpServers");
+        let text = cursor.snippet.unwrap();
         assert!(
             text.contains(&format!("http://127.0.0.1:{port}/mcp")),
             "{text}"
         );
         assert!(text.contains(&format!("Bearer {token}")));
-        assert!(
-            !c.install_client("cursor", &dirs, None, false)
-                .await
-                .unwrap()
-                .changed
-        );
+        let path = cursor.path.unwrap();
+        assert!(path.ends_with("mcp.json"), "{path}");
+        assert!(!std::path::Path::new(&path).exists());
+        assert!(!dirs.home.exists() && !dirs.config.exists());
 
         // Claude Desktop needs the launcher.
         let none = c
-            .install_client("claude-desktop", &dirs, None, false)
+            .client_config("claude-desktop", Some(&dirs), None)
             .await
             .unwrap();
         assert!(none.error.is_some() && none.snippet.is_none(), "{none:?}");
         let desktop = c
-            .install_client(
-                "claude-desktop",
-                &dirs,
-                Some("/opt/SerialBot".into()),
-                false,
-            )
+            .client_config("claude-desktop", None, Some("/opt/SerialBot".into()))
             .await
             .unwrap();
-        assert!(desktop.changed, "{desktop:?}");
+        assert!(desktop.path.is_none());
+        assert!(desktop.snippet.unwrap().contains("/opt/SerialBot"));
+
+        let codex = c.client_config("codex", Some(&dirs), None).await.unwrap();
         assert!(
-            std::fs::read_to_string(&desktop.path)
+            codex
+                .snippet
                 .unwrap()
-                .contains("/opt/SerialBot")
+                .starts_with("[mcp_servers.serialbot]")
         );
-
-        // Packaged: no new file under the config directory, the entry to paste instead.
-        let vscode = c.install_client("vscode", &dirs, None, true).await.unwrap();
-        assert!(!vscode.changed && vscode.error.is_some(), "{vscode:?}");
-        assert!(vscode.snippet.unwrap().contains("\"servers\""));
-        assert!(!std::path::Path::new(&vscode.path).exists());
-
-        assert!(c.install_client("zed", &dirs, None, false).await.is_err());
+        assert!(c.client_config("zed", Some(&dirs), None).await.is_err());
     }
 
     #[tokio::test(flavor = "multi_thread")]

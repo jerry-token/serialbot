@@ -1157,6 +1157,18 @@ button.signal.on:hover:not(:disabled) {
   font-size: 12px;
 }
 
+/* The client whose settings are shown. */
+.mcp-clients button[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* A long default path breaks anywhere rather than widening the panel. */
+.mcp-panel .path {
+  overflow-wrap: anywhere;
+}
+
 /* Lines an AI agent sent or marked through MCP. */
 .line.ai {
   background: color-mix(in srgb, var(--ai, #7c5cff) 9%, transparent);

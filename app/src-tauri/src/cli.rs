@@ -92,11 +92,6 @@ pub fn is_packaged(exe: &Path) -> bool {
         .contains(r"\windowsapps\")
 }
 
-/// Whether this app runs from an MSIX package (the Microsoft Store app).
-pub fn packaged() -> bool {
-    std::env::current_exe().is_ok_and(|exe| is_packaged(&exe))
-}
-
 /// The execution alias the Microsoft Store package declares
 /// (`.github/scripts/package_msix.py`).
 pub const STORE_ALIAS: &str = "serialbot.exe";
@@ -204,6 +199,5 @@ mod tests {
         assert!(!is_packaged(Path::new(
             r"C:\Program Files\SerialBot\serialbot.exe"
         )));
-        assert!(!super::packaged());
     }
 }

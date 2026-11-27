@@ -165,20 +165,14 @@ pub struct McpTexts {
     pub choices: &'static str,
     /// No server to bridge to.
     pub unreachable: &'static str,
-    /// `mcp install`: before the client and the file.
-    pub installed: &'static str,
-    /// `mcp install`: the file already held the entry.
-    pub unchanged: &'static str,
-    /// `mcp install`: before the backup's path.
-    pub backup: &'static str,
-    /// `mcp install`: the client must be restarted.
-    pub restart: &'static str,
-    /// `mcp install`: what an HTTP client needs running.
+    /// `mcp config`: before the file the client reads by default.
+    pub default_file: &'static str,
+    /// `mcp config`: after that path.
+    pub maybe_elsewhere: &'static str,
+    /// `mcp config`: how to add the entry; `{section}` is where servers sit.
+    pub add_inside: &'static str,
+    /// `mcp config`: what an HTTP client needs running.
     pub needs_serve: &'static str,
-    /// `mcp install`: before the entry to add by hand.
-    pub by_hand: &'static str,
-    /// `mcp install`: no home or config directory.
-    pub no_dirs: &'static str,
 }
 
 /// Texts of the interactive terminal (`open`).
@@ -390,13 +384,10 @@ static EN_MCP: McpTexts = McpTexts {
     ask: "AI wants",
     choices: "  y allow · s allow for this session · n deny",
     unreachable: "no SerialBot MCP server is running: start `serialbot-cli mcp serve`, or turn the server on in the app",
-    installed: "Added SerialBot to",
-    unchanged: "SerialBot is already set up in",
-    backup: "previous file saved as",
-    restart: "restart the client to load it",
+    default_file: "default file:",
+    maybe_elsewhere: "(yours may be elsewhere)",
+    add_inside: "copy this into the client's file; if it already has \"{section}\", add only the serialbot entry inside it, then restart the client",
     needs_serve: "the client reaches `serialbot-cli mcp serve`: keep it running while you use it",
-    by_hand: "add this to the client's settings by hand:",
-    no_dirs: "this system has no home or configuration directory",
 };
 
 static ZH_MCP: McpTexts = McpTexts {
@@ -408,13 +399,10 @@ static ZH_MCP: McpTexts = McpTexts {
     ask: "AI 想要",
     choices: "  y 允许 · s 本会话内都允许 · n 拒绝",
     unreachable: "没有正在运行的 SerialBot MCP 服务：请启动 `serialbot-cli mcp serve`，或在 App 里打开 MCP 服务",
-    installed: "已把 SerialBot 加入",
-    unchanged: "SerialBot 已经配置在",
-    backup: "原文件已备份为",
-    restart: "重启该客户端后生效",
+    default_file: "默认文件：",
+    maybe_elsewhere: "（你的可能在别处）",
+    add_inside: "把下面的内容复制到客户端的配置文件；如果文件里已经有 \"{section}\"，只把其中的 serialbot 条目加进去，然后重启客户端",
     needs_serve: "该客户端连接的是 `serialbot-cli mcp serve`：使用时请保持它在运行",
-    by_hand: "请手动把下面的内容加入客户端配置：",
-    no_dirs: "系统没有用户目录或配置目录",
 };
 
 static EN: Strings = Strings {
@@ -707,16 +695,12 @@ static EN: Strings = Strings {
             "For clients that start servers as processes (Claude Desktop): forwards to a running mcp serve, else the app",
         ),
         (
-            "mcp.install",
-            "Add SerialBot to an MCP client's settings (other entries are kept, the old file is backed up)",
+            "mcp.config",
+            "Print the settings that connect an MCP client, to copy into its file (nothing is written)",
         ),
         (
-            "mcp.install.client",
+            "mcp.config.client",
             "claude-desktop (starts mcp stdio); cursor, vscode, codex, gemini or opencode (reach mcp serve over HTTP)",
-        ),
-        (
-            "mcp.install.print",
-            "Print the settings entry instead of writing it",
         ),
     ],
 };
@@ -990,14 +974,13 @@ static ZH: Strings = Strings {
             "给以子进程启动服务的客户端（Claude Desktop）：转发到正在运行的 mcp serve，没有则转发到 App",
         ),
         (
-            "mcp.install",
-            "把 SerialBot 加入 MCP 客户端的配置（保留其它配置，原文件会备份）",
+            "mcp.config",
+            "打印连接 MCP 客户端的配置，复制到它的配置文件（不写任何文件）",
         ),
         (
-            "mcp.install.client",
+            "mcp.config.client",
             "claude-desktop（启动 mcp stdio）；cursor、vscode、codex、gemini 或 opencode（通过 HTTP 连接 mcp serve）",
         ),
-        ("mcp.install.print", "只打印配置内容，不写入文件"),
     ],
 };
 
