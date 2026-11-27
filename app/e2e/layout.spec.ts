@@ -150,6 +150,18 @@ for (const locale of ["en-US", "zh-CN"]) {
         }
         expect(errors).toEqual([]);
       });
+
+      test("the frames window fits", async ({ page }) => {
+        const errors: string[] = [];
+        page.on("pageerror", (e) => errors.push(e.message));
+        await page.goto("/e2e/harness.html#frames");
+        await expect(page.locator(".frames-table .frame").first()).toBeVisible();
+        await fits(page, "frames");
+        await page.locator(".frames-table .frame").first().click();
+        await expect(page.locator(".frame-detail")).toBeVisible();
+        await fits(page, "frame fields");
+        expect(errors).toEqual([]);
+      });
     });
   }
 }

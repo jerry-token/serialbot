@@ -12,6 +12,7 @@ import type { LineEnding } from "./bytes";
 
 /** Label of the separate command-list window (see capabilities/default.json). */
 export const COMMAND_WINDOW = "commands";
+export const FRAMES_WINDOW = "frames";
 
 /** Label of a session's own window (capabilities allow "session-*"). */
 export function sessionWindowLabel(id: number): string {
@@ -129,6 +130,46 @@ export interface FileSendStatus {
   protocol?: string | null;
   /** Blocks sent again (XMODEM / YMODEM). */
   retries?: number;
+}
+
+/** A protocol the backend decodes. */
+export interface Protocol {
+  id: string;
+  name: string;
+}
+
+/** One named part of a decoded frame. */
+export interface FrameField {
+  name: string;
+  /** Its first byte, from the start of the frame. */
+  offset: number;
+  len: number;
+  value: number | string | boolean | number[];
+  /** The value as people read it. */
+  text: string;
+}
+
+/** One decoded message (or bytes that are not one). */
+export interface DecodedFrame {
+  /** Its number, from 0. */
+  seq: number;
+  timestampUs: number;
+  direction: "rx" | "tx";
+  /** Its bytes as spaced hex. */
+  bytes: string;
+  name: string;
+  summary: string;
+  fields: FrameField[];
+  status: "ok" | "badChecksum" | "incomplete" | "unknown";
+}
+
+/** Frames from one read. */
+export interface FramesChunk {
+  frames: DecodedFrame[];
+  /** The number to ask for next. */
+  next: number;
+  /** Frames after the asked number that are no longer kept. */
+  missed: number;
 }
 
 /** A failed run of a test sequence. */
@@ -279,6 +320,18 @@ export interface Backend {
     gapMs: number,
   ): Promise<SequenceStatus>;
   stopSequence(id: number): Promise<SequenceStatus>;
+  /** The protocols frames can be decoded as. */
+  protocols(): Promise<Protocol[]>;
+  /** Up to `max` frames of the session decoded as `protocol`, from number `after`. */
+  readFrames(
+    id: number,
+    protocol: string,
+    lang: "en" | "zh",
+    after: number,
+    max: number,
+  ): Promise<FramesChunk>;
+  /** Opens (or focuses) the frames window. */
+  openFramesWindow(title: string): Promise<void>;
   sequenceStatus(id: number): Promise<SequenceStatus>;
   fileSendStatus(id: number): Promise<FileSendStatus>;
   /** Writes what the session's log holds now to `path`. */
@@ -411,6 +464,25 @@ export const tauriBackend: Backend = {
       gapMs,
     }),
   stopSequence: (id) => invoke("stop_sequence", { id }),
+  protocols: () => invoke("protocols"),
+  readFrames: (id, protocol, lang, after, max) =>
+    invoke("read_frames", { id, protocol, lang, after, max }),
+  openFramesWindow: async (title) => {
+    const open = await WebviewWindow.getByLabel(FRAMES_WINDOW);
+    if (open) return open.setFocus();
+    const window = new WebviewWindow(FRAMES_WINDOW, {
+      url: "index.html#frames",
+      title,
+      width: 860,
+      height: 600,
+      minWidth: 420,
+      minHeight: 320,
+    });
+    await new Promise<void>((resolve, reject) => {
+      void window.once("tauri://created", () => resolve());
+      void window.once("tauri://error", (e) => reject(String(e.payload)));
+    });
+  },
   sequenceStatus: (id) => invoke("sequence_status", { id }),
   fileSendStatus: (id) => invoke("file_send_status", { id }),
   exportLog: (id, path, format) =>

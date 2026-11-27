@@ -3810,6 +3810,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serialbot-core",
+ "serialbot-decode",
  "serialbot-jobs",
  "serialbot-mcp",
  "tauri",

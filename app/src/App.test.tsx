@@ -8,6 +8,7 @@ import { type Screen, type ScreenOptions, themeFromCss } from "./screen";
 import type { Chart, ChartFactory } from "./chart";
 import { App } from "./App";
 import { CommandWindow } from "./CommandWindow";
+import { FramesWindow, PROTOCOL_KEY } from "./FramesWindow";
 import { loadGroups, newCommand, newGroup, saveGroups } from "./commands";
 import type {
   ApprovalRequest,
@@ -16,6 +17,7 @@ import type {
   LogChunk,
   LogEntry,
   ClientConfig,
+  DecodedFrame,
   McpClientId,
   McpSettings,
   McpStatus,
@@ -329,6 +331,37 @@ class FakeBackend implements Backend {
 
   async fileSendStatus(_id: number) {
     return this.file;
+  }
+
+  frameLog: DecodedFrame[] = [];
+  frameReads: unknown[][] = [];
+  framesMissed = 0;
+  failFrames: string | null = null;
+  framesOpened: string[] = [];
+  failFramesWindow = false;
+
+  async protocols() {
+    return [
+      { id: "modbus-rtu", name: "Modbus RTU" },
+      { id: "slcan", name: "SLCAN" },
+    ];
+  }
+
+  async readFrames(id: number, protocol: string, lang: string, after: number, max: number) {
+    this.frameReads.push([id, protocol, lang, after, max]);
+    if (this.failFrames) throw this.failFrames;
+    const frames = this.frameLog
+      .filter((f) => f.seq >= after)
+      .slice(0, max)
+      .map((f) => (lang === "zh" ? { ...f, name: `中文 ${f.name}` } : f));
+    const missed = this.framesMissed;
+    this.framesMissed = 0;
+    return { frames, next: (frames.at(-1)?.seq ?? after - 1) + 1, missed };
+  }
+
+  async openFramesWindow(title: string) {
+    if (this.failFramesWindow) throw "frames window could not be created";
+    this.framesOpened.push(title);
   }
 
   sequenceCalls: unknown[][] = [];
@@ -2324,6 +2357,105 @@ describe("Command window", () => {
       window.dispatchEvent(new StorageEvent("storage", { key: "serialbot.preferences" }));
     });
     expect(await screen.findByRole("combobox", { name: "发送到" })).toBeInTheDocument();
+  });
+});
+
+describe("Frames window", () => {
+  const frame = (seq: number, change: Partial<DecodedFrame> = {}): DecodedFrame => ({
+    seq,
+    timestampUs: Date.UTC(2026, 10, 27, 1, 2, 3) * 1000,
+    direction: "rx",
+    bytes: "01 03 04 00 E7 01 A2 CA 2D",
+    name: "Read Holding Registers (03)",
+    summary: `slave 1 · ${seq}=231`,
+    fields: [
+      { name: "slave", offset: 0, len: 1, value: 1, text: "1" },
+      { name: "register 0", offset: 3, len: 2, value: 231, text: "231 (0x00E7)" },
+    ],
+    status: "ok",
+    ...change,
+  });
+
+  function setupWindow(backend = new FakeBackend(), storage: Storage = memoryStorage()) {
+    const user = userEvent.setup();
+    const view = render(<FramesWindow backend={backend} lang="en" storage={storage} />);
+    return { backend, user, storage, view };
+  }
+
+  it("lists decoded frames of a session and opens their fields", async () => {
+    const backend = new FakeBackend();
+    const { user, storage } = setupWindow(backend);
+    expect(await screen.findByText("No port yet. Open one in the main window.")).toBeInTheDocument();
+    let id = 0;
+    act(() => {
+      id = backend.addSession("COM3", "plc").id;
+    });
+    expect(await screen.findByRole("option", { name: "plc (COM3)" })).toBeInTheDocument();
+    expect(await screen.findByText(/No frames yet/)).toBeInTheDocument();
+
+    // Data arrives: the window reads the frames after the last one.
+    backend.frameLog = [
+      frame(0, { direction: "tx", summary: "slave 1 · address 0 · quantity 2" }),
+      frame(1),
+      frame(2, { status: "badChecksum", name: "Write Single Register (06)", summary: "bad CRC" }),
+      frame(3, { status: "unknown", name: "Unknown", summary: "1 bytes", fields: [] }),
+    ];
+    act(() => backend.notify([id]));
+    expect(await screen.findByText("slave 1 · 1=231")).toBeInTheDocument();
+    expect(screen.getByText("4 frames · 2 with errors")).toBeInTheDocument();
+    expect(screen.getByText("TX")).toBeInTheDocument();
+    expect(screen.getByTitle("wrong checksum")).toHaveTextContent("✗");
+    expect(screen.getByTitle("not this protocol")).toHaveTextContent("?");
+    await waitFor(() => expect(backend.frameReads.at(-1)).toEqual([id, "modbus-rtu", "en", 4, 1000]));
+
+    // A row opens its fields with their bytes.
+    await user.click(screen.getByText("slave 1 · 1=231"));
+    const detail = within(screen.getByRole("region", { name: "Read Holding Registers (03)" }));
+    expect(detail.getByText("✓ checksum right")).toBeInTheDocument();
+    expect(detail.getByText("231 (0x00E7)")).toBeInTheDocument();
+    expect(detail.getByText("00 E7")).toBeInTheDocument();
+    await user.click(screen.getByText("slave 1 · 1=231"));
+    expect(screen.queryByRole("region", { name: "Read Holding Registers (03)" })).toBeNull();
+
+    // The filter matches name, summary and bytes.
+    await user.type(screen.getByLabelText("Filter"), "write");
+    expect(screen.queryByText("slave 1 · 1=231")).toBeNull();
+    expect(screen.getByText("bad CRC")).toBeInTheDocument();
+    await user.clear(screen.getByLabelText("Filter"));
+
+    // Another protocol starts from the first frame, and is remembered.
+    await user.selectOptions(screen.getByLabelText("Protocol"), "slcan");
+    await waitFor(() => expect(backend.frameReads.at(-1)).toEqual([id, "slcan", "en", 0, 1000]));
+    expect(storage.getItem(PROTOCOL_KEY)).toBe("slcan");
+  });
+
+  it("says when old frames are gone, shows read errors and follows the language", async () => {
+    const backend = new FakeBackend();
+    act(() => void backend.addSession("COM3", null));
+    backend.frameLog = [frame(7)];
+    backend.framesMissed = 7;
+    const storage = memoryStorage();
+    storage.setItem("serialbot.preferences", JSON.stringify({ language: "zh" }));
+    storage.setItem(PROTOCOL_KEY, "slcan");
+    const user = userEvent.setup();
+    render(<FramesWindow backend={backend} lang="en" storage={storage} />);
+    expect(await screen.findByText("较早的 7 帧已不再保留。")).toBeInTheDocument();
+    expect(screen.getByText("中文 Read Holding Registers (03)")).toBeInTheDocument();
+    expect(backend.frameReads[0]?.[1]).toBe("slcan");
+    expect(backend.frameReads[0]?.[2]).toBe("zh");
+
+    backend.failFrames = "unknown protocol";
+    await user.selectOptions(screen.getByLabelText("协议"), "modbus-rtu");
+    expect(await screen.findByText("unknown protocol")).toBeInTheDocument();
+  });
+
+  it("is opened from the main window", async () => {
+    const { backend, user } = setup();
+    await user.click(screen.getByRole("button", { name: "Frames" }));
+    expect(backend.framesOpened).toEqual(["SerialBot frames"]);
+    backend.failFramesWindow = true;
+    await user.click(screen.getByRole("button", { name: "Frames" }));
+    expect(await screen.findByText("frames window could not be created")).toBeInTheDocument();
   });
 });
 

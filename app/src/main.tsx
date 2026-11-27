@@ -4,6 +4,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { CommandWindow } from "./CommandWindow";
+import { FramesWindow } from "./FramesWindow";
 import { pinnedSession, tauriBackend } from "./api";
 import { browserStorage } from "./commands";
 import { detectLang } from "./i18n";
@@ -23,6 +24,8 @@ if (root) {
     <StrictMode>
       {window.location.hash === "#commands" ? (
         <CommandWindow backend={tauriBackend} lang={detectLang(navigator.languages)} />
+      ) : window.location.hash === "#frames" ? (
+        <FramesWindow backend={tauriBackend} lang={detectLang(navigator.languages)} />
       ) : (
         <App
           backend={tauriBackend}

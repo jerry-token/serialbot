@@ -66,6 +66,7 @@ You stay in charge. Every change to a port needs your approval, and every line t
 - ✍️ Multi-line text or HEX with a choice of line ending. `Enter` sends, `Shift+Enter` adds a line, `↑` recalls history. Data goes out as raw bytes, exactly as typed: only the line ending you pick is added.
 - 🧮 Checksums appended to HEX data: CRC-8, CRC-16 (Modbus, CCITT), CRC-32, XOR, SUM8, LRC.
 - ⏲️ Timed send, 📋 saved command lists (click to send, or run a group in order; ⧉ opens them in their own window with its own target port), and 📄 file send: in chunks, or with XMODEM (128 / 1K) and YMODEM to an MCU bootloader (`/send-file --ymodem fw.bin` in the terminal, `serialbot-cli send <port> --file fw.bin --protocol ymodem`).
+- 🧩 **Frames window** (the ▤ button above the log): what a port sent and received, decoded as **Modbus RTU** or **SLCAN** (CAN adapters), one message per row: function, slave, registers by address, CAN ID and data, with the CRC checked. A row opens its fields and the bytes each one takes. Choosing a protocol later still decodes what came before.
 - 🧪 **Test sequences** (🔁 above the log): a script of `send`, `expect` (a regex the reply must match in time), `wait`, `dtr` / `rts` and `mark` steps, run N times or until stopped, for soak tests and production checks. It counts passed and failed runs, shows run times and the failed steps, and copies a plain-text report; a command group can be turned into a script with one click. The same scripts run in the terminal: `serialbot-cli run <port> test.txt --runs 100`.
 
 **AI agents, under your control**
@@ -235,6 +236,7 @@ serialbot-cli mcp serve                               # MCP server without the a
 - [x] Terminal mode (VT100, interactive shells)
 - [x] Waveform plots of received numbers
 - [x] Test sequences: send / expect scripts run N times, with a report
+- [x] Frame decoding: Modbus RTU and SLCAN (your own protocols in TOML next)
 - [ ] Built-in AI assistant "Bo"
 - [ ] JS scripts
 - [ ] BLE

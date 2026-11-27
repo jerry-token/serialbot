@@ -318,6 +318,7 @@ pub struct AppState {
     captures: Captures,
     file_sends: FileSends,
     sequences: Sequences,
+    decoders: crate::frames::Decoders,
 }
 
 impl std::fmt::Debug for AppState {
@@ -338,6 +339,7 @@ impl AppState {
             captures: Captures::default(),
             file_sends: FileSends::default(),
             sequences: Sequences::default(),
+            decoders: crate::frames::Decoders::default(),
         }
     }
 
@@ -449,6 +451,7 @@ impl AppState {
         self.file_sends.remove(id);
         self.captures.remove(id);
         self.sequences.remove(id);
+        self.decoders.remove(id);
         self.manager
             .remove(SessionId(id))
             .map_err(|e| e.to_string())
@@ -698,6 +701,27 @@ impl AppState {
         self.sequences
             .start(id, session, name.to_owned(), items, options)?;
         Ok(self.sequences.status(id))
+    }
+
+    /// Up to `max` (at most 2000) frames of the session's log decoded as
+    /// `protocol`, from number `after` on, named in `lang` (`zh` or
+    /// anything else for English); see [`crate::frames::Decoders::read`].
+    pub fn read_frames(
+        &self,
+        id: u32,
+        protocol: &str,
+        lang: &str,
+        after: u64,
+        max: usize,
+    ) -> Result<crate::frames::FramesChunk, String> {
+        let session = self.manager.get(SessionId(id)).map_err(|e| e.to_string())?;
+        let lang = if lang == "zh" {
+            serialbot_decode::Lang::Zh
+        } else {
+            serialbot_decode::Lang::En
+        };
+        self.decoders
+            .read(id, &session, protocol, lang, after, max.clamp(1, 2000))
     }
 
     /// Stops the session's test sequence; its tally stays readable.
@@ -1137,6 +1161,27 @@ mod tests {
         assert!(!app.sequence_status(1).running, "closing the port stops it");
         app.close(1).unwrap();
         assert_eq!(app.sequence_status(1), SequenceStatus::default());
+        app.shutdown();
+    }
+
+    #[test]
+    fn frames_are_read_by_protocol_and_forgotten_with_the_session() {
+        let (app, devices) = state();
+        assert!(
+            app.read_frames(1, "slcan", "en", 0, 10).is_err(),
+            "no session"
+        );
+        app.open(&request("mock0")).unwrap();
+        devices.lock().unwrap()["mock0"].send(b"t1230\r");
+        wait_until(|| !app.read(1, 0, 16).unwrap().entries.is_empty());
+        let en = app.read_frames(1, "slcan", "en", 0, 0).unwrap();
+        assert_eq!(en.frames.len(), 1, "at least one frame per read");
+        assert_eq!(en.frames[0].frame.name, "CAN standard frame");
+        let zh = app.read_frames(1, "slcan", "zh", 0, 10).unwrap();
+        assert_eq!(zh.frames[0].frame.name, "CAN 标准帧");
+        assert!(app.read_frames(1, "x", "en", 0, 10).is_err());
+        app.close(1).unwrap();
+        assert!(app.read_frames(1, "slcan", "en", 0, 10).is_err());
         app.shutdown();
     }
 
