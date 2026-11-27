@@ -39,6 +39,14 @@ Windows 可能提示「未知发布者」，点「更多信息」→「仍要运
 
 ### New in this release / 本版新增
 
+- **beta.4: XMODEM / YMODEM** to MCU bootloaders: XMODEM (128, CRC or checksum), XMODEM-1K and YMODEM (1K or 128, with name and size). Pick the protocol in the app's file send panel; `/send-file --ymodem fw.bin` in `open` / `tui`; `serialbot-cli send <port> --file fw.bin --protocol ymodem`. Tested against lrzsz; please report how it works with your bootloader.
+  发送文件到 MCU bootloader：XMODEM（128，CRC 或校验和）、XMODEM-1K、YMODEM（1K 或 128，带文件名和大小）。App 文件发送面板里选协议；`open` / `tui` 里用 `/send-file --ymodem fw.bin`；命令行 `serialbot-cli send <端口> --file fw.bin --protocol ymodem`。已和 lrzsz 互通测试，欢迎反馈你的 bootloader 是否正常。
+- **beta.4: one-click MCP / 一键配置 MCP**: on the AI page, *Add SerialBot to* Claude Desktop, Cursor, VS Code, Codex, Gemini CLI or opencode (or `serialbot-cli mcp install <client>`). Only the `serialbot` entry is written and the old file is backed up.
+  AI 页「把 SerialBot 添加到」Claude Desktop、Cursor、VS Code、Codex、Gemini CLI 或 opencode（命令行 `serialbot-cli mcp install <客户端>`）。只写入 `serialbot` 这一项，原文件会备份。
+- **beta.4: Copy for AI / 复制给 AI**: copies the newest 200 lines shown, with times and a question, to paste into any AI chat.
+  复制当前显示的最新 200 行，带上时间和一个问题，可直接粘贴到任意 AI 聊天里。
+- **beta.4: VOFA+ waveforms / VOFA+ 波形**: FireWater lines (`prefix:1,2,3`) plot as they are; JustFloat binary frames with the plot's format picker, or `/plot justfloat` and `--plot justfloat` in `tui`.
+  FireWater 文本（`prefix:1,2,3`）直接画曲线；JustFloat 二进制帧在波形图的格式选择里切换，`tui` 里用 `/plot justfloat` 或 `--plot justfloat`。
 - **beta.3**: the first build with a Microsoft Store package (MSIX); on Windows, `serialbot mcp` for Claude Desktop also works from the Store version through its `serialbot.exe` alias. The site has a privacy policy: SerialBot collects no personal data.
   首次附带微软商店安装包（MSIX）；商店版也能通过 `serialbot.exe` 别名给 Claude Desktop 提供 `serialbot mcp`。官网新增隐私政策：SerialBot 不收集任何个人数据。
 - **Fixed in beta.2 / beta.2 修复** (serialbot-cli): Enter in `open` and `tui` sends CR only, as a terminal does, so shells that take CR and LF each as Enter no longer answer twice (#108; `--ending crlf` if a device wants it). Backspace deletes in the input box also in terminals that send ^H (#109). In the app's send box, pick `\r` as the ending for such shells.
