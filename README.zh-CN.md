@@ -66,6 +66,7 @@ SerialBot 补上的就是这一环，让 Agent 直接面对设备：
 - ✍️ 多行输入，文本或 HEX，可选结尾符；`Enter` 发送，`Shift+Enter` 换行，`↑` 调出历史。发出去的是原始字节，和输入完全一致，只加你选的结尾符。
 - 🧮 HEX 发送可自动追加校验：CRC-8、CRC-16（Modbus、CCITT）、CRC-32、XOR、SUM8、LRC。
 - ⏲️ 定时发送、📋 扩展命令列表（点一下发送，或整组按顺序执行；⧉ 可把命令列表放到独立窗口，并单独选择发往哪个端口）、📄 发送文件：分块直接发送，或用 XMODEM（128 / 1K）、YMODEM 发给 MCU 的 bootloader（终端里 `/send-file --ymodem fw.bin`，命令行 `serialbot-cli send <端口> --file fw.bin --protocol ymodem`）。
+- 🧪 **测试序列**（日志上方的 🔁）：由 `send`、`expect`（回复须在超时内匹配的正则）、`wait`、`dtr` / `rts`、`mark` 组成的脚本，运行 N 轮或直到停止，适合老化测试和产线检测。统计通过和失败的轮次，显示每轮耗时和失败的步骤，可复制纯文本报告；命令分组一键转成脚本。同样的脚本也能在终端运行：`serialbot-cli run <端口> test.txt --runs 100`。
 
 **AI 能用，你说了算**
 - 🤖 内置 MCP 服务：Claude Code、Claude Desktop 等 AI 工具可以列出和打开串口、收发数据、等待回复、控制 DTR / RTS，用的就是你在窗口里看到的会话。
@@ -232,6 +233,7 @@ serialbot-cli mcp serve                               # 不开 App 的 MCP 服�
 - [x] 命令列表独立窗口
 - [x] 终端模式（VT100、交互式 shell）
 - [x] 接收数值的波形图
+- [x] 测试序列：send / expect 脚本跑 N 轮，生成报告
 - [ ] 内置 AI 助手「小波」
 - [ ] JS 脚本
 - [ ] BLE

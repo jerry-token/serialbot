@@ -21,7 +21,7 @@ pub mod mcp;
 pub mod settings;
 pub mod watch;
 
-pub use serialbot_jobs::{export, filesend, repeat};
+pub use serialbot_jobs::{export, filesend, repeat, sequence};
 pub use serialbot_mcp::approval;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -63,6 +63,7 @@ mod ipc {
     use super::filesend::FileSendStatus;
     use super::mcp::{McpController, McpStatus};
     use super::repeat::RepeatStatus;
+    use super::sequence::SequenceStatus;
     use super::settings::McpSettings;
 
     #[tauri::command(async)]
@@ -203,6 +204,47 @@ mod ipc {
         id: u32,
     ) -> Result<RepeatStatus, String> {
         Ok(state.repeat_status(id))
+    }
+
+    #[tauri::command(async)]
+    #[allow(clippy::too_many_arguments, reason = "one IPC call's fields")]
+    pub(crate) fn start_sequence(
+        state: tauri::State<'_, AppState>,
+        id: u32,
+        name: String,
+        script: String,
+        ending: String,
+        encoding: String,
+        runs: Option<u32>,
+        stop_on_fail: bool,
+        gap_ms: u64,
+    ) -> Result<SequenceStatus, String> {
+        state.start_sequence(
+            id,
+            &name,
+            &script,
+            &ending,
+            &encoding,
+            runs,
+            stop_on_fail,
+            gap_ms,
+        )
+    }
+
+    #[tauri::command(async)]
+    pub(crate) fn stop_sequence(
+        state: tauri::State<'_, AppState>,
+        id: u32,
+    ) -> Result<SequenceStatus, String> {
+        Ok(state.stop_sequence(id))
+    }
+
+    #[tauri::command(async)]
+    pub(crate) fn sequence_status(
+        state: tauri::State<'_, AppState>,
+        id: u32,
+    ) -> Result<SequenceStatus, String> {
+        Ok(state.sequence_status(id))
     }
 
     #[tauri::command(async)]
@@ -483,6 +525,9 @@ pub fn run() -> Result<(), tauri::Error> {
             ipc::start_repeat,
             ipc::stop_repeat,
             ipc::repeat_status,
+            ipc::start_sequence,
+            ipc::stop_sequence,
+            ipc::sequence_status,
             ipc::signals,
             ipc::set_signals,
             ipc::run_signals,

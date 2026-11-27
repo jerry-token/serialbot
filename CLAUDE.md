@@ -108,6 +108,8 @@ Not automated, still required:
     `log-changed` events and reads new entries itself (no IPC polling)
   - `src/terminal.ts` — log entries to display lines (text/hex, line breaks, UTF-8)
   - `src/commands.ts` — saved command groups (local storage) and the in-order runner
+  - `src/sequence.ts` — test sequences: saved script and options, a group as a script, the
+    report (the runs themselves are `serialbot-jobs::sequence` in the backend)
   - `src/App.tsx` + `src/components/` — UI; tests use a fake `Backend`
   - `e2e/` — layout tests in Chromium (Playwright): the app on a fake backend
     (`harness.tsx`), smallest to large windows, English and Chinese, every panel open;

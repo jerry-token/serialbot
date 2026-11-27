@@ -22,6 +22,7 @@ pub use serialbot_mcp::PortLister;
 use crate::export::{CaptureStatus, Captures, ExportFormat, ExportSummary};
 use crate::filesend::{FileSendStatus, FileSends};
 use crate::repeat::{RepeatStatus, Repeaters};
+use crate::sequence::{self, SequenceStatus, Sequences};
 use serialbot_jobs::xmodem::Modem;
 
 /// Largest payload one [`AppState::read`] returns.
@@ -316,6 +317,7 @@ pub struct AppState {
     repeaters: Repeaters,
     captures: Captures,
     file_sends: FileSends,
+    sequences: Sequences,
 }
 
 impl std::fmt::Debug for AppState {
@@ -335,6 +337,7 @@ impl AppState {
             repeaters: Repeaters::default(),
             captures: Captures::default(),
             file_sends: FileSends::default(),
+            sequences: Sequences::default(),
         }
     }
 
@@ -407,11 +410,12 @@ impl AppState {
     }
 
     /// Closes a session's port but keeps the session and its log (its tab
-    /// stays). Timed and file sends stop; a capture to file keeps its file
+    /// stays). Timed and file sends and test sequences stop; a capture to file keeps its file
     /// and continues after a reopen.
     pub fn release(&self, id: u32) -> Result<(), String> {
         self.repeaters.stop(id);
         self.file_sends.stop(id);
+        self.sequences.stop(id);
         self.manager
             .release(SessionId(id))
             .map_err(|e| e.to_string())
@@ -444,6 +448,7 @@ impl AppState {
         self.repeaters.stop(id);
         self.file_sends.remove(id);
         self.captures.remove(id);
+        self.sequences.remove(id);
         self.manager
             .remove(SessionId(id))
             .map_err(|e| e.to_string())
@@ -582,6 +587,7 @@ impl AppState {
     pub fn shutdown(&self) {
         self.repeaters.stop_all();
         self.file_sends.stop_all();
+        self.sequences.stop_all();
         self.captures.stop_all();
         self.manager.close_all();
     }
@@ -653,6 +659,56 @@ impl AppState {
     /// Progress of the session's repeat job.
     pub fn repeat_status(&self, id: u32) -> RepeatStatus {
         self.repeaters.status(id)
+    }
+
+    /// Starts running the test sequence `script` (see
+    /// [`serialbot_jobs::script`]) on the session in the background,
+    /// replacing its previous one. Sends get `ending` (`none`, `cr`, `lf`,
+    /// `crlf`) until an `ending` line changes it and are encoded in
+    /// `encoding`. `runs` `None` runs until stopped; `stop_on_fail` ends it
+    /// at the first failed run; `gap_ms` is the pause between runs. Fails
+    /// for a script error (naming its line) or bad options.
+    #[allow(clippy::too_many_arguments, reason = "one IPC call's fields")]
+    pub fn start_sequence(
+        &self,
+        id: u32,
+        name: &str,
+        script: &str,
+        ending: &str,
+        encoding: &str,
+        runs: Option<u32>,
+        stop_on_fail: bool,
+        gap_ms: u64,
+    ) -> Result<SequenceStatus, String> {
+        use serialbot_jobs::script::{Ending, parse_text};
+        let ending = match ending {
+            "none" => Ending::None,
+            "cr" => Ending::Cr,
+            "lf" => Ending::Lf,
+            "crlf" => Ending::Crlf,
+            other => return Err(format!("unknown line ending {other:?}")),
+        };
+        let items = parse_text(script, ending, encoding)?;
+        let session = self.manager.get(SessionId(id)).map_err(|e| e.to_string())?;
+        let options = sequence::Options {
+            runs,
+            stop_on_fail,
+            gap: std::time::Duration::from_millis(gap_ms),
+        };
+        self.sequences
+            .start(id, session, name.to_owned(), items, options)?;
+        Ok(self.sequences.status(id))
+    }
+
+    /// Stops the session's test sequence; its tally stays readable.
+    pub fn stop_sequence(&self, id: u32) -> SequenceStatus {
+        self.sequences.stop(id);
+        self.sequences.status(id)
+    }
+
+    /// Where the session's test sequence is, and its tally so far.
+    pub fn sequence_status(&self, id: u32) -> SequenceStatus {
+        self.sequences.status(id)
     }
 
     /// Starts sending the file at `path`, replacing the session's previous
@@ -1042,6 +1098,45 @@ mod tests {
         assert!(app.file_send_status(1).running, "waits for the receiver");
         app.close(1).unwrap();
         assert_eq!(app.file_send_status(1), FileSendStatus::default());
+        app.shutdown();
+    }
+
+    #[test]
+    fn test_sequences_run_stop_and_end_with_the_session() {
+        let (app, devices) = state();
+        let start = |script: &str, ending: &str, runs| {
+            app.start_sequence(1, "check", script, ending, "utf-8", runs, true, 0)
+        };
+        assert!(start("send x", "crlf", Some(1)).is_err(), "no session yet");
+        app.open(&request("mock0")).unwrap();
+        assert!(
+            start("frobnicate", "crlf", Some(1))
+                .unwrap_err()
+                .contains("line 1")
+        );
+        assert!(start("send x", "dos", Some(1)).is_err());
+        assert!(start("send x", "crlf", Some(0)).is_err());
+
+        let started = start("send x\nwait 1ms", "lf", Some(2)).unwrap();
+        assert_eq!(started.name, "check");
+        wait_until(|| !app.sequence_status(1).running);
+        let done = app.sequence_status(1);
+        assert_eq!((done.done, done.passed, done.failed), (2, 2, 0));
+        assert_eq!(devices.lock().unwrap()["mock0"].take_written(), b"x\nx\n");
+
+        for ending in ["none", "cr", "crlf"] {
+            start("wait 1ms", ending, Some(1)).unwrap();
+        }
+        start("wait 1s", "none", None).unwrap();
+        assert!(app.sequence_status(1).running);
+        let stopped = app.stop_sequence(1);
+        assert!(stopped.stopped && !stopped.running, "{stopped:?}");
+
+        start("wait 1s", "none", None).unwrap();
+        app.release(1).unwrap();
+        assert!(!app.sequence_status(1).running, "closing the port stops it");
+        app.close(1).unwrap();
+        assert_eq!(app.sequence_status(1), SequenceStatus::default());
         app.shutdown();
     }
 

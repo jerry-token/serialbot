@@ -27,6 +27,7 @@ import type {
   ExportFormat,
   RepeatStatus,
   SessionStateName,
+  SequenceStatus,
   SignalsInfo,
 } from "./api";
 
@@ -328,6 +329,51 @@ class FakeBackend implements Backend {
 
   async fileSendStatus(_id: number) {
     return this.file;
+  }
+
+  sequenceCalls: unknown[][] = [];
+  sequence: SequenceStatus = {
+    running: false,
+    name: "",
+    runs: null,
+    done: 0,
+    passed: 0,
+    failed: 0,
+    step: null,
+    failures: [],
+    fastestMs: null,
+    slowestMs: null,
+    passedMs: 0,
+    elapsedMs: 0,
+    stopped: false,
+    error: null,
+  };
+  failSequence: string | null = null;
+
+  async startSequence(...args: unknown[]) {
+    if (this.failSequence) throw this.failSequence;
+    this.sequenceCalls.push(args);
+    this.sequence = {
+      ...this.sequence,
+      running: true,
+      name: String(args[1]),
+      step: "send AT",
+    };
+    return this.sequence;
+  }
+
+  async stopSequence(_id: number) {
+    this.sequence = {
+      ...this.sequence,
+      running: false,
+      stopped: true,
+      step: null,
+    };
+    return this.sequence;
+  }
+
+  async sequenceStatus(_id: number) {
+    return this.sequence;
   }
 
   async encodeText(text: string, encoding: string) {
@@ -939,6 +985,122 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Commands" }));
     expect(panel().getByRole("button", { name: "Send version" })).toBeDisabled();
     expect(panel().getByRole("button", { name: "Send raw" })).toHaveTextContent("rawhex 01 02");
+  });
+
+  it("runs a test sequence, shows its tally and copies the report", async () => {
+    const { backend, user, copy, storage, view } = setup();
+    const seq = () =>
+      within(screen.getByRole("complementary", { name: "Test sequence" }));
+    await user.click(screen.getByRole("button", { name: "Test sequence" }));
+    expect(seq().getByRole("button", { name: "Run" })).toBeDisabled();
+    await openPort(user);
+
+    // A command group becomes the script.
+    await user.click(screen.getByRole("button", { name: "Commands" }));
+    await addCommand(user, "version", "AT+GMR", { delayMs: 50 });
+    await user.selectOptions(
+      seq().getByLabelText("From command group…"),
+      "Default",
+    );
+    expect(seq().getByLabelText("Script")).toHaveValue(
+      "# Default\nending crlf\nsend AT+GMR\nwait 50ms\n",
+    );
+    const runs = seq().getByLabelText("Runs (0: until stopped)");
+    await user.clear(runs);
+    await user.type(runs, "0");
+    fireEvent.change(seq().getByLabelText("Pause between runs (ms)"), {
+      target: { value: "250" },
+    });
+    await user.click(
+      seq().getByRole("checkbox", { name: "Go on after a failed run" }),
+    );
+    await user.click(seq().getByRole("button", { name: "Run" }));
+    await waitFor(() => expect(backend.sequenceCalls).toHaveLength(1));
+    expect(backend.sequenceCalls[0]).toEqual([
+      1,
+      "COM3",
+      "# Default\nending crlf\nsend AT+GMR\nwait 50ms\n",
+      "crlf",
+      "utf-8",
+      null,
+      false,
+      250,
+    ]);
+    expect(await seq().findByText("Run 1")).toBeInTheDocument();
+    expect(seq().getByText("send AT")).toBeInTheDocument();
+    expect(seq().getByLabelText("Script")).toHaveAttribute("readonly");
+
+    // The backend's tally arrives by polling.
+    act(() => {
+      backend.sequence = {
+        ...backend.sequence,
+        runs: 3,
+        done: 2,
+        passed: 1,
+        failed: 1,
+        fastestMs: 120,
+        slowestMs: 120,
+        passedMs: 120,
+        failures: [
+          { run: 2, line: 3, source: "expect OK", reason: { kind: "timeout" } },
+        ],
+      };
+    });
+    expect(
+      await seq().findByText("Run 3 of 3", {}, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    expect(
+      seq().getByText("Runs: 2 · passed: 1 · failed: 1"),
+    ).toBeInTheDocument();
+    expect(
+      seq().getByText(/fastest 120 ms · average 120 ms/),
+    ).toBeInTheDocument();
+    expect(
+      seq().getByText("Run 2, line 3 (expect OK): no reply matched in time"),
+    ).toBeInTheDocument();
+
+    await user.click(seq().getByRole("button", { name: "Stop" }));
+    expect(
+      await seq().findByText("Runs: 2 · passed: 1 · failed: 1 (stopped)"),
+    ).toBeInTheDocument();
+    await user.click(seq().getByRole("button", { name: "Copy report" }));
+    const report = String(
+      (copy.mock.calls.at(-1) as unknown[] | undefined)?.[0],
+    );
+    expect(report).toContain("Port: COM3");
+    expect(report).toContain("send AT+GMR");
+
+    // Many failures: the first five are listed.
+    act(() => {
+      backend.sequence = {
+        ...backend.sequence,
+        running: true,
+        failed: 8,
+        failures: Array.from({ length: 8 }, (_, i) => ({
+          run: i + 1,
+          line: 1,
+          source: "send x",
+          reason: { kind: "error" as const, message: "gone" },
+        })),
+        error: "the device went away",
+      };
+    });
+    await user.click(seq().getByRole("button", { name: "Run" }));
+    expect(await seq().findByText("…and 3 more")).toBeInTheDocument();
+    expect(seq().getByText("the device went away")).toBeInTheDocument();
+
+    backend.failSequence = 'line 1: "frobnicate" is not a step';
+    backend.sequence = { ...backend.sequence, running: false };
+    await user.click(await seq().findByRole("button", { name: "Stop" }));
+    await user.click(await seq().findByRole("button", { name: "Run" }));
+    expect(await screen.findByText(/frobnicate/)).toBeInTheDocument();
+
+    // The script and options are kept.
+    view.unmount();
+    setup(new FakeBackend(), undefined, storage);
+    await user.click(screen.getByRole("button", { name: "Test sequence" }));
+    expect(seq().getByLabelText("Runs (0: until stopped)")).toHaveValue(0);
+    expect(seq().getByLabelText("Pause between runs (ms)")).toHaveValue(250);
   });
 
   it("keeps the tab of a port an agent closed, so its actions can be looked back at", async () => {

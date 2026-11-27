@@ -8,6 +8,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import type { LineEnding } from "./bytes";
 
 /** Label of the separate command-list window (see capabilities/default.json). */
 export const COMMAND_WINDOW = "commands";
@@ -130,6 +131,41 @@ export interface FileSendStatus {
   retries?: number;
 }
 
+/** A failed run of a test sequence. */
+export interface SequenceFailure {
+  /** The run, from 1. */
+  run: number;
+  /** The step's line in the script. */
+  line: number;
+  /** The step as written. */
+  source: string;
+  reason: { kind: "timeout" } | { kind: "error"; message: string };
+}
+
+/** Where a session's test sequence is, and its tally so far. */
+export interface SequenceStatus {
+  running: boolean;
+  name: string;
+  /** Runs asked for; null: until stopped. */
+  runs: number | null;
+  done: number;
+  passed: number;
+  failed: number;
+  /** The step running now, as written. */
+  step: string | null;
+  /** The first 50 failures. */
+  failures: SequenceFailure[];
+  fastestMs: number | null;
+  slowestMs: number | null;
+  /** All passed runs together (for the average). */
+  passedMs: number;
+  elapsedMs: number;
+  /** Stopped before its last run. */
+  stopped: boolean;
+  /** Why it ended early: the device went away. */
+  error: string | null;
+}
+
 /** How a file is sent: plain chunks, or to a bootloader. */
 export type FileProtocol =
   "raw" | "xmodem" | "xmodem-1k" | "ymodem" | "ymodem-128";
@@ -231,6 +267,19 @@ export interface Backend {
     protocol: FileProtocol,
   ): Promise<FileSendStatus>;
   stopFileSend(id: number): Promise<FileSendStatus>;
+  /** Starts a test sequence: `script` run `runs` times (null: until stopped). */
+  startSequence(
+    id: number,
+    name: string,
+    script: string,
+    ending: LineEnding,
+    encoding: string,
+    runs: number | null,
+    stopOnFail: boolean,
+    gapMs: number,
+  ): Promise<SequenceStatus>;
+  stopSequence(id: number): Promise<SequenceStatus>;
+  sequenceStatus(id: number): Promise<SequenceStatus>;
   fileSendStatus(id: number): Promise<FileSendStatus>;
   /** Writes what the session's log holds now to `path`. */
   exportLog(
@@ -341,6 +390,28 @@ export const tauriBackend: Backend = {
   sendFile: (id, path, chunk, delayMs, protocol) =>
     invoke("send_file", { id, path, chunk, delayMs, protocol }),
   stopFileSend: (id) => invoke("stop_file_send", { id }),
+  startSequence: (
+    id,
+    name,
+    script,
+    ending,
+    encoding,
+    runs,
+    stopOnFail,
+    gapMs,
+  ) =>
+    invoke("start_sequence", {
+      id,
+      name,
+      script,
+      ending,
+      encoding,
+      runs,
+      stopOnFail,
+      gapMs,
+    }),
+  stopSequence: (id) => invoke("stop_sequence", { id }),
+  sequenceStatus: (id) => invoke("sequence_status", { id }),
   fileSendStatus: (id) => invoke("file_send_status", { id }),
   exportLog: (id, path, format) =>
     invoke("export_log", { id, path, format, utcOffsetMin: utcOffsetMin() }),
