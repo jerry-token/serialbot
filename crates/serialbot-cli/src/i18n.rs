@@ -526,7 +526,7 @@ static EN: Strings = Strings {
         ),
         (
             "monitor.decode",
-            "Show one line per message of this protocol (name, fields, ✓ for a good checksum) instead of bytes; --json gives the fields",
+            "Show one line per message instead of bytes (✓ for a good checksum; --json gives the fields): modbus-rtu, slcan, a protocol file in the protocols folder, or a .toml file",
         ),
         (
             "signal",
@@ -836,7 +836,7 @@ static ZH: Strings = Strings {
         ("monitor.log", "同时把全部内容带时间戳保存到这个文件"),
         (
             "monitor.decode",
-            "按此协议每条消息显示一行（名称、字段，校验正确显示 ✓），不显示原始字节；配合 --json 输出字段",
+            "按消息逐行显示，不显示原始字节（校验正确显示 ✓；配合 --json 输出字段）：modbus-rtu、slcan、protocols 文件夹里的协议文件，或一个 .toml 文件",
         ),
         (
             "signal",

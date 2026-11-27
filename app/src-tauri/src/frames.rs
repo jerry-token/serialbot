@@ -123,24 +123,30 @@ impl Decoders {
         self.streams.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// Up to `max` frames of `session` (id `id`) decoded as `protocol`
-    /// (an id of [`serialbot_decode::PROTOCOLS`]), from number `after` on,
-    /// with names in `lang`. Starts that decoder at the beginning of the
-    /// log the first time. Fails for an unknown protocol or a bad log read.
+    /// Up to `max` frames of `session` (id `id`), from number `after` on,
+    /// decoded by the decoder kept under `protocol` and `lang`; the first
+    /// time, `make` makes it and it starts at the beginning of the log (a
+    /// changed protocol file gets a new `protocol` key, so it decodes
+    /// afresh). Fails when `make` does or the log cannot be read.
+    #[allow(clippy::too_many_arguments, reason = "one read's parameters")]
     pub fn read(
         &self,
         id: u32,
         session: &Session,
         protocol: &str,
         lang: Lang,
+        make: &dyn Fn() -> Result<Box<dyn Decoder>, String>,
         after: u64,
         max: usize,
     ) -> Result<FramesChunk, String> {
         let key = (id, protocol.to_ascii_lowercase(), lang == Lang::Zh);
         let mut streams = self.lock();
         if !streams.contains_key(&key) {
-            let decoder = serialbot_decode::decoder(protocol, lang)
-                .ok_or_else(|| format!("unknown protocol {protocol:?}"))?;
+            // Stale versions of this session's protocol go.
+            streams.retain(|(s, p, _), _| {
+                !(*s == id && p.split('#').next() == key.1.split('#').next())
+            });
+            let decoder = make()?;
             streams.insert(
                 key.clone(),
                 Stream {
@@ -229,7 +235,20 @@ mod tests {
             .unwrap();
         device.send(&[0x01, 0x03, 0x04, 0x00, 0xE7, 0x01, 0xA2, 0xCA, 0x2D]);
         wait_for_rx(&s, 17);
-        let chunk = d.read(1, &s, "modbus-rtu", Lang::En, 0, 100).unwrap();
+        let chunk = d
+            .read(
+                1,
+                &s,
+                "modbus-rtu",
+                Lang::En,
+                &|| {
+                    serialbot_decode::decoder("modbus-rtu", Lang::En)
+                        .ok_or_else(|| "unknown".to_owned())
+                },
+                0,
+                100,
+            )
+            .unwrap();
         assert_eq!(chunk.frames.len(), 2, "{chunk:#?}");
         assert_eq!(chunk.next, 2);
         assert_eq!(chunk.missed, 0);
@@ -244,16 +263,54 @@ mod tests {
         assert_eq!(json["frames"][1]["status"], "ok");
 
         // Nothing new: nothing returned, the same next number.
-        let again = d.read(1, &s, "modbus-rtu", Lang::En, 2, 100).unwrap();
+        let again = d
+            .read(
+                1,
+                &s,
+                "modbus-rtu",
+                Lang::En,
+                &|| {
+                    serialbot_decode::decoder("modbus-rtu", Lang::En)
+                        .ok_or_else(|| "unknown".to_owned())
+                },
+                2,
+                100,
+            )
+            .unwrap();
         assert!(again.frames.is_empty());
         assert_eq!(again.next, 2);
 
         // Another protocol or language decodes the same log afresh.
-        let zh = d.read(1, &s, "MODBUS-RTU", Lang::Zh, 0, 1).unwrap();
+        let zh = d
+            .read(
+                1,
+                &s,
+                "MODBUS-RTU",
+                Lang::Zh,
+                &|| {
+                    serialbot_decode::decoder("MODBUS-RTU", Lang::Zh)
+                        .ok_or_else(|| "unknown".to_owned())
+                },
+                0,
+                1,
+            )
+            .unwrap();
         assert_eq!(zh.frames.len(), 1);
         assert_eq!(zh.next, 1);
         assert_eq!(zh.frames[0].frame.name, "读保持寄存器 (03)");
-        assert!(d.read(1, &s, "mavlink", Lang::En, 0, 1).is_err());
+        assert!(
+            d.read(
+                1,
+                &s,
+                "mavlink",
+                Lang::En,
+                &|| serialbot_decode::decoder("mavlink", Lang::En)
+                    .ok_or_else(|| "unknown".to_owned()),
+                0,
+                1
+            )
+            .is_err()
+        );
 
         d.remove(1);
         assert!(format!("{d:?}").contains("streams: 0"));
@@ -265,10 +322,34 @@ mod tests {
         let d = Decoders::default();
         device.send(b"t12");
         wait_for_rx(&s, 3);
-        let chunk = d.read(1, &s, "slcan", Lang::En, 0, 10).unwrap();
+        let chunk = d
+            .read(
+                1,
+                &s,
+                "slcan",
+                Lang::En,
+                &|| {
+                    serialbot_decode::decoder("slcan", Lang::En).ok_or_else(|| "unknown".to_owned())
+                },
+                0,
+                10,
+            )
+            .unwrap();
         assert!(chunk.frames.is_empty(), "the line may still end");
         std::thread::sleep(Duration::from_millis(250));
-        let chunk = d.read(1, &s, "slcan", Lang::En, 0, 10).unwrap();
+        let chunk = d
+            .read(
+                1,
+                &s,
+                "slcan",
+                Lang::En,
+                &|| {
+                    serialbot_decode::decoder("slcan", Lang::En).ok_or_else(|| "unknown".to_owned())
+                },
+                0,
+                10,
+            )
+            .unwrap();
         assert_eq!(chunk.frames.len(), 1);
         assert_eq!(chunk.frames[0].frame.status, Status::Incomplete);
     }
@@ -301,7 +382,19 @@ mod tests {
         assert_eq!(stream.frames[0].seq, 5);
         let d = Decoders::default();
         d.lock().insert((1, "slcan".into(), false), stream);
-        let chunk = d.read(1, &s, "slcan", Lang::En, 2, 3).unwrap();
+        let chunk = d
+            .read(
+                1,
+                &s,
+                "slcan",
+                Lang::En,
+                &|| {
+                    serialbot_decode::decoder("slcan", Lang::En).ok_or_else(|| "unknown".to_owned())
+                },
+                2,
+                3,
+            )
+            .unwrap();
         assert_eq!(chunk.missed, 3);
         assert_eq!(
             chunk.frames.iter().map(|f| f.seq).collect::<Vec<_>>(),
@@ -309,7 +402,19 @@ mod tests {
         );
         assert_eq!(chunk.next, 8);
         let end = u64::try_from(MAX_FRAMES).unwrap() + 5;
-        let past = d.read(1, &s, "slcan", Lang::En, end + 10, 3).unwrap();
+        let past = d
+            .read(
+                1,
+                &s,
+                "slcan",
+                Lang::En,
+                &|| {
+                    serialbot_decode::decoder("slcan", Lang::En).ok_or_else(|| "unknown".to_owned())
+                },
+                end + 10,
+                3,
+            )
+            .unwrap();
         assert!(past.frames.is_empty());
         assert_eq!(past.next, end + 10, "asking past the end keeps the number");
     }

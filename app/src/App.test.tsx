@@ -18,6 +18,7 @@ import type {
   LogEntry,
   ClientConfig,
   DecodedFrame,
+  Protocol,
   McpClientId,
   McpSettings,
   McpStatus,
@@ -340,11 +341,24 @@ class FakeBackend implements Backend {
   framesOpened: string[] = [];
   failFramesWindow = false;
 
+  userProtocols: Protocol[] = [];
+  protocolCalls = 0;
+  dirOpens = 0;
+  failDir: string | null = null;
+
   async protocols() {
+    this.protocolCalls += 1;
     return [
       { id: "modbus-rtu", name: "Modbus RTU" },
       { id: "slcan", name: "SLCAN" },
+      ...this.userProtocols,
     ];
+  }
+
+  async openProtocolsDir() {
+    if (this.failDir) throw this.failDir;
+    this.dirOpens += 1;
+    return "/home/j/.config/cc.aiany.serialbot/protocols";
   }
 
   async readFrames(id: number, protocol: string, lang: string, after: number, max: number) {
@@ -2447,6 +2461,33 @@ describe("Frames window", () => {
     backend.failFrames = "unknown protocol";
     await user.selectOptions(screen.getByLabelText("协议"), "modbus-rtu");
     expect(await screen.findByText("unknown protocol")).toBeInTheDocument();
+  });
+
+  it("offers the user's protocol files and reads them again after a visit elsewhere", async () => {
+    const backend = new FakeBackend();
+    act(() => void backend.addSession("COM3", null));
+    backend.userProtocols = [
+      { id: "user:board", name: "Board", file: "/p/board.toml", error: null },
+      { id: "user:broken", name: "broken.toml", file: "/p/broken.toml", error: "line 3: field \"a\": type \"u12\"" },
+    ];
+    const { user } = setupWindow(backend);
+    expect(await screen.findByRole("option", { name: "broken.toml (has a mistake)" })).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Protocol"), "user:broken");
+    expect(screen.getByText('line 3: field "a": type "u12"')).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Protocol"), "user:board");
+    await waitFor(() => expect(backend.frameReads.at(-1)?.[1]).toBe("user:board"));
+    const reads = backend.frameReads.length;
+    const lists = backend.protocolCalls;
+    act(() => void window.dispatchEvent(new Event("focus")));
+    await waitFor(() => expect(backend.frameReads.length).toBeGreaterThan(reads));
+    expect(backend.frameReads.at(-1)?.[3]).toBe(0);
+    expect(backend.protocolCalls).toBeGreaterThan(lists);
+
+    await user.click(screen.getByRole("button", { name: "Protocol files…" }));
+    expect(backend.dirOpens).toBe(1);
+    backend.failDir = "this system has no configuration folder";
+    await user.click(screen.getByRole("button", { name: "Protocol files…" }));
+    expect(await screen.findByText("this system has no configuration folder")).toBeInTheDocument();
   });
 
   it("is opened from the main window", async () => {

@@ -19,12 +19,14 @@
 //! command-line tool and the MCP server feed it from a session's log.
 //!
 //! Built in: [Modbus RTU](modbus) and [SLCAN](slcan) (CAN adapters that
-//! speak the Lawicel ASCII protocol). [`checksum`] has the checksums the
+//! speak the Lawicel ASCII protocol). Other protocols are described in a
+//! TOML file ([`custom`]). [`checksum`] has the checksums the
 //! send box can append, shared with the command-line tool.
 
 use serde::Serialize;
 
 pub mod checksum;
+pub mod custom;
 pub mod modbus;
 pub mod slcan;
 
@@ -191,6 +193,45 @@ pub fn decoder(id: &str, lang: Lang) -> Option<Box<dyn Decoder>> {
     }
 }
 
+/// The decoder for `spec`: a built-in protocol id (`modbus-rtu`), a
+/// protocol file in `dir` (`user:thermostat` or `thermostat`), or the path
+/// of a `.toml` file. Gives the protocol's name too. An unknown `spec`
+/// fails with the protocols there are; a broken file fails with its
+/// mistake.
+pub fn find_decoder(
+    spec: &str,
+    dir: Option<&std::path::Path>,
+    lang: Lang,
+) -> Result<(String, Box<dyn Decoder>), String> {
+    if let Some(d) = decoder(spec, lang) {
+        let name = PROTOCOLS
+            .iter()
+            .find(|p| p.id.eq_ignore_ascii_case(spec))
+            .map_or("Modbus RTU", |p| p.name);
+        return Ok((name.to_owned(), d));
+    }
+    let stem = spec.strip_prefix("user:").unwrap_or(spec);
+    let in_dir = dir
+        .map(|d| d.join(format!("{stem}.toml")))
+        .filter(|p| p.is_file());
+    let path = in_dir.or_else(|| {
+        let p = std::path::PathBuf::from(spec);
+        (p.is_file() || spec.to_ascii_lowercase().ends_with(".toml")).then_some(p)
+    });
+    if let Some(path) = path {
+        let custom = custom::load(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        return Ok((custom.name().to_owned(), custom.decoder(lang)));
+    }
+    let mut known: Vec<String> = PROTOCOLS.iter().map(|p| p.id.to_owned()).collect();
+    if let Some(d) = dir {
+        known.extend(custom::load_dir(d).into_iter().map(|p| p.id));
+    }
+    Err(format!(
+        "unknown protocol {spec:?}; there are: {}",
+        known.join(", ")
+    ))
+}
+
 /// Decodes a whole recording at once: each `(direction, timestamp_us,
 /// bytes)` in order, then whatever is left. Frames come out in the order
 /// they ended.
@@ -285,6 +326,39 @@ mod tests {
         assert!(decoder("mavlink", Lang::En).is_none());
         assert_eq!(Direction::Rx.index(), 0);
         assert_eq!(Direction::Tx.index(), 1);
+    }
+
+    #[test]
+    fn decoders_are_found_by_id_file_name_or_path() {
+        let dir = std::env::temp_dir().join(format!("serialbot-find-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("mine.toml"), custom::EXAMPLE).unwrap();
+        std::fs::write(dir.join("broken.toml"), "nope").unwrap();
+        let name = |spec: &str| find_decoder(spec, Some(&dir), Lang::En).map(|(n, _)| n);
+        assert_eq!(name("SLCAN").unwrap(), "SLCAN");
+        assert_eq!(name("modbus").unwrap(), "Modbus RTU");
+        assert_eq!(name("user:mine").unwrap(), "Example: thermostat");
+        assert_eq!(name("mine").unwrap(), "Example: thermostat");
+        let path = dir.join("mine.toml");
+        assert_eq!(
+            find_decoder(path.to_str().unwrap(), None, Lang::En)
+                .map(|(n, _)| n)
+                .unwrap(),
+            "Example: thermostat"
+        );
+        assert!(name("broken").unwrap_err().contains("broken.toml"));
+        assert!(name("gone.toml").unwrap_err().contains("gone.toml"));
+        let err = name("mavlink").unwrap_err();
+        assert!(
+            err.contains("modbus-rtu, slcan, user:broken, user:mine"),
+            "{err}"
+        );
+        let Err(err) = find_decoder("mavlink", None, Lang::En) else {
+            panic!("found");
+        };
+        assert!(err.ends_with("modbus-rtu, slcan"), "{err}");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

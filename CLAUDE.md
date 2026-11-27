@@ -63,12 +63,14 @@ Not automated, still required:
   - `src/manager.rs` — owns all sessions; refuses to open a port twice
   - `src/transport/mock.rs` — in-memory device for tests of everything above transports
   - `tests/serial_socat.rs` — real serial code over socat virtual ports (Linux only)
-- `crates/serialbot-decode` — frame decoders, pure (no ports, no UI): bytes with direction and
+- `crates/serialbot-decode` — frame decoders (no ports, no UI; reads protocol files): bytes with direction and
   time in, frames with named fields out; shared by the CLI and the app (MCP next)
   - `src/lib.rs` — `Frame` / `Field` / `Status`, the `Decoder` trait, `PROTOCOLS`, `decoder(id)`
   - `src/modbus.rs` — Modbus RTU: frames found by function code and CRC, responses paired with
     their requests
   - `src/slcan.rs` — SLCAN (Lawicel ASCII CAN adapters): CAN frames, commands, replies
+  - `src/custom.rs` — the user's own protocols, described in TOML (`docs/protocols.md`):
+    parsing with line numbers, the protocols folder, decoding
   - `src/checksum.rs` — the send box's checksums (CRC-8/16/32, XOR, SUM8, LRC)
 - `crates/serialbot-jobs` — background jobs per session, shared by the app and the CLI:
   `filesend.rs` / `repeat.rs` / `export.rs` (file send, timed send, save/capture); the app
@@ -112,7 +114,8 @@ Not automated, still required:
   - `src-tauri/src/mcp.rs` — embedded MCP server on the same `SessionManager`
     (settings in `mcp.json` via `settings.rs`, status events to every window)
   - `src-tauri/src/frames.rs` — decoders per session, protocol and language for the frames
-    window, fed from the log; the newest 50 000 frames, read by number
+    window, fed from the log; the newest 50 000 frames, read by number (user protocols come from
+    `protocols/` in the config folder, read again when the file changes)
   - `src-tauri/src/watch.rs` — change detection; the window gets `sessions-changed` /
     `log-changed` events and reads new entries itself (no IPC polling)
   - `src/terminal.ts` — log entries to display lines (text/hex, line breaks, UTF-8)

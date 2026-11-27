@@ -249,8 +249,17 @@ mod ipc {
     }
 
     #[tauri::command(async)]
-    pub(crate) fn protocols() -> Vec<serialbot_decode::Protocol> {
-        serialbot_decode::PROTOCOLS.to_vec()
+    pub(crate) fn protocols(
+        state: tauri::State<'_, AppState>,
+    ) -> Vec<crate::commands::ProtocolDto> {
+        state.protocols()
+    }
+
+    #[tauri::command(async)]
+    pub(crate) fn open_protocols_dir(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        let dir = state.ensure_protocols_dir()?;
+        open::that_detached(&dir).map_err(|e| e.to_string())?;
+        Ok(dir.display().to_string())
     }
 
     #[tauri::command(async)]
@@ -463,7 +472,9 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let state = app.state::<AppState>();
     let manager = Arc::clone(state.manager());
     let lister = Arc::clone(state.port_lister());
-    let path = app.path().app_config_dir()?.join("mcp.json");
+    let config = app.path().app_config_dir()?;
+    state.set_protocols_dir(config.join("protocols"));
+    let path = config.join("mcp.json");
     let (settings, note) = match settings::load(&path) {
         Ok(loaded) => loaded,
         Err(e) => (settings::McpSettings::new_default()?, Some(e)),
@@ -544,6 +555,7 @@ pub fn run() -> Result<(), tauri::Error> {
             ipc::stop_repeat,
             ipc::repeat_status,
             ipc::protocols,
+            ipc::open_protocols_dir,
             ipc::read_frames,
             ipc::start_sequence,
             ipc::stop_sequence,

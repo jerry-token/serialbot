@@ -50,9 +50,22 @@ pub fn run(
     manager: &SessionManager,
     interrupted: &Arc<AtomicBool>,
     utc_offset_min: i32,
+    protocols_dir: Option<&std::path::Path>,
     out: &mut Output<'_>,
 ) -> Result<(), Failure> {
     let s = out.strings();
+    let lang = match out.lang() {
+        crate::Lang::En => serialbot_decode::Lang::En,
+        crate::Lang::Zh => serialbot_decode::Lang::Zh,
+    };
+    // A wrong protocol is reported before the port is opened.
+    let decoder = args
+        .decode
+        .as_deref()
+        .map(|spec| serialbot_decode::find_decoder(spec, protocols_dir, lang))
+        .transpose()
+        .map_err(|e| Failure::new(Exit::Usage, e))?
+        .map(|(_, d)| d);
     let session = open(manager, &args.port, s)?;
     let captures = Captures::default();
     if let Some(path) = &args.log
@@ -61,19 +74,12 @@ pub fn run(
         let _ = manager.remove(session.id());
         return Err(Failure::new(Exit::Usage, e));
     }
-    let lang = match out.lang() {
-        crate::Lang::En => serialbot_decode::Lang::En,
-        crate::Lang::Zh => serialbot_decode::Lang::Zh,
-    };
     let mut view = View {
         args,
         utc_offset_min,
         at_line_start: true,
         tail: Vec::new(),
-        decoder: args
-            .decode
-            .as_deref()
-            .and_then(|id| serialbot_decode::decoder(id, lang)),
+        decoder,
         frames: Vec::new(),
         last_seen: None,
     };
@@ -583,5 +589,57 @@ mod tests {
 
         let ran = f.run(&["monitor", "mock0", "--decode", "mavlink"]);
         assert_eq!(ran.code, Exit::Usage as u8);
+        assert!(ran.err.contains("modbus-rtu, slcan"), "{}", ran.err);
+    }
+
+    #[test]
+    fn decode_takes_protocol_files_from_the_folder_or_a_path() {
+        let f = Fixture::new();
+        let dir = f.config_dir.join("protocols");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("ping.toml"),
+            "name = \"Ping\"\n[frame]\nend = \"0A\"\n[[field]]\nname = \"text\"\ntype = \"ascii\"\n",
+        )
+        .unwrap();
+        let device = feed(&f, &[b"hello\n"]);
+        let ran = f.run(&[
+            "monitor",
+            "mock0",
+            "--decode",
+            "ping",
+            "--duration",
+            "300ms",
+        ]);
+        device.join().unwrap();
+        assert_eq!(
+            ran.out, "✓ Ping  text=hello  [68 65 6C 6C 6F 0A]\n",
+            "{}",
+            ran.err
+        );
+
+        let f = Fixture::new();
+        let path = dir.join("ping.toml");
+        let device = feed(&f, &[b"again\n"]);
+        let ran = f.run(&[
+            "monitor",
+            "mock0",
+            "--decode",
+            path.to_str().unwrap(),
+            "--duration",
+            "300ms",
+        ]);
+        device.join().unwrap();
+        assert!(ran.out.contains("text=again"), "{}", ran.err);
+
+        std::fs::write(dir.join("bad.toml"), "name = \"x\"\nsize = 1\n").unwrap();
+        let ran = Fixture::new().run(&[
+            "monitor",
+            "mock0",
+            "--decode",
+            path.with_file_name("bad.toml").to_str().unwrap(),
+        ]);
+        assert_eq!(ran.code, Exit::Usage as u8);
+        assert!(ran.err.contains("line 2"), "{}", ran.err);
     }
 }
