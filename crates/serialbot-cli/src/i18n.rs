@@ -90,6 +90,12 @@ pub struct Strings {
     pub modem_closed_early: &'static str,
     /// No reply matched in time; followed by the pattern.
     pub no_match: &'static str,
+    /// `run --runs`: the tally; `{done}`, `{passed}`, `{failed}`.
+    pub runs_tally: &'static str,
+    /// `run --runs`: run times; `{fastest}`, `{average}`, `{slowest}` (ms).
+    pub runs_times: &'static str,
+    /// `run --runs`: some runs failed; `{failed}`, `{done}`.
+    pub runs_failed: &'static str,
     /// Reading the file to send failed; followed by the reason.
     pub cannot_read: &'static str,
     /// The data to send is empty.
@@ -418,6 +424,9 @@ static EN: Strings = Strings {
     cannot_open: "cannot open",
     disconnected: "the device went away",
     no_match: "no reply matched within the timeout",
+    runs_tally: "runs: {done}, passed: {passed}, failed: {failed}",
+    runs_times: "passed runs took {fastest} ms fastest, {average} ms on average, {slowest} ms slowest",
+    runs_failed: "{failed} of {done} runs failed",
     modem_waiting: "waiting for the device to start receiving",
     modem_sent: "sent",
     modem_closed_early: "the device closed the port after the last block",
@@ -669,6 +678,15 @@ static EN: Strings = Strings {
             "Line ending after send text (the script can change it with an ending line)",
         ),
         ("run.encoding", "Text encoding (utf-8, gbk, ...)"),
+        (
+            "run.runs",
+            "Run the script this many times (0: until Ctrl+C), then print the tally",
+        ),
+        (
+            "run.keep_going",
+            "With --runs: go on after a failed run instead of stopping",
+        ),
+        ("run.gap", "With --runs: the pause between runs (500ms, 2s)"),
         ("mcp", "MCP server for AI agents, without the desktop app"),
         (
             "mcp.serve",
@@ -718,6 +736,9 @@ static ZH: Strings = Strings {
     cannot_open: "无法打开",
     disconnected: "设备已断开",
     no_match: "超时内没有收到匹配的回复",
+    runs_tally: "轮次：{done}，通过：{passed}，失败：{failed}",
+    runs_times: "通过的轮次耗时：最快 {fastest} ms，平均 {average} ms，最慢 {slowest} ms",
+    runs_failed: "{done} 轮中有 {failed} 轮失败",
     modem_waiting: "等待设备开始接收",
     modem_sent: "已发送",
     modem_closed_early: "设备在最后一块之后关闭了端口",
@@ -951,6 +972,15 @@ static ZH: Strings = Strings {
             "send 文本后追加的行尾（脚本里可用 ending 行修改）",
         ),
         ("run.encoding", "文本编码（utf-8、gbk……）"),
+        (
+            "run.runs",
+            "把脚本运行这么多轮（0：直到 Ctrl+C），最后打印统计",
+        ),
+        (
+            "run.keep_going",
+            "配合 --runs：某一轮失败后继续，而不是停止",
+        ),
+        ("run.gap", "配合 --runs：两轮之间的间隔（500ms、2s）"),
         ("mcp", "给 AI 智能体用的 MCP 服务，不需要桌面 App"),
         (
             "mcp.serve",

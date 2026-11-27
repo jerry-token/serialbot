@@ -208,6 +208,7 @@ serialbot-cli send /dev/ttyUSB0 AT --expect OK       # send, wait for the reply;
 serialbot-cli monitor /dev/ttyUSB0 --until 'boot ok'  # receive only (text, --hex or --json lines)
 serialbot-cli signal /dev/ttyUSB0 dtr=0 100ms dtr=1   # DTR/RTS steps, BREAK
 serialbot-cli run /dev/ttyUSB0 boot.txt               # a script: send, expect, wait, dtr, rts, mark …
+serialbot-cli run /dev/ttyUSB0 boot.txt --runs 100  # 100 runs, then the tally (--keep-going)
 serialbot-cli open /dev/ttyUSB0 -b 921600             # interactive terminal, minicom keys (Ctrl+A Z)
 serialbot-cli tui /dev/ttyUSB0 /dev/ttyUSB1           # full screen: several ports, waveform, AI panel
 serialbot-cli mcp serve                               # MCP server without the app; asks in the terminal

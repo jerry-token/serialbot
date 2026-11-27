@@ -208,6 +208,7 @@ serialbot-cli send /dev/ttyUSB0 AT --expect OK       # 发送并等待回复；�
 serialbot-cli monitor /dev/ttyUSB0 --until 'boot ok'  # 只接收（文本、--hex 或 --json 逐行）
 serialbot-cli signal /dev/ttyUSB0 dtr=0 100ms dtr=1   # DTR/RTS 时序、BREAK
 serialbot-cli run /dev/ttyUSB0 boot.txt               # 脚本：send、expect、wait、dtr、rts、mark……
+serialbot-cli run /dev/ttyUSB0 boot.txt --runs 100  # 跑 100 轮后打印统计（--keep-going）
 serialbot-cli open /dev/ttyUSB0 -b 921600             # 交互终端，按键兼容 minicom（Ctrl+A Z）
 serialbot-cli tui /dev/ttyUSB0 /dev/ttyUSB1           # 全屏界面：多串口分屏、波形图、AI 面板
 serialbot-cli mcp serve                               # 不开 App 的 MCP 服务，在终端里确认

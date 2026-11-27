@@ -3864,6 +3864,7 @@ version = "0.3.0"
 dependencies = [
  "regex",
  "serde",
+ "serde_json",
  "serialbot-core",
  "thiserror 2.0.21",
 ]

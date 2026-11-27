@@ -66,6 +66,9 @@ Not automated, still required:
 - `crates/serialbot-jobs` — background jobs per session, shared by the app and the CLI:
   `filesend.rs` / `repeat.rs` / `export.rs` (file send, timed send, save/capture); the app
   stops them when a session closes
+  - `src/script.rs` — scripts (send / expect / wait / dtr / rts / mark…) and the app's command
+    exports: parsing and running, shared by `run` and the app
+  - `src/sequence.rs` — test sequences: a script run N times or until stopped, with the tally
   - `src/xmodem.rs` — XMODEM (128 / 1K) and YMODEM sending to bootloaders
   - `tests/modem_lrzsz.rs` — XMODEM / YMODEM against lrzsz's `rx` / `rb` over socat (Linux only)
 - `crates/serialbot-cli` — `serialbot-cli`, the terminal front end
@@ -73,7 +76,7 @@ Not automated, still required:
   - `src/commands/` — one file per subcommand (`ports`, `send`, `monitor`, `signal`, `open`, `run`,
     `mcp`: `mcp serve` asks in the terminal, `mcp stdio` bridges to it or the app)
   - `src/config.rs` — `cli.json` (MCP token and port) next to the app's settings
-  - `src/script.rs` — `run` / `/run` scripts: text steps or the app's command export
+  - `src/script.rs` — `run` / `/run` scripts on the shared engine in `serialbot-jobs`
   - `src/term/` — the interactive terminal: `keys.rs` (minicom keys, pure), `editor.rs`
     (input box), `feed.rs` (entries to lines), `screen.rs` (redraws only the bottom rows),
     `console.rs` (one session: lines, commands, jobs, reconnecting; shared with `tui`),
