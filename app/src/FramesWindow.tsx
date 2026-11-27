@@ -74,6 +74,9 @@ export function FramesWindow({ backend, lang, storage = browserStorage() }: Prop
   const [selected, setSelected] = useState<number | null>(null);
   const [filter, setFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Bumped when the window comes back into focus: a protocol file may have
+  // been edited meanwhile.
+  const [reload, setReload] = useState(0);
   const next = useRef(0);
   const reading = useRef(false);
   const again = useRef(false);
@@ -99,8 +102,16 @@ export function FramesWindow({ backend, lang, storage = browserStorage() }: Prop
     let gone = false;
     void backend.onSessionsChanged(applySessions).then((u) => (gone ? u() : (unlisten = u)));
     backend.listSessions().then(applySessions, (e: unknown) => setError(errorMessage(e)));
-    backend.protocols().then(setProtocols, (e: unknown) => setError(errorMessage(e)));
+    const refresh = () =>
+      backend.protocols().then(setProtocols, (e: unknown) => setError(errorMessage(e)));
+    void refresh();
+    const onFocus = () => {
+      void refresh();
+      setReload((n) => n + 1);
+    };
+    window.addEventListener("focus", onFocus);
     return () => {
+      window.removeEventListener("focus", onFocus);
       gone = true;
       unlisten?.();
     };
@@ -116,6 +127,8 @@ export function FramesWindow({ backend, lang, storage = browserStorage() }: Prop
   const sessionId = picked?.id ?? null;
   const protocolId = chosen?.id ?? null;
   const frameLang = uiLang === "zh" ? "zh" : "en";
+  // A file of the user's is read again after the window comes back.
+  const version = chosen?.file ? reload : 0;
 
   // Reads every frame after the last one, then again if asked meanwhile.
   const read = useCallback(async () => {
@@ -151,15 +164,17 @@ export function FramesWindow({ backend, lang, storage = browserStorage() }: Prop
     }
   }, [backend, sessionId, protocolId, frameLang]);
 
-  // A new session, protocol or language: start from the first frame.
+  // A new session, protocol, language or protocol file: start from the
+  // first frame.
   useEffect(() => {
+    void version;
     next.current = 0;
     atBottom.current = true;
     setFrames([]);
     setMissed(0);
     setSelected(null);
     void read();
-  }, [read]);
+  }, [read, version]);
 
   // New data: read now, and once more after the decoder's gap.
   useEffect(() => {
@@ -228,11 +243,24 @@ export function FramesWindow({ backend, lang, storage = browserStorage() }: Prop
           >
             {protocols.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.name}
+                {p.error ? t.protocolBroken(p.name) : p.name}
               </option>
             ))}
           </select>
         </label>
+        <button
+          type="button"
+          className="chip"
+          title={t.protocolFilesHint}
+          onClick={() =>
+            backend.openProtocolsDir().then(
+              () => setError(null),
+              (e: unknown) => setError(errorMessage(e)),
+            )
+          }
+        >
+          {t.protocolFiles}
+        </button>
         <input
           className="grow"
           type="search"
@@ -246,6 +274,7 @@ export function FramesWindow({ backend, lang, storage = browserStorage() }: Prop
       {sessions.length === 0 && <p className="muted">{t.framesNoPort}</p>}
       {sessions.length > 0 && frames.length === 0 && <p className="muted">{t.framesNone}</p>}
       {missed > 0 && <p className="muted">{t.framesMissed(missed)}</p>}
+      {chosen?.error && <p className="error">{chosen.error}</p>}
       <div
         className="frames-list"
         ref={list}

@@ -319,6 +319,22 @@ pub struct AppState {
     file_sends: FileSends,
     sequences: Sequences,
     decoders: crate::frames::Decoders,
+    /// Where the user's protocol files are (`protocols` in the config folder).
+    protocols_dir: std::sync::Mutex<Option<std::path::PathBuf>>,
+}
+
+/// A protocol the frames window can pick.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtocolDto {
+    /// `modbus-rtu`, `slcan`, or `user:<file name>`.
+    pub id: String,
+    /// Its name (a broken file: the file's name).
+    pub name: String,
+    /// The protocol file, for the user's own.
+    pub file: Option<String>,
+    /// What is wrong with the file, naming the line.
+    pub error: Option<String>,
 }
 
 impl std::fmt::Debug for AppState {
@@ -340,6 +356,7 @@ impl AppState {
             file_sends: FileSends::default(),
             sequences: Sequences::default(),
             decoders: crate::frames::Decoders::default(),
+            protocols_dir: std::sync::Mutex::new(None),
         }
     }
 
@@ -703,9 +720,78 @@ impl AppState {
         Ok(self.sequences.status(id))
     }
 
+    /// Sets the folder of the user's protocol files.
+    pub fn set_protocols_dir(&self, dir: std::path::PathBuf) {
+        *self
+            .protocols_dir
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(dir);
+    }
+
+    fn protocols_dir(&self) -> Option<std::path::PathBuf> {
+        self.protocols_dir
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    /// The built-in protocols, then every protocol file in the folder (a
+    /// broken one with its mistake, so the window can say what to fix).
+    pub fn protocols(&self) -> Vec<ProtocolDto> {
+        let mut list: Vec<ProtocolDto> = serialbot_decode::PROTOCOLS
+            .iter()
+            .map(|p| ProtocolDto {
+                id: p.id.to_owned(),
+                name: p.name.to_owned(),
+                file: None,
+                error: None,
+            })
+            .collect();
+        if let Some(dir) = self.protocols_dir() {
+            list.extend(
+                serialbot_decode::custom::load_dir(&dir)
+                    .into_iter()
+                    .map(|p| {
+                        let file_name = p
+                            .path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_default();
+                        let (name, error) = match p.protocol {
+                            Ok(c) => (c.name().to_owned(), None),
+                            Err(e) => (file_name, Some(e)),
+                        };
+                        ProtocolDto {
+                            id: p.id,
+                            name,
+                            file: Some(p.path.display().to_string()),
+                            error,
+                        }
+                    }),
+            );
+        }
+        list
+    }
+
+    /// The protocols folder, made (with an example file to copy) if it is
+    /// not there yet.
+    pub fn ensure_protocols_dir(&self) -> Result<std::path::PathBuf, String> {
+        let dir = self
+            .protocols_dir()
+            .ok_or("this system has no configuration folder")?;
+        if !dir.exists() {
+            std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+            std::fs::write(dir.join("example.toml"), serialbot_decode::custom::EXAMPLE)
+                .map_err(|e| format!("{}: {e}", dir.display()))?;
+        }
+        Ok(dir)
+    }
+
     /// Up to `max` (at most 2000) frames of the session's log decoded as
-    /// `protocol`, from number `after` on, named in `lang` (`zh` or
-    /// anything else for English); see [`crate::frames::Decoders::read`].
+    /// `protocol` (a built-in id or `user:<file name>`), from number
+    /// `after` on, named in `lang` (`zh` or anything else for English); see
+    /// [`crate::frames::Decoders::read`]. A protocol file is read each time,
+    /// so a saved change shows at once.
     pub fn read_frames(
         &self,
         id: u32,
@@ -714,14 +800,32 @@ impl AppState {
         after: u64,
         max: usize,
     ) -> Result<crate::frames::FramesChunk, String> {
+        use std::hash::{Hash, Hasher};
         let session = self.manager.get(SessionId(id)).map_err(|e| e.to_string())?;
         let lang = if lang == "zh" {
             serialbot_decode::Lang::Zh
         } else {
             serialbot_decode::Lang::En
         };
+        let dir = self.protocols_dir();
+        let key = match protocol.strip_prefix("user:") {
+            Some(stem) => {
+                let path = dir
+                    .as_ref()
+                    .map(|d| d.join(format!("{stem}.toml")))
+                    .ok_or("this system has no configuration folder")?;
+                let text = std::fs::read_to_string(&path)
+                    .map_err(|e| format!("{}: {e}", path.display()))?;
+                let mut hash = std::collections::hash_map::DefaultHasher::new();
+                text.hash(&mut hash);
+                format!("{protocol}#{:x}", hash.finish())
+            }
+            None => protocol.to_owned(),
+        };
+        let make =
+            || serialbot_decode::find_decoder(protocol, dir.as_deref(), lang).map(|(_, d)| d);
         self.decoders
-            .read(id, &session, protocol, lang, after, max.clamp(1, 2000))
+            .read(id, &session, &key, lang, &make, after, max.clamp(1, 2000))
     }
 
     /// Stops the session's test sequence; its tally stays readable.
@@ -1180,6 +1284,46 @@ mod tests {
         let zh = app.read_frames(1, "slcan", "zh", 0, 10).unwrap();
         assert_eq!(zh.frames[0].frame.name, "CAN 标准帧");
         assert!(app.read_frames(1, "x", "en", 0, 10).is_err());
+        assert!(
+            app.read_frames(1, "user:x", "en", 0, 10).is_err(),
+            "no folder"
+        );
+
+        // The user's own protocols, from the folder.
+        assert_eq!(app.protocols().len(), 2);
+        assert!(app.ensure_protocols_dir().is_err());
+        let dir = crate::settings::tests::TempDir::new("protocols");
+        let folder = dir.0.join("protocols");
+        app.set_protocols_dir(folder.clone());
+        assert_eq!(app.ensure_protocols_dir().unwrap(), folder);
+        std::fs::write(
+            folder.join("example.toml"),
+            "name = \"Mine\"\n[frame]\nend = \"0D\"\n",
+        )
+        .unwrap();
+        assert_eq!(app.ensure_protocols_dir().unwrap(), folder, "kept");
+        std::fs::write(folder.join("broken.toml"), "nope").unwrap();
+        let list = app.protocols();
+        let ids: Vec<&str> = list.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, ["modbus-rtu", "slcan", "user:broken", "user:example"]);
+        assert_eq!(list[2].name, "broken.toml");
+        assert!(list[2].error.is_some());
+        assert_eq!(list[3].name, "Mine");
+        let mine = app.read_frames(1, "user:example", "en", 0, 10).unwrap();
+        assert_eq!(mine.frames[0].frame.name, "Mine");
+        // A saved change decodes afresh.
+        std::fs::write(
+            folder.join("example.toml"),
+            "name = \"Yours\"\n[frame]\nend = \"0D\"\n",
+        )
+        .unwrap();
+        let yours = app.read_frames(1, "user:example", "en", 0, 10).unwrap();
+        assert_eq!(yours.frames[0].frame.name, "Yours");
+        assert!(
+            app.read_frames(1, "user:broken", "en", 0, 10)
+                .unwrap_err()
+                .contains("broken.toml")
+        );
         app.close(1).unwrap();
         assert!(app.read_frames(1, "slcan", "en", 0, 10).is_err());
         app.shutdown();

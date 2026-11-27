@@ -172,6 +172,10 @@ where
             &ctx.manager,
             &ctx.interrupted,
             ctx.utc_offset_min,
+            ctx.config_dir
+                .as_deref()
+                .map(|d| d.join("protocols"))
+                .as_deref(),
             &mut out,
         ),
     };

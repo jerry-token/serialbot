@@ -132,10 +132,15 @@ export interface FileSendStatus {
   retries?: number;
 }
 
-/** A protocol the backend decodes. */
+/** A protocol the backend decodes: built in, or a file of the user's. */
 export interface Protocol {
+  /** `modbus-rtu`, `slcan`, or `user:<file name>`. */
   id: string;
   name: string;
+  /** The protocol file, for the user's own. */
+  file?: string | null;
+  /** What is wrong with the file, naming the line. */
+  error?: string | null;
 }
 
 /** One named part of a decoded frame. */
@@ -330,6 +335,8 @@ export interface Backend {
     after: number,
     max: number,
   ): Promise<FramesChunk>;
+  /** Opens the folder of protocol files (made, with an example, if new); its path. */
+  openProtocolsDir(): Promise<string>;
   /** Opens (or focuses) the frames window. */
   openFramesWindow(title: string): Promise<void>;
   sequenceStatus(id: number): Promise<SequenceStatus>;
@@ -465,6 +472,7 @@ export const tauriBackend: Backend = {
     }),
   stopSequence: (id) => invoke("stop_sequence", { id }),
   protocols: () => invoke("protocols"),
+  openProtocolsDir: () => invoke("open_protocols_dir"),
   readFrames: (id, protocol, lang, after, max) =>
     invoke("read_frames", { id, protocol, lang, after, max }),
   openFramesWindow: async (title) => {
