@@ -50,6 +50,7 @@ import { SessionTabs, Toggle, tabLabel } from "./components/SessionTabs";
 import { type Page, Sidebar } from "./components/Sidebar";
 import {
   ClearIcon,
+  FramesIcon,
   ListIcon,
   RepeatIcon,
   SearchIcon,
@@ -1211,6 +1212,19 @@ export function App({
                 onClick={() => setShowSequence((o) => !o)}
               >
                 <RepeatIcon size={16} />
+              </button>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={t.frames}
+                title={t.framesHint}
+                onClick={() =>
+                  backend
+                    .openFramesWindow(t.framesWindowTitle)
+                    .catch((e: unknown) => setError(errorMessage(e)))
+                }
+              >
+                <FramesIcon size={16} />
               </button>
               <button
                 type="button"

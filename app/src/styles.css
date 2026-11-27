@@ -1513,3 +1513,124 @@ mark.kw {
   width: auto;
   border-left: none;
 }
+
+/* Decoded frames in their own window */
+.frames-window {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--panel);
+}
+
+.frames-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.frames-bar label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.frames-bar .grow {
+  flex: 1 1 120px;
+}
+
+.frames-window > .muted,
+.frames-window > .error {
+  margin: 8px 12px 0;
+}
+
+.frames-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.frames-table,
+.frame-fields {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.frames-table th,
+.frame-fields th {
+  position: sticky;
+  top: 0;
+  padding: 4px 8px;
+  background: var(--panel);
+  color: var(--muted);
+  font-weight: 500;
+  text-align: left;
+}
+
+.frames-table td,
+.frame-fields td {
+  padding: 3px 8px;
+  border-top: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.frames-table .frame {
+  cursor: pointer;
+}
+
+.frames-table .frame:hover {
+  background: var(--hover);
+}
+
+.frames-table .frame.selected {
+  background: var(--accent-soft);
+}
+
+.frames-table .mark {
+  width: 1.5em;
+  text-align: center;
+  color: var(--muted);
+}
+
+.frames-table .st-badChecksum .mark,
+.frames-table .st-incomplete .mark,
+.frames-table .st-unknown .mark {
+  color: var(--info);
+}
+
+.frames-table .time,
+.frames-table .dir {
+  white-space: nowrap;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.frames-table .name {
+  white-space: nowrap;
+}
+
+.frames-table .summary {
+  overflow-wrap: anywhere;
+}
+
+.frame-detail {
+  flex: 0 0 auto;
+  max-height: 45%;
+  overflow: auto;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.frame-detail p {
+  margin: 0 0 6px;
+}
+
+.frame-bytes {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Cascadia Mono", monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}

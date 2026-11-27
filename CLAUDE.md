@@ -64,7 +64,7 @@ Not automated, still required:
   - `src/transport/mock.rs` — in-memory device for tests of everything above transports
   - `tests/serial_socat.rs` — real serial code over socat virtual ports (Linux only)
 - `crates/serialbot-decode` — frame decoders, pure (no ports, no UI): bytes with direction and
-  time in, frames with named fields out; shared by the CLI and (next) the app and MCP
+  time in, frames with named fields out; shared by the CLI and the app (MCP next)
   - `src/lib.rs` — `Frame` / `Field` / `Status`, the `Decoder` trait, `PROTOCOLS`, `decoder(id)`
   - `src/modbus.rs` — Modbus RTU: frames found by function code and CRC, responses paired with
     their requests
@@ -111,10 +111,14 @@ Not automated, still required:
     `lib.rs` only forwards IPC calls to it
   - `src-tauri/src/mcp.rs` — embedded MCP server on the same `SessionManager`
     (settings in `mcp.json` via `settings.rs`, status events to every window)
+  - `src-tauri/src/frames.rs` — decoders per session, protocol and language for the frames
+    window, fed from the log; the newest 50 000 frames, read by number
   - `src-tauri/src/watch.rs` — change detection; the window gets `sessions-changed` /
     `log-changed` events and reads new entries itself (no IPC polling)
   - `src/terminal.ts` — log entries to display lines (text/hex, line breaks, UTF-8)
   - `src/commands.ts` — saved command groups (local storage) and the in-order runner
+  - `src/FramesWindow.tsx` — the frames window (`#frames`): session and protocol, one row per
+    message, its fields and bytes
   - `src/sequence.ts` — test sequences: saved script and options, a group as a script, the
     report (the runs themselves are `serialbot-jobs::sequence` in the backend)
   - `src/App.tsx` + `src/components/` — UI; tests use a fake `Backend`

@@ -4,9 +4,11 @@
 // one USB port that opens, an MCP server that is off, everything else idle.
 import { createRoot } from "react-dom/client";
 import { App } from "../src/App";
+import { FramesWindow } from "../src/FramesWindow";
 import type {
   Backend,
   SequenceStatus,
+  DecodedFrame,
   McpStatus,
   PortInfo,
   SessionInfo,
@@ -15,7 +17,8 @@ import type {
 import { detectLang } from "../src/i18n";
 import "../src/styles.css";
 
-let open = false;
+// The frames window starts with a session to decode.
+let open = window.location.hash === "#frames";
 
 const session = (): SessionInfo => ({
   id: 1,
@@ -58,6 +61,22 @@ const sequence: SequenceStatus = {
   stopped: false,
   error: null,
 };
+
+const STATUSES = ["ok", "badChecksum", "incomplete", "unknown"] as const;
+const frames: DecodedFrame[] = Array.from({ length: 40 }, (_, i) => ({
+  seq: i,
+  timestampUs: 1_764_000_000_000_000 + i * 1000,
+  direction: i % 2 === 0 ? "tx" : "rx",
+  bytes: Array.from({ length: 40 }, (_, k) => ((i + k) % 256).toString(16).padStart(2, "0")).join(" "),
+  name: "Read/Write Multiple Registers (17)",
+  summary: "slave 247 · 0=65535 1=65535 2=65535 3=65535 4=65535 5=65535 6=65535 7=65535 …",
+  fields: [
+    { name: "slave", offset: 0, len: 1, value: 247, text: "247" },
+    { name: "register 65535", offset: 3, len: 2, value: 65535, text: "65535 (0xFFFF)" },
+    { name: "CRC", offset: 38, len: 2, value: 1, text: "0x0001, should be 0xFFFF" },
+  ],
+  status: STATUSES[i % 4] ?? "ok",
+}));
 
 const mcp: McpStatus = {
   settings: {
@@ -115,6 +134,16 @@ const fake: Record<string, unknown> = {
   captureStatus: async () => ({ running: false }),
   repeatStatus: async () => ({ running: false, sent: 0 }),
   pendingApprovals: async () => [],
+  // Frames with long names and summaries, every status, for the frames window.
+  protocols: async () => [
+    { id: "modbus-rtu", name: "Modbus RTU" },
+    { id: "slcan", name: "SLCAN" },
+  ],
+  readFrames: async (_id: number, _p: string, _l: string, after: number) => ({
+    frames: after > 0 ? [] : frames,
+    next: frames.length,
+    missed: 0,
+  }),
   // A finished sequence with long failures, so its panel is seen full.
   startSequence: async () => sequence,
   sequenceStatus: async () => sequence,
@@ -143,6 +172,10 @@ const backend = new Proxy(fake, {
 const root = document.getElementById("root");
 if (root) {
   createRoot(root).render(
-    <App backend={backend} lang={detectLang(navigator.languages)} />,
+    window.location.hash === "#frames" ? (
+      <FramesWindow backend={backend} lang={detectLang(navigator.languages)} />
+    ) : (
+      <App backend={backend} lang={detectLang(navigator.languages)} />
+    ),
   );
 }

@@ -16,6 +16,7 @@
 
 pub mod cli;
 pub mod commands;
+pub mod frames;
 pub mod links;
 pub mod mcp;
 pub mod settings;
@@ -245,6 +246,23 @@ mod ipc {
         id: u32,
     ) -> Result<SequenceStatus, String> {
         Ok(state.sequence_status(id))
+    }
+
+    #[tauri::command(async)]
+    pub(crate) fn protocols() -> Vec<serialbot_decode::Protocol> {
+        serialbot_decode::PROTOCOLS.to_vec()
+    }
+
+    #[tauri::command(async)]
+    pub(crate) fn read_frames(
+        state: tauri::State<'_, AppState>,
+        id: u32,
+        protocol: String,
+        lang: String,
+        after: u64,
+        max: usize,
+    ) -> Result<crate::frames::FramesChunk, String> {
+        state.read_frames(id, &protocol, &lang, after, max)
     }
 
     #[tauri::command(async)]
@@ -525,6 +543,8 @@ pub fn run() -> Result<(), tauri::Error> {
             ipc::start_repeat,
             ipc::stop_repeat,
             ipc::repeat_status,
+            ipc::protocols,
+            ipc::read_frames,
             ipc::start_sequence,
             ipc::stop_sequence,
             ipc::sequence_status,

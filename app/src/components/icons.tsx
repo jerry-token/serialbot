@@ -77,6 +77,14 @@ export const ListIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const FramesIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3" y="5" width="7" height="5" rx="1" />
+    <rect x="14" y="5" width="7" height="5" rx="1" />
+    <rect x="3" y="14" width="18" height="5" rx="1" />
+  </Svg>
+);
+
 export const RepeatIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M17 2l3 3-3 3" />
