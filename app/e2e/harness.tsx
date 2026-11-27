@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "../src/App";
 import type {
   Backend,
+  SequenceStatus,
   McpStatus,
   PortInfo,
   SessionInfo,
@@ -34,6 +35,28 @@ const port: PortInfo = {
   manufacturer: "wch.cn",
   product: "USB-SERIAL CH340",
   serialNumber: null,
+};
+
+const sequence: SequenceStatus = {
+  running: false,
+  name: "COM3",
+  runs: 1000,
+  done: 1000,
+  passed: 990,
+  failed: 10,
+  step: null,
+  failures: Array.from({ length: 10 }, (_, i) => ({
+    run: i * 97 + 3,
+    line: 12,
+    source: "expect ^\\+READY firmware-version:(\\S+) build-[0-9a-f]{12}$",
+    reason: { kind: "timeout" as const },
+  })),
+  fastestMs: 1203,
+  slowestMs: 98765,
+  passedMs: 990 * 1500,
+  elapsedMs: 1_600_000,
+  stopped: false,
+  error: null,
 };
 
 const mcp: McpStatus = {
@@ -92,6 +115,10 @@ const fake: Record<string, unknown> = {
   captureStatus: async () => ({ running: false }),
   repeatStatus: async () => ({ running: false, sent: 0 }),
   pendingApprovals: async () => [],
+  // A finished sequence with long failures, so its panel is seen full.
+  startSequence: async () => sequence,
+  sequenceStatus: async () => sequence,
+  stopSequence: async () => sequence,
   // A long path and snippet, so the layout test sees them in a small window.
   mcpClientConfig: async () => ({
     client: "Claude Desktop",

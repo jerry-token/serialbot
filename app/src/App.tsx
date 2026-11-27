@@ -12,6 +12,7 @@ import type {
   ExportFormat,
   FileSendStatus,
   RepeatStatus,
+  SequenceStatus,
   SignalsInfo,
   Unlisten,
 } from "./api";
@@ -23,6 +24,8 @@ import { useSharedGroups } from "./useSharedGroups";
 import { makeHighlighter, parseHighlights } from "./highlight";
 import { type Command, type CommandGroup, browserStorage } from "./commands";
 import { CommandPanel } from "./components/CommandPanel";
+import { SequencePanel } from "./components/SequencePanel";
+import { loadSequence, saveSequence, sequenceReport } from "./sequence";
 import { DisplaySettings } from "./components/DisplaySettings";
 import { FileSend, type FileSendOptions } from "./components/FileSend";
 import { HelpPanel } from "./components/HelpPanel";
@@ -45,7 +48,12 @@ import { BREAK_MS, SignalBar } from "./components/SignalBar";
 import type { SignalStep } from "./signals";
 import { SessionTabs, Toggle, tabLabel } from "./components/SessionTabs";
 import { type Page, Sidebar } from "./components/Sidebar";
-import { ClearIcon, ListIcon, SearchIcon } from "./components/icons";
+import {
+  ClearIcon,
+  ListIcon,
+  RepeatIcon,
+  SearchIcon,
+} from "./components/icons";
 import { type Lang, strings } from "./i18n";
 import { DEFAULT_LIMITS, type Line, Terminal } from "./terminal";
 import { applyAppearance, loadPrefs, resolveLanguage, savePrefs } from "./prefs";
@@ -147,6 +155,14 @@ export function App({
   // The command window edits the same groups; each window follows the other.
   const [groups, setGroups] = useSharedGroups(storage, t.defaultGroup);
   const [showCommands, setShowCommands] = useState(false);
+  const [showSequence, setShowSequence] = useState(false);
+  const [testSeq, setTestSeq] = useState(() => loadSequence(storage));
+  const [sequences, setSequences] = useState<Record<number, SequenceStatus>>(
+    {},
+  );
+  const sequenceStarts = useRef<
+    Record<number, { at: Date; script: string; port: string }>
+  >({});
   const [ports, setPorts] = useState<PortInfo[]>([]);
   const [settings, setSettings] = useState<PortSettings>({
     kind: "serial",
@@ -792,6 +808,73 @@ export function App({
     }
   };
 
+  useEffect(() => {
+    saveSequence(storage, testSeq);
+  }, [storage, testSeq]);
+
+  // While test sequences run, refresh their tally like timed sends.
+  const sequenceIds = Object.entries(sequences)
+    .filter(([, q]) => q?.running)
+    .map(([id]) => Number(id))
+    .join(",");
+  useEffect(() => {
+    if (sequenceIds === "") return undefined;
+    const timer = setInterval(() => {
+      for (const id of sequenceIds.split(",").map(Number)) {
+        backend.sequenceStatus(id).then(
+          (status) => setSequences((all) => ({ ...all, [id]: status })),
+          (e: unknown) => setError(errorMessage(e)),
+        );
+      }
+    }, REPEAT_POLL_MS);
+    return () => clearInterval(timer);
+  }, [backend, sequenceIds]);
+
+  const startSequence = async () => {
+    if (!active) return;
+    const { id, port } = active;
+    try {
+      const status = await backend.startSequence(
+        id,
+        port,
+        testSeq.script,
+        send.ending,
+        encoding,
+        testSeq.runs > 0 ? testSeq.runs : null,
+        !testSeq.keepGoing,
+        testSeq.gapMs,
+      );
+      sequenceStarts.current[id] = {
+        at: new Date(),
+        script: testSeq.script,
+        port,
+      };
+      setSequences((all) => ({ ...all, [id]: status }));
+      setError(null);
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  };
+
+  const stopSequence = async (id: number) => {
+    try {
+      const status = await backend.stopSequence(id);
+      setSequences((all) => ({ ...all, [id]: status }));
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  };
+
+  const copySequenceReport = (id: number) => {
+    const status = sequences[id];
+    const start = sequenceStarts.current[id];
+    if (!status || !start) return;
+    copy(sequenceReport(t, status, start.port, start.script, start.at)).then(
+      () => setError(null),
+      (e: unknown) => setError(errorMessage(e)),
+    );
+  };
+
   const exportLog = async (format: ExportFormat): Promise<string | null> => {
     if (!active) return null;
     const path = await backend.chooseSaveFile(saveFileName(active.port, format), format);
@@ -1122,6 +1205,16 @@ export function App({
               <button
                 type="button"
                 className="icon-button"
+                aria-label={t.sequence}
+                title={t.testSequenceHint}
+                aria-pressed={showSequence}
+                onClick={() => setShowSequence((o) => !o)}
+              >
+                <RepeatIcon size={16} />
+              </button>
+              <button
+                type="button"
+                className="icon-button"
                 aria-label={t.search}
                 title={`${t.search} (Ctrl+F)`}
                 aria-pressed={searchOpen}
@@ -1262,6 +1355,19 @@ export function App({
                       .catch((e: unknown) => setError(errorMessage(e)))
                   }
                   defaultEnding={send.ending}
+                />
+              )}
+              {showSequence && (
+                <SequencePanel
+                  t={t}
+                  settings={testSeq}
+                  onChange={setTestSeq}
+                  groups={groups}
+                  enabled={activeOpen}
+                  status={active ? (sequences[active.id] ?? null) : null}
+                  onRun={() => void startSequence()}
+                  onStop={() => active && void stopSequence(active.id)}
+                  onCopyReport={() => active && copySequenceReport(active.id)}
                 />
               )}
             </div>

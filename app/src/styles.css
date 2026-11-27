@@ -1062,6 +1062,80 @@ button.signal.on:hover:not(:disabled) {
   background: var(--panel);
 }
 
+/* The test sequence: the script grows, everything else keeps its size.
+   The panel may shrink in small windows; long group names are cut. */
+.sequence-panel {
+  flex: 0 1 300px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.sequence-panel .command-head > strong {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sequence-panel .command-head > select {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.sequence-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 8px 6px;
+  overflow: auto;
+}
+
+.sequence-body textarea {
+  flex: 1 0 120px;
+  resize: none;
+  font-family:
+    ui-monospace, "SF Mono", Menlo, Consolas, "Cascadia Mono", monospace;
+  font-size: 12px;
+}
+
+.sequence-body p {
+  margin: 0;
+}
+
+.sequence-body .small {
+  font-size: 11.5px;
+}
+
+.sequence-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sequence-field > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.sequence-field > input {
+  width: 96px;
+}
+
+.sequence-status {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+
+.sequence-failures {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+}
+
 .command-head,
 .command-foot,
 .command-row {
