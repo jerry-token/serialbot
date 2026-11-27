@@ -39,6 +39,8 @@ Windows 可能提示「未知发布者」，点「更多信息」→「仍要运
 
 ### New in this release / 本版新增
 
+- **beta.5: layout fixes / 界面修复**: with HEX on, the checksum dropdown no longer pushes the window wider; the status bar and the pop-up panels (e.g. the DTR/RTS sequence) stay inside small windows, and the waveform leaves the terminal room. A test in a real browser now checks every panel at sizes from 640×420 up.
+  打开 HEX 时校验下拉框不再把窗口撑出横向滚动条；小窗口下状态栏和弹出面板（如 DTR/RTS 时序）不再超出窗口，波形图也会给终端留出空间。新增真实浏览器测试，在 640×420 起的各种窗口尺寸下检查每个面板。
 - **beta.4: XMODEM / YMODEM** to MCU bootloaders: XMODEM (128, CRC or checksum), XMODEM-1K and YMODEM (1K or 128, with name and size). Pick the protocol in the app's file send panel; `/send-file --ymodem fw.bin` in `open` / `tui`; `serialbot-cli send <port> --file fw.bin --protocol ymodem`. Tested against lrzsz; please report how it works with your bootloader.
   发送文件到 MCU bootloader：XMODEM（128，CRC 或校验和）、XMODEM-1K、YMODEM（1K 或 128，带文件名和大小）。App 文件发送面板里选协议；`open` / `tui` 里用 `/send-file --ymodem fw.bin`；命令行 `serialbot-cli send <端口> --file fw.bin --protocol ymodem`。已和 lrzsz 互通测试，欢迎反馈你的 bootloader 是否正常。
 - **beta.4: one-click MCP / 一键配置 MCP**: on the AI page, *Add SerialBot to* Claude Desktop, Cursor, VS Code, Codex, Gemini CLI or opencode (or `serialbot-cli mcp install <client>`). Only the `serialbot` entry is written and the old file is backed up.
