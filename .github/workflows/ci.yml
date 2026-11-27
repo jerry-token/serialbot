@@ -149,6 +149,9 @@ jobs:
       - run: npm run typecheck
       - run: npm run coverage
       - run: npm run build
+      # Layout in a real browser: nothing may stick out of the window.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e
 
   deny:
     name: Licenses & advisories

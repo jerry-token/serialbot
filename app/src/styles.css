@@ -94,6 +94,11 @@ body,
   color: var(--text);
 }
 
+/* A desktop window never scrolls sideways; panels scroll on their own. */
+#root {
+  overflow: hidden;
+}
+
 /* ---- controls ---------------------------------------------------------- */
 
 select,
@@ -111,6 +116,20 @@ button {
 input[type="checkbox"] {
   padding: 0;
   margin: 0;
+}
+
+/* Fields shrink with their row instead of pushing it past the window: a
+   flex item is otherwise never narrower than its content (a select: its
+   longest option). The open list still shows options in full. */
+select,
+input:not([type="checkbox"]):not([type="radio"]),
+textarea {
+  min-width: 0;
+  max-width: 100%;
+}
+
+select {
+  text-overflow: ellipsis;
 }
 
 button {
@@ -292,6 +311,8 @@ label.check {
   border-radius: var(--radius);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
   min-width: 220px;
+  /* Never wider than the window; Popover moves it inside sideways. */
+  max-width: calc(100vw - 16px);
   white-space: nowrap;
 }
 
@@ -656,6 +677,18 @@ label.check {
   background: var(--panel);
   border-top: 1px solid var(--border);
   white-space: nowrap;
+  overflow: hidden;
+}
+
+/* In a narrow window the items shorten with "…"; the last one (MCP) stays whole. */
+.statusbar > * {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.statusbar > :last-child {
+  flex-shrink: 0;
 }
 
 .statusbar .error {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 Jerry. SerialBot: https://github.com/jerry-token/serialbot
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 interface Props {
   /** Accessible name of the button and the panel. */
@@ -17,9 +17,26 @@ interface Props {
   children: ReactNode | ((close: () => void) => ReactNode);
 }
 
+/** Space kept between a panel and the window's edges, in pixels. */
+export const EDGE = 8;
+
+/**
+ * How far to move a panel sideways so it lies within a window `width`
+ * pixels wide: 0 when it fits; when it is wider than the window, its left
+ * edge goes to the margin.
+ */
+export function shiftIntoWindow(left: number, right: number, width: number): number {
+  if (right > width - EDGE) {
+    const shift = width - EDGE - right;
+    return left + shift < EDGE ? EDGE - left : shift;
+  }
+  return left < EDGE ? EDGE - left : 0;
+}
+
 /**
  * A button that opens a small panel below it. The panel closes on Escape
- * and on clicks outside it.
+ * and on clicks outside it, and is moved sideways when it would reach past
+ * the window (again when its content or the window changes size).
  */
 export function Popover({
   label,
@@ -32,6 +49,26 @@ export function Popover({
 }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const el = panel.current;
+    if (!open || !el) return undefined;
+    const fit = () => {
+      el.style.translate = "";
+      const r = el.getBoundingClientRect();
+      const shift = shiftIntoWindow(r.left, r.right, window.innerWidth);
+      if (shift !== 0) el.style.translate = `${shift}px`;
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(fit);
+    observer?.observe(el);
+    return () => {
+      window.removeEventListener("resize", fit);
+      observer?.disconnect();
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -64,6 +101,7 @@ export function Popover({
       </button>
       {open && (
         <div
+          ref={panel}
           className={`popover${alignRight ? " right" : ""}${up ? " up" : ""}`}
           role="dialog"
           aria-label={label}

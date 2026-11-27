@@ -453,7 +453,8 @@ fn frontend(root: &Path) -> Outcome {
         return Outcome::Skip("run `npm ci` in app/ first; CI runs it".into());
     }
     let npm = if cfg!(windows) { "npm.cmd" } else { "npm" };
-    for script in ["typecheck", "coverage", "build"] {
+    // `e2e` needs a browser once: `npx playwright install chromium`.
+    for script in ["typecheck", "coverage", "build", "e2e"] {
         let result = status(
             Command::new(npm).args(["run", script]).current_dir(&app),
             &["npm", "run", script],

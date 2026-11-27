@@ -20,7 +20,7 @@ checks marked *slow*), the commit-msg hook checks the message.
 | All tests pass. | `check:test` |
 | Docs build without warnings (broken links fail). *slow* | `check:docs` |
 | Rust line coverage stays at or above 85% (`cargo llvm-cov`). *slow* | `check:coverage` |
-| Frontend: typecheck, line coverage at or above 85%, build. *slow* | `check:frontend` |
+| Frontend: typecheck, line coverage at or above 85%, build, and nothing sticking out of the window in a real browser (Playwright, `npm run e2e`). *slow* | `check:frontend` |
 | Licenses and security advisories are clean (`cargo deny`). *slow* | `check:deny` |
 | Commit subjects (and PR titles, which become the squashed subject) are Conventional Commits of at most 72 characters. | `check:conventional-commits` |
 | No session links or session trailers in commits. | `check:no-session-links` |
@@ -106,7 +106,11 @@ Not automated, still required:
   - `src/terminal.ts` — log entries to display lines (text/hex, line breaks, UTF-8)
   - `src/commands.ts` — saved command groups (local storage) and the in-order runner
   - `src/App.tsx` + `src/components/` — UI; tests use a fake `Backend`
-  - Frontend gate: `npm run typecheck`, `npm run coverage` (≥ 85% lines), `npm run build`
+  - `e2e/` — layout tests in Chromium (Playwright): the app on a fake backend
+    (`harness.tsx`), smallest to large windows, English and Chinese, every panel open;
+    `npx playwright install chromium` once
+  - Frontend gate: `npm run typecheck`, `npm run coverage` (≥ 85% lines), `npm run build`,
+    `npm run e2e`
 - `xtask` — `cargo xtask check|policy|commit-msg|hooks`: the quality gates above
 - `.github/workflows/ci.yml` — fmt, clippy, tests, MSRV, docs, coverage gate,
   license/advisory checks. PRs run on Linux x64; the Windows/macOS/Linux x64
