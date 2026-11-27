@@ -3838,6 +3838,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serialbot-core",
+ "serialbot-decode",
  "serialbot-jobs",
  "serialbot-mcp",
  "sys-locale",
@@ -3856,6 +3857,15 @@ dependencies = [
  "regex",
  "serialport",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "serialbot-decode"
+version = "0.3.0"
+dependencies = [
+ "proptest",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

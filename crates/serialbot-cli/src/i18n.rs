@@ -525,6 +525,10 @@ static EN: Strings = Strings {
             "Also save everything to this file, with timestamps",
         ),
         (
+            "monitor.decode",
+            "Show one line per message of this protocol (name, fields, ✓ for a good checksum) instead of bytes; --json gives the fields",
+        ),
+        (
             "signal",
             "Set DTR/RTS, send a BREAK or run a reset sequence within one open, then show the line levels",
         ),
@@ -830,6 +834,10 @@ static ZH: Strings = Strings {
         ("monitor.hex", "以 HEX 显示字节"),
         ("monitor.time", "每行开头加上本地时间"),
         ("monitor.log", "同时把全部内容带时间戳保存到这个文件"),
+        (
+            "monitor.decode",
+            "按此协议每条消息显示一行（名称、字段，校验正确显示 ✓），不显示原始字节；配合 --json 输出字段",
+        ),
         (
             "signal",
             "在一次打开内设置 DTR/RTS、发送 BREAK 或执行复位时序，然后显示各信号线电平",

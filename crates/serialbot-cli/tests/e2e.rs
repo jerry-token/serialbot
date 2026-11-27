@@ -220,6 +220,36 @@ fn monitor_streams_until_a_match_or_ctrl_c() {
 }
 
 #[test]
+fn monitor_decodes_modbus_over_a_real_port() {
+    let Some(pair) = virtual_pair("cli-decode") else {
+        return;
+    };
+    let a = pair.a.to_str().unwrap().to_owned();
+    let mut device = serial::open(&SerialConfig::new(pair.b.to_str().unwrap(), 115_200)).unwrap();
+    let child = Command::new(env!("CARGO_BIN_EXE_serialbot-cli"))
+        .args(["monitor", &a, "--decode", "modbus-rtu", "--duration", "2s"])
+        .env("LANG", "C")
+        .env_remove("LC_ALL")
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    std::thread::sleep(Duration::from_millis(500));
+    // A response with two registers, written in two pieces.
+    device.control.write_all(&[0x01, 0x03, 0x04, 0x00]).unwrap();
+    std::thread::sleep(Duration::from_millis(5));
+    device
+        .control
+        .write_all(&[0xE7, 0x01, 0xA2, 0xCA, 0x2D])
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        "✓ Read Holding Registers (03)  slave 1 · 0=231 1=418  [01 03 04 00 E7 01 A2 CA 2D]\n"
+    );
+}
+
+#[test]
 fn signal_reports_ports_without_modem_lines() {
     let Some(pair) = virtual_pair("cli-signal") else {
         return;

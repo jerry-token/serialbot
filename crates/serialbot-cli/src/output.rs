@@ -59,6 +59,11 @@ impl<'a> Output<'a> {
         }
     }
 
+    /// The user's language.
+    pub fn lang(&self) -> Lang {
+        self.lang
+    }
+
     /// The messages in the user's language.
     pub fn strings(&self) -> &'static Strings {
         self.lang.strings()

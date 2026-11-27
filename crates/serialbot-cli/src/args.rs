@@ -384,6 +384,13 @@ pub struct MonitorArgs {
     /// Also save everything to this file.
     #[arg(long, value_name = "FILE")]
     pub log: Option<PathBuf>,
+    /// Show messages of this protocol instead of bytes.
+    #[arg(
+        long,
+        value_name = "PROTOCOL",
+        value_parser = clap::builder::PossibleValuesParser::new(serialbot_decode::PROTOCOLS.map(|p| p.id))
+    )]
+    pub decode: Option<String>,
 }
 
 /// Options of `open`.
