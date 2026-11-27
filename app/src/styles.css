@@ -1360,7 +1360,9 @@ mark.kw {
 /* Plot view */
 .plot {
   position: relative;
-  flex: 0 0 240px;
+  /* 240 px, less in a small window so the log or terminal keeps room. */
+  flex: 0 1 240px;
+  min-height: 120px;
   overflow: hidden;
   padding: 6px 8px 0;
   background: var(--log-bg);

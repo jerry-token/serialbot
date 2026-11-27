@@ -7,8 +7,8 @@
 import { expect, type Page, test } from "@playwright/test";
 
 /**
- * Elements reaching past the window, unless a box that scrolls holds them.
- * A box that only hides overflow does not count: that would cut them off.
+ * Elements reaching past the window, unless a box inside the window that
+ * scrolls or clips holds them.
  */
 async function overflow(page: Page): Promise<string[]> {
   return page.evaluate(() => {
@@ -16,16 +16,27 @@ async function overflow(page: Page): Promise<string[]> {
     const height = window.innerHeight;
     const found: string[] = [];
     const root = document.getElementById("root");
-    // Whether a box between el and #root scrolls along this axis.
+    // Whether a box between el and #root scrolls or clips along this axis
+    // and itself lies inside the window (#root's own clipping does not
+    // count: that is the window's edge).
     const scrolls = (el: Element, axis: "overflowX" | "overflowY") => {
       for (let p = el.parentElement; p && p !== root; p = p.parentElement) {
-        if (/(auto|scroll)/.test(getComputedStyle(p)[axis])) return true;
+        if (getComputedStyle(p)[axis] === "visible") continue;
+        const b = p.getBoundingClientRect();
+        const inside =
+          axis === "overflowX"
+            ? b.right <= width + 0.5
+            : b.bottom <= height + 0.5;
+        if (inside) return true;
       }
       return false;
     };
     for (const el of document.querySelectorAll("#root *")) {
       const r = el.getBoundingClientRect();
       if (r.width === 0 || r.height === 0) continue;
+      // Wholly left of or above the window: placed off screen on purpose
+      // (text measuring, screen-reader-only text), not pushed out.
+      if (r.right <= 0 || r.bottom <= 0) continue;
       const wide = r.right > width + 0.5 || r.left < -0.5;
       const tall = r.bottom > height + 0.5 || r.top < -0.5;
       const past =
@@ -75,6 +86,32 @@ const SIZES = [
   { width: 1440, height: 900 },
 ];
 
+/** Buttons that end something rather than open it. */
+const SKIP = /close|clear|send|stop|关闭|清空|发送|停止/i;
+
+/**
+ * Clicks every enabled button of the current page in turn (looked up by
+ * name, as clicks change the page), checking the layout with each opened.
+ */
+async function openEachPanel(page: Page, where: string) {
+  const names = await page
+    .locator("#root button:visible:enabled:not(.nav-item)")
+    .evaluateAll((buttons) =>
+      buttons.map((b) =>
+        (b.getAttribute("aria-label") ?? b.textContent ?? "").trim(),
+      ),
+    );
+  for (const name of new Set(names)) {
+    if (!name || SKIP.test(name)) continue;
+    const button = page.getByRole("button", { name, exact: true }).first();
+    if (!(await button.isVisible()) || !(await button.isEnabled())) continue;
+    await button.click({ timeout: 5000 });
+    await longestChoices(page);
+    await fits(page, `${where}: after "${name}"`);
+    await page.keyboard.press("Escape");
+  }
+}
+
 for (const locale of ["en-US", "zh-CN"]) {
   for (const viewport of SIZES) {
     test.describe(`${locale} at ${viewport.width} × ${viewport.height}`, () => {
@@ -99,22 +136,17 @@ for (const locale of ["en-US", "zh-CN"]) {
         await longestChoices(page);
         await fits(page, "longest choices");
 
-        // Every enabled button that opens something, one after another.
-        const buttons = page.locator("button:visible:enabled");
-        const count = await buttons.count();
-        for (let i = 0; i < count; i++) {
-          const button = buttons.nth(i);
-          if (!(await button.isVisible()) || !(await button.isEnabled()))
-            continue;
-          const name =
-            (await button.getAttribute("aria-label")) ??
-            (await button.textContent()) ??
+        // Each page of the sidebar, and on it every button that opens something.
+        const pages = await page.locator(".nav-item").count();
+        for (let i = 0; i < pages; i++) {
+          const nav = page.locator(".nav-item").nth(i);
+          const pageName =
+            (await nav.getAttribute("aria-label")) ??
+            (await nav.textContent()) ??
             "";
-          if (/close|clear|send|stop|关闭|清空|发送|停止/i.test(name)) continue;
-          await button.click();
-          await longestChoices(page);
-          await fits(page, `after "${name.trim()}"`);
-          await page.keyboard.press("Escape");
+          await nav.click();
+          await fits(page, `page "${pageName.trim()}"`);
+          await openEachPanel(page, pageName.trim());
         }
         expect(errors).toEqual([]);
       });
