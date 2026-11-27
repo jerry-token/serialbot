@@ -93,8 +93,8 @@ Not automated, still required:
   - `src/lib.rs` — `router`/`serve`: bearer token, Host allowlist, Origin rejected
   - `src/server.rs` — `RunningServer`: bind local or LAN, port fallback, stop
   - `src/approval.rs` — `Approvals`: the queue of agent actions waiting for the user
-  - `src/clients.rs` — adds SerialBot to Claude Desktop / Cursor / VS Code / Codex / Gemini CLI /
-    opencode settings (app and CLI)
+  - `src/clients.rs` — the settings to copy into Claude Desktop / Cursor / VS Code / Codex /
+    Gemini CLI / opencode, with their default paths (app and CLI; nothing is written)
   - `tests/http.rs` — real MCP client over HTTP against mock devices
 - `app/` — desktop app (Tauri 2 + React/TypeScript, Vite, Vitest)
   - `src-tauri/src/commands.rs` — everything the UI can ask for, tested with mock devices;

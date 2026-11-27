@@ -171,24 +171,22 @@ export interface McpStatus {
   stdioCommand: string | null;
 }
 
-/** MCP clients whose settings SerialBot can write. */
+/** MCP clients SerialBot shows settings for. */
 export type McpClientId =
   "claude-desktop" | "cursor" | "vscode" | "codex" | "gemini" | "opencode";
 
-/** What adding SerialBot to an MCP client did. */
-export interface ClientInstall {
+/** The settings that connect an MCP client, for the user to copy. */
+export interface ClientConfig {
   /** The client's product name. */
   client: string;
-  /** Its configuration file. */
-  path: string;
-  /** Where the previous content was saved, if the file changed. */
-  backup: string | null;
-  /** False when the file already held the entry (or nothing was written). */
-  changed: boolean;
-  /** Why nothing was written, if so. */
-  error: string | null;
-  /** The entry to add by hand when nothing was written. */
+  /** The file the client reads by default (it may use another). */
+  path: string | null;
+  /** Where the servers sit in that file, such as `mcpServers`. */
+  section: string;
+  /** A whole file holding only the `serialbot` entry; null with `error`. */
   snippet: string | null;
+  /** Why there is no snippet. */
+  error: string | null;
 }
 
 export type Unlisten = () => void;
@@ -297,7 +295,8 @@ export interface Backend {
   mcpApply(settings: McpSettings): Promise<McpStatus>;
   mcpRegenerateToken(): Promise<McpStatus>;
   /** Writes SerialBot into an MCP client's settings file (keeps everything else, backs it up). */
-  mcpInstallClient(client: McpClientId): Promise<ClientInstall>;
+  /** The settings for `client`; nothing is written. */
+  mcpClientConfig(client: McpClientId): Promise<ClientConfig>;
   pendingApprovals(): Promise<ApprovalRequest[]>;
   answerApproval(id: number, decision: Decision): Promise<void>;
   /** Called with the whole queue whenever a request arrives or leaves. */
@@ -409,7 +408,7 @@ export const tauriBackend: Backend = {
   mcpStatus: () => invoke("mcp_status"),
   mcpApply: (settings) => invoke("mcp_apply", { settings }),
   mcpRegenerateToken: () => invoke("mcp_regenerate_token"),
-  mcpInstallClient: (client) => invoke("mcp_install_client", { client }),
+  mcpClientConfig: (client) => invoke("mcp_client_config", { client }),
   pendingApprovals: () => invoke("pending_approvals"),
   answerApproval: (id, decision) => invoke("answer_approval", { id, decision }),
   onApprovalsChanged: (handler) =>

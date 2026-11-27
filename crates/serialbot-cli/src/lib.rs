@@ -65,7 +65,7 @@ pub struct Context<'a> {
     /// Where `cli.json` lives; `None` without a config directory.
     pub config_dir: Option<std::path::PathBuf>,
     /// The user's config and home directories, where MCP clients keep
-    /// their settings (`mcp install`); `None` if the system has none.
+    /// their settings (`mcp config` shows them); `None` if the system has none.
     pub client_dirs: Option<serialbot_mcp::clients::Dirs>,
 }
 
@@ -232,8 +232,8 @@ fn run_mcp(
             };
             commands::mcp::serve(a, env, out)
         }
-        args::McpCommand::Install(a) => {
-            commands::mcp::install(a, ctx.client_dirs, ctx.config_dir, out)
+        args::McpCommand::Config(a) => {
+            commands::mcp::config(a, ctx.client_dirs, ctx.config_dir, out)
         }
         args::McpCommand::Stdio => commands::mcp::stdio(ctx.config_dir, ctx.interrupted, out),
     }
@@ -284,6 +284,8 @@ pub(crate) mod testing {
         pub(crate) interactive: bool,
         /// Where `cli.json` is kept (a fresh temporary directory).
         pub(crate) config_dir: std::path::PathBuf,
+        /// Run as if the system had no home or config directory.
+        pub(crate) no_client_dirs: bool,
     }
 
     /// Standard input that ends after a delay.
@@ -342,6 +344,7 @@ pub(crate) mod testing {
                 stdin: Vec::new(),
                 stdin_delay: None,
                 interactive: false,
+                no_client_dirs: false,
                 config_dir: {
                     static NEXT: std::sync::atomic::AtomicUsize =
                         std::sync::atomic::AtomicUsize::new(0);
@@ -352,7 +355,7 @@ pub(crate) mod testing {
             }
         }
 
-        /// Where `mcp install` writes clients' settings (inside `config_dir`).
+        /// The directories `mcp config` names clients' default files under.
         pub(crate) fn client_dirs(&self) -> serialbot_mcp::clients::Dirs {
             serialbot_mcp::clients::Dirs {
                 config: self.config_dir.join("user-config"),
@@ -381,7 +384,7 @@ pub(crate) mod testing {
                 ))),
                 interactive: self.interactive,
                 config_dir: Some(self.config_dir.clone()),
-                client_dirs: Some(self.client_dirs()),
+                client_dirs: (!self.no_client_dirs).then(|| self.client_dirs()),
             };
             let code = run(
                 std::iter::once("serialbot-cli").chain(args.iter().copied()),

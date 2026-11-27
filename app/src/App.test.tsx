@@ -15,7 +15,7 @@ import type {
   Backend,
   LogChunk,
   LogEntry,
-  ClientInstall,
+  ClientConfig,
   McpClientId,
   McpSettings,
   McpStatus,
@@ -513,21 +513,20 @@ class FakeBackend implements Backend {
     for (const l of this.approvalListeners) l(this.approvals);
   }
 
-  /** What mcpInstallClient answers next; null: it rejects. */
-  installResult: ClientInstall | null = {
+  /** What mcpClientConfig answers next; null: it rejects. */
+  clientConfig: ClientConfig | null = {
     client: "Cursor",
     path: "/home/j/.cursor/mcp.json",
-    backup: "/home/j/.cursor/mcp.json.serialbot-backup",
-    changed: true,
+    section: "mcpServers",
+    snippet: '{ "mcpServers": { "serialbot": {} } }\n',
     error: null,
-    snippet: null,
   };
-  installed: string[] = [];
+  configsAsked: string[] = [];
 
-  async mcpInstallClient(client: McpClientId) {
-    this.installed.push(client);
-    if (!this.installResult) throw "no home directory";
-    return this.installResult;
+  async mcpClientConfig(client: McpClientId) {
+    this.configsAsked.push(client);
+    if (!this.clientConfig) throw "unknown MCP client";
+    return this.clientConfig;
   }
 
   async mcpRegenerateToken() {
@@ -2632,43 +2631,50 @@ describe("MCP panel", () => {
     expect(screen.getByRole("region", { name: /MCP server/ })).toBeInTheDocument();
   });
 
-  it("adds itself to MCP clients, or shows the entry to add by hand", async () => {
+  it("shows the settings to copy into an MCP client's file", async () => {
     const { backend, user, copy } = setup();
     const panel = await openPanel(user);
     for (const name of ["Codex", "Gemini CLI", "opencode"]) {
       await user.click(within(panel).getByRole("button", { name }));
     }
-    expect(backend.installed).toEqual(["codex", "gemini", "opencode"]);
-    backend.installed = [];
-    await user.click(within(panel).getByRole("button", { name: "Cursor" }));
-    expect(backend.installed).toEqual(["cursor"]);
+    expect(backend.configsAsked).toEqual(["codex", "gemini", "opencode"]);
+    backend.configsAsked = [];
+    const cursor = within(panel).getByRole("button", { name: "Cursor" });
+    await user.click(cursor);
+    expect(backend.configsAsked).toEqual(["cursor"]);
+    expect(cursor).toHaveAttribute("aria-pressed", "true");
     expect(
       await within(panel).findByText(
-        /Added to Cursor \(\/home\/j\/\.cursor\/mcp\.json\)\. Restart Cursor to use it\. The previous file is saved as/,
+        "Default file: /home/j/.cursor/mcp.json (yours may be elsewhere)",
       ),
     ).toBeInTheDocument();
+    expect(
+      within(panel).getByText(/If it already has "mcpServers", add only the serialbot entry/),
+    ).toBeInTheDocument();
+    await user.click(within(panel).getByRole("button", { name: "Copy Cursor config" }));
+    expect(copy).toHaveBeenCalledWith('{ "mcpServers": { "serialbot": {} } }\n');
 
-    backend.installResult = {
-      client: "VS Code",
-      path: "/c/Code/User/mcp.json",
-      backup: null,
-      changed: false,
-      error: "mcp.json is not plain JSON",
-      snippet: '{ "servers": {} }',
+    // No default path known: the snippet alone.
+    backend.clientConfig = { ...backend.clientConfig!, client: "Codex", path: null };
+    await user.click(within(panel).getByRole("button", { name: "Codex" }));
+    expect(await within(panel).findByRole("button", { name: "Copy Codex config" })).toBeInTheDocument();
+    expect(within(panel).queryByText(/Default file/)).not.toBeInTheDocument();
+
+    backend.clientConfig = {
+      client: "Claude Desktop",
+      path: "/c/Claude/claude_desktop_config.json",
+      section: "mcpServers",
+      snippet: null,
+      error: "Claude Desktop needs a program to start, and this build has none",
     };
+    await user.click(within(panel).getByRole("button", { name: "Claude Desktop" }));
+    expect(await within(panel).findByText(/needs a program to start/)).toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: /Copy Claude Desktop config/ }))
+      .toBeNull();
+
+    backend.clientConfig = null;
     await user.click(within(panel).getByRole("button", { name: "VS Code" }));
-    expect(await within(panel).findByText("mcp.json is not plain JSON")).toBeInTheDocument();
-    expect(within(panel).getByText("Add this to VS Code's settings by hand:")).toBeInTheDocument();
-    await user.click(within(panel).getByRole("button", { name: "Copy VS Code config" }));
-    expect(copy).toHaveBeenCalledWith('{ "servers": {} }');
-
-    backend.installResult = { ...backend.installResult, error: null, snippet: null };
-    await user.click(within(panel).getByRole("button", { name: "Claude Desktop" }));
-    expect(await within(panel).findByText("VS Code is already set up.")).toBeInTheDocument();
-
-    backend.installResult = null;
-    await user.click(within(panel).getByRole("button", { name: "Claude Desktop" }));
-    expect(await within(panel).findByText("no home directory")).toBeInTheDocument();
+    expect(await within(panel).findByText("unknown MCP client")).toBeInTheDocument();
   });
 
   it("saves port and token, and regenerates the token", async () => {
