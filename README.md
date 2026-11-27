@@ -70,7 +70,7 @@ You stay in charge. Every change to a port needs your approval, and every line t
 - 🧪 **Test sequences** (🔁 above the log): a script of `send`, `expect` (a regex the reply must match in time), `wait`, `dtr` / `rts` and `mark` steps, run N times or until stopped, for soak tests and production checks. It counts passed and failed runs, shows run times and the failed steps, and copies a plain-text report; a command group can be turned into a script with one click. The same scripts run in the terminal: `serialbot-cli run <port> test.txt --runs 100`.
 
 **AI agents, under your control**
-- 🤖 A built-in MCP server lets Claude Code, Claude Desktop and other agents list and open ports, send data, wait for replies and drive DTR / RTS, on the same sessions you see in the window.
+- 🤖 A built-in MCP server lets Claude Code, Claude Desktop and other agents list and open ports, send data, wait for replies and drive DTR / RTS, on the same sessions you see in the window. Agents can read traffic already decoded (`io.read` with `decode`: Modbus RTU, SLCAN or your own protocol files), so they see fields and checksums instead of counting bytes.
 - ✅ Before an agent sends data, toggles a line or opens, closes or reconfigures a port, SerialBot asks you: **allow once**, **allow for the session**, or **deny** (unanswered requests are refused after 60 s).
 - 🟣 Everything an agent did is tagged **AI** in the log; **AI access** in the status bar keeps a session away from agents.
 - 🔒 The server is off until you turn it on, listens on `127.0.0.1` by default and always needs a token. It can also serve the local network (`0.0.0.0`) when you choose to.

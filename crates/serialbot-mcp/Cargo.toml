@@ -12,6 +12,7 @@ publish.workspace = true
 
 [dependencies]
 serialbot-core.workspace = true
+serialbot-decode.workspace = true
 rmcp = { workspace = true, features = ["server", "macros", "transport-streamable-http-server", "client", "transport-streamable-http-client-reqwest", "transport-io"] }
 axum = { workspace = true, features = ["tokio", "http1"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }

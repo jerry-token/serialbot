@@ -131,6 +131,7 @@ pub fn prepare(args: &TuiArgs, manager: &Arc<SessionManager>, env: &Env) -> Resu
                     listen: Listen::Local,
                     port: args.mcp_port,
                     token,
+                    protocols_dir: env.config_dir.as_ref().map(|d| d.join("protocols")),
                 })
             });
         match started {

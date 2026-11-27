@@ -47,6 +47,11 @@ impl Harness {
 
     /// Like [`Harness::start`], asking `guard` before every action.
     async fn start_with(guard: Arc<dyn Guard>) -> Self {
+        Self::start_full(guard, None).await
+    }
+
+    /// Like [`Harness::start_with`], with protocol files in `protocols`.
+    async fn start_full(guard: Arc<dyn Guard>, protocols: Option<std::path::PathBuf>) -> Self {
         let devices: Devices = Arc::default();
         let registry = Arc::clone(&devices);
         let opener = move |config: &serialbot_core::transport::serial::SerialConfig| -> Result<Connection, TransportError> {
@@ -80,7 +85,10 @@ impl Harness {
                 },
             ])
         };
-        let tools = SerialTools::new(Arc::clone(&manager), Arc::new(lister)).with_guard(guard);
+        let mut tools = SerialTools::new(Arc::clone(&manager), Arc::new(lister)).with_guard(guard);
+        if let Some(dir) = protocols {
+            tools = tools.with_protocols_dir(dir);
+        }
         let shutdown = CancellationToken::new();
         let options = McpOptions::new(TOKEN).unwrap();
         let app = router(tools, &options, &shutdown);
@@ -275,6 +283,78 @@ async fn sessions_are_released_reopened_and_configured() {
     );
 
     client.cancel().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn reads_decode_messages_with_built_in_and_user_protocols() {
+    let dir = std::env::temp_dir().join(format!("serialbot-mcp-protocols-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("line.toml"),
+        "name = \"Line\"\n[frame]\nend = \"0A\"\n[[field]]\nname = \"text\"\ntype = \"ascii\"\n",
+    )
+    .unwrap();
+    let h = Harness::start_full(Arc::new(AllowAll), Some(dir.clone())).await;
+    let client = h.client().await;
+    ok(
+        &client,
+        "session.open",
+        json!({"port": "mock0", "alias": "plc"}),
+    )
+    .await;
+    ok(
+        &client,
+        "io.write",
+        json!({"session": "plc", "hex": "01 03 00 00 00 02 C4 0B"}),
+    )
+    .await;
+    h.device("mock0")
+        .send(&[0x01, 0x03, 0x04, 0x00, 0xE7, 0x01, 0xA2, 0xCA, 0x2D]);
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let read = loop {
+        let read = ok(
+            &client,
+            "io.read",
+            json!({"session": "plc", "decode": "modbus-rtu"}),
+        )
+        .await;
+        if read["frames"].as_array().is_some_and(|f| f.len() == 2) {
+            break read;
+        }
+        assert!(std::time::Instant::now() < deadline, "{read}");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    };
+    assert_eq!(read["entries"], json!([]));
+    let frames = &read["frames"];
+    assert_eq!(frames[0]["direction"], "tx");
+    assert_eq!(frames[0]["name"], "Read Holding Registers (03)");
+    assert_eq!(frames[1]["summary"], "slave 1 · 0=231 1=418");
+    assert_eq!(frames[1]["status"], "ok");
+    assert_eq!(frames[1]["fields"][3]["name"], "register 0");
+    assert_eq!(frames[1]["fields"][3]["value"], 231);
+    assert_eq!(frames[1]["bytes"], "01 03 04 00 E7 01 A2 CA 2D");
+
+    // The user's protocol files, and a read without decode keeps entries.
+    let read = ok(
+        &client,
+        "io.read",
+        json!({"session": "plc", "decode": "user:line"}),
+    )
+    .await;
+    assert_eq!(read["frames"][0]["name"], "Line");
+    let plain = ok(&client, "io.read", json!({"session": "plc"})).await;
+    assert!(plain.get("frames").is_none());
+    assert!(!plain["entries"].as_array().unwrap().is_empty());
+    let e = err(
+        &client,
+        "io.read",
+        json!({"session": "plc", "decode": "mavlink"}),
+    )
+    .await;
+    assert!(e.contains("modbus-rtu, slcan, user:line"), "{e}");
+    client.cancel().await.unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]

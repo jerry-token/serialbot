@@ -123,6 +123,8 @@ pub struct Start {
     pub port: u16,
     /// Bearer token clients send.
     pub token: String,
+    /// The user's protocol files, for `io.read`'s `decode`.
+    pub protocols_dir: Option<std::path::PathBuf>,
 }
 
 /// A running server and what it reports.
@@ -168,6 +170,7 @@ pub fn start(start: Start) -> Result<Running, Failure> {
         listen,
         port,
         token,
+        protocols_dir,
     } = start;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -191,7 +194,10 @@ pub fn start(start: Start) -> Result<Running, Failure> {
         inner,
         events: Arc::clone(&events),
     });
-    let tools = SerialTools::new(manager, list_ports).with_guard(guard);
+    let mut tools = SerialTools::new(manager, list_ports).with_guard(guard);
+    if let Some(dir) = protocols_dir {
+        tools = tools.with_protocols_dir(dir);
+    }
     let server = runtime
         .block_on(RunningServer::start(tools, token.clone(), listen, port))
         .map_err(|e| Failure::new(Exit::Busy, e))?;
@@ -224,6 +230,7 @@ pub fn serve(args: &ServeArgs, env: Serve, out: &mut Output<'_>) -> Result<(), F
         listen,
         port: args.port,
         token,
+        protocols_dir: env.config_dir.as_ref().map(|d| d.join("protocols")),
     })?;
     let (server, token) = (&running.server, &running.token);
     out.line(&format!("{}: {}", m.serving, server.url()));

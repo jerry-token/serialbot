@@ -238,8 +238,16 @@ impl McpController {
 
     async fn start(&self, inner: &mut Inner) {
         let guard: Arc<dyn serialbot_mcp::guard::Guard> = Arc::clone(&self.approvals) as _;
-        let tools = SerialTools::new(Arc::clone(&self.manager), Arc::clone(&self.list_ports))
+        let mut tools = SerialTools::new(Arc::clone(&self.manager), Arc::clone(&self.list_ports))
             .with_guard(guard);
+        // Protocol files sit next to mcp.json, in `protocols`.
+        if let Some(dir) = self
+            .settings_path
+            .as_deref()
+            .and_then(std::path::Path::parent)
+        {
+            tools = tools.with_protocols_dir(dir.join("protocols"));
+        }
         let settings = &inner.settings;
         match RunningServer::start(
             tools,

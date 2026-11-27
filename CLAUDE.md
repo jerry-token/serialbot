@@ -64,7 +64,7 @@ Not automated, still required:
   - `src/transport/mock.rs` — in-memory device for tests of everything above transports
   - `tests/serial_socat.rs` — real serial code over socat virtual ports (Linux only)
 - `crates/serialbot-decode` — frame decoders (no ports, no UI; reads protocol files): bytes with direction and
-  time in, frames with named fields out; shared by the CLI and the app (MCP next)
+  time in, frames with named fields out; shared by the CLI, the app and MCP (`io.read` with `decode`)
   - `src/lib.rs` — `Frame` / `Field` / `Status`, the `Decoder` trait, `PROTOCOLS`, `decoder(id)`
   - `src/modbus.rs` — Modbus RTU: frames found by function code and CRC, responses paired with
     their requests
