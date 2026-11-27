@@ -11,6 +11,7 @@ use serde_json::json;
 use serialbot_core::log::{Cursor, Direction, Entry, EntryKind};
 use serialbot_core::session::{Session, SessionState};
 use serialbot_core::{SessionManager, hex};
+use serialbot_decode::{Decoder, Frame, Status};
 use serialbot_jobs::export::{Captures, ExportFormat, format_timestamp};
 
 use crate::Failure;
@@ -37,7 +38,9 @@ enum Stop {
     Lost(SessionState),
 }
 
-/// Streams what the device sends. Exit codes: 0 on Ctrl+C, when `--until`
+/// Streams what the device sends; with `--decode`, one line per message of
+/// that protocol instead (bytes that are no message show as unknown, so
+/// nothing is hidden). Exit codes: 0 on Ctrl+C, when `--until`
 /// matched, or when `--duration` ends without `--until`; 1 when
 /// `--duration` ends before `--until` matched; 3 the port cannot be
 /// opened; 4 the device went away. `--log` also saves everything to a file
@@ -58,13 +61,24 @@ pub fn run(
         let _ = manager.remove(session.id());
         return Err(Failure::new(Exit::Usage, e));
     }
+    let lang = match out.lang() {
+        crate::Lang::En => serialbot_decode::Lang::En,
+        crate::Lang::Zh => serialbot_decode::Lang::Zh,
+    };
     let mut view = View {
         args,
         utc_offset_min,
         at_line_start: true,
         tail: Vec::new(),
+        decoder: args
+            .decode
+            .as_deref()
+            .and_then(|id| serialbot_decode::decoder(id, lang)),
+        frames: Vec::new(),
+        last_seen: None,
     };
     let stop = view.stream(&session, interrupted, out);
+    view.decoded(u64::MAX, out);
     captures.stop_all();
     let _ = manager.remove(session.id());
     match stop {
@@ -85,6 +99,13 @@ struct View<'a> {
     at_line_start: bool,
     /// The last received bytes, for `--until`.
     tail: Vec<u8>,
+    /// `--decode`'s decoder.
+    decoder: Option<Box<dyn Decoder>>,
+    /// Frames the decoder gave back, to print.
+    frames: Vec<Frame>,
+    /// The last received entry's time and when it was seen: the decoder's
+    /// clock is the log's, which need not be this computer's.
+    last_seen: Option<(u64, Instant)>,
 }
 
 impl View<'_> {
@@ -110,6 +131,10 @@ impl View<'_> {
                     }
                 }
                 cursor = chunk.next;
+            }
+            if let Some((at, seen)) = self.last_seen {
+                let since = u64::try_from(seen.elapsed().as_micros()).unwrap_or(u64::MAX);
+                self.decoded(at.saturating_add(since), out);
             }
             if state != SessionState::Open {
                 return Stop::Lost(state);
@@ -143,7 +168,16 @@ impl View<'_> {
             }
             _ => return false,
         };
-        if self.args.json {
+        if let Some(decoder) = &mut self.decoder {
+            self.last_seen = Some((entry.timestamp_us, Instant::now()));
+            decoder.feed(
+                serialbot_decode::Direction::Rx,
+                entry.timestamp_us,
+                bytes,
+                &mut self.frames,
+            );
+            self.print_frames(out);
+        } else if self.args.json {
             let data = if self.args.hex {
                 hex::to_hex(bytes)
             } else {
@@ -157,7 +191,11 @@ impl View<'_> {
                 "ai": false,
             }));
         } else if self.args.hex {
-            let line = format!("{}{}", self.stamp(entry, out), hex::to_hex(bytes));
+            let line = format!(
+                "{}{}",
+                self.stamp(entry.timestamp_us, out),
+                hex::to_hex(bytes)
+            );
             out.line(&line);
         } else {
             self.text(entry, bytes, out);
@@ -165,12 +203,56 @@ impl View<'_> {
         self.matched(bytes)
     }
 
+    /// Prints the frames of bytes that have waited past the decoder's gap
+    /// by `now_us` (`u64::MAX`: all that are left).
+    fn decoded(&mut self, now_us: u64, out: &mut Output<'_>) {
+        if let Some(decoder) = &mut self.decoder {
+            decoder.idle(now_us, &mut self.frames);
+            self.print_frames(out);
+        }
+    }
+
+    /// One line per decoded frame: `✓ name  summary  [hex]`, or a JSON
+    /// object with the fields.
+    fn print_frames(&mut self, out: &mut Output<'_>) {
+        for frame in std::mem::take(&mut self.frames) {
+            if self.args.json {
+                out.json(&json!({
+                    "timestamp_us": frame.timestamp_us,
+                    "kind": "frame",
+                    "name": frame.name,
+                    "summary": frame.summary,
+                    "status": frame.status,
+                    "data": hex::to_hex(&frame.bytes),
+                    "fields": frame.fields,
+                }));
+                continue;
+            }
+            let mark = match frame.status {
+                Status::Ok => out.paint(Style::Dim, "✓"),
+                Status::BadChecksum => out.paint(Style::Red, "✗"),
+                Status::Incomplete | Status::Unknown => out.paint(Style::Red, "?"),
+            };
+            let bytes = out.paint(
+                Style::Dim,
+                &format!("[{}]", serialbot_decode::hex(&frame.bytes)),
+            );
+            let summary = if frame.summary.is_empty() {
+                String::new()
+            } else {
+                format!("  {}", frame.summary)
+            };
+            let stamp = self.stamp(frame.timestamp_us, out);
+            out.line(&format!("{stamp}{mark} {}{summary}  {bytes}", frame.name));
+        }
+    }
+
     /// `[HH:MM:SS.mmm] ` in local time with `--time`, else nothing.
-    fn stamp(&self, entry: &Entry, out: &Output<'_>) -> String {
+    fn stamp(&self, timestamp_us: u64, out: &Output<'_>) -> String {
         if !self.args.time {
             return String::new();
         }
-        let full = format_timestamp(entry.timestamp_us, self.utc_offset_min);
+        let full = format_timestamp(timestamp_us, self.utc_offset_min);
         let time = full.get(11..23).unwrap_or(&full);
         format!("{} ", out.paint(Style::Dim, &format!("[{time}]")))
     }
@@ -181,7 +263,7 @@ impl View<'_> {
             out.bytes(bytes);
             return;
         }
-        let stamp = self.stamp(entry, out);
+        let stamp = self.stamp(entry.timestamp_us, out);
         for piece in bytes.split_inclusive(|b| *b == b'\n') {
             if self.at_line_start {
                 out.bytes(stamp.as_bytes());
@@ -411,5 +493,95 @@ mod tests {
         assert_eq!(bad.code, Exit::Usage as u8, "{}", bad.err);
         assert!(f.manager.list().is_empty());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn decode_prints_one_line_per_message() {
+        let f = Fixture::new();
+        // A Modbus response, then noise. (Splitting is the decoder's tests'
+        // job: here a slow machine could stretch the pause past its gap.)
+        let device = feed(
+            &f,
+            &[
+                &[0x01, 0x03, 0x04, 0x00, 0xE7, 0x01, 0xA2, 0xCA, 0x2D],
+                &[0xFF],
+            ],
+        );
+        let ran = f.run(&[
+            "monitor",
+            "mock0",
+            "--decode",
+            "modbus-rtu",
+            "--duration",
+            "400ms",
+        ]);
+        device.join().unwrap();
+        assert_eq!(ran.code, 0, "{}", ran.err);
+        let lines: Vec<&str> = ran.out.lines().collect();
+        assert_eq!(
+            lines,
+            [
+                "✓ Read Holding Registers (03)  slave 1 · 0=231 1=418  [01 03 04 00 E7 01 A2 CA 2D]",
+                "? Unknown  1 bytes  [FF]",
+            ],
+            "{}",
+            ran.out
+        );
+    }
+
+    #[test]
+    fn decode_with_json_gives_the_fields_and_follows_the_language() {
+        let f = Fixture::new();
+        let device = feed(&f, &[b"t1232AABB\r", b"t12"]);
+        let ran = f.run(&[
+            "monitor",
+            "mock0",
+            "--decode",
+            "slcan",
+            "--json",
+            "--duration",
+            "400ms",
+        ]);
+        device.join().unwrap();
+        let lines: Vec<serde_json::Value> = ran
+            .out
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
+        assert_eq!(lines.len(), 2, "{}", ran.out);
+        assert_eq!(lines[0]["kind"], "frame");
+        assert_eq!(lines[0]["name"], "CAN standard frame");
+        assert_eq!(lines[0]["status"], "ok");
+        assert_eq!(lines[0]["data"], "74 31 32 33 32 41 41 42 42 0d");
+        assert_eq!(lines[0]["fields"][0]["value"], 0x123);
+        assert_eq!(lines[1]["status"], "incomplete");
+
+        // A fresh fixture: the device of the first run is gone.
+        let mut f = Fixture::new();
+        f.lang = crate::Lang::Zh;
+        let device = feed(&f, &[b"t1230\r"]);
+        let ran = f.run(&[
+            "monitor",
+            "mock0",
+            "--decode",
+            "slcan",
+            "--time",
+            "--duration",
+            "300ms",
+        ]);
+        device.join().unwrap();
+        assert!(
+            ran.out.contains("✓ CAN 标准帧  ID 0x123 · DLC 0"),
+            "{}",
+            ran.out
+        );
+        assert!(
+            ran.out.starts_with('['),
+            "--time stamps each frame: {}",
+            ran.out
+        );
+
+        let ran = f.run(&["monitor", "mock0", "--decode", "mavlink"]);
+        assert_eq!(ran.code, Exit::Usage as u8);
     }
 }

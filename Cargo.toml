@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "crates/serialbot-cli",
     "crates/serialbot-core",
+    "crates/serialbot-decode",
     "crates/serialbot-jobs",
     "crates/serialbot-mcp",
     "app/src-tauri",
@@ -27,6 +28,7 @@ regex = "1.12"
 serialport = "4.10"
 encoding_rs = "0.8"
 serialbot-core = { path = "crates/serialbot-core" }
+serialbot-decode = { path = "crates/serialbot-decode" }
 serialbot-jobs = { path = "crates/serialbot-jobs" }
 serialbot-mcp = { path = "crates/serialbot-mcp" }
 rmcp = { version = "3.10", default-features = false }

@@ -16,6 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 serialbot-core.workspace = true
+serialbot-decode.workspace = true
 serialbot-jobs.workspace = true
 serialbot-mcp.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time"] }

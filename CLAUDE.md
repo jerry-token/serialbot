@@ -63,6 +63,13 @@ Not automated, still required:
   - `src/manager.rs` — owns all sessions; refuses to open a port twice
   - `src/transport/mock.rs` — in-memory device for tests of everything above transports
   - `tests/serial_socat.rs` — real serial code over socat virtual ports (Linux only)
+- `crates/serialbot-decode` — frame decoders, pure (no ports, no UI): bytes with direction and
+  time in, frames with named fields out; shared by the CLI and (next) the app and MCP
+  - `src/lib.rs` — `Frame` / `Field` / `Status`, the `Decoder` trait, `PROTOCOLS`, `decoder(id)`
+  - `src/modbus.rs` — Modbus RTU: frames found by function code and CRC, responses paired with
+    their requests
+  - `src/slcan.rs` — SLCAN (Lawicel ASCII CAN adapters): CAN frames, commands, replies
+  - `src/checksum.rs` — the send box's checksums (CRC-8/16/32, XOR, SUM8, LRC)
 - `crates/serialbot-jobs` — background jobs per session, shared by the app and the CLI:
   `filesend.rs` / `repeat.rs` / `export.rs` (file send, timed send, save/capture); the app
   stops them when a session closes

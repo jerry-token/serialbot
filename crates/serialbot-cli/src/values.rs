@@ -30,77 +30,17 @@ impl Checksum {
     /// The checksum bytes of `data`, in the order they are sent. Empty data
     /// gives each algorithm's initial value.
     pub fn bytes(self, data: &[u8]) -> Vec<u8> {
-        let sum = data.iter().fold(0u8, |acc, b| acc.wrapping_add(*b));
+        use serialbot_decode::checksum as c;
         match self {
-            Self::Crc8 => vec![crc8(data)],
-            Self::Crc16Modbus => crc16_modbus(data).to_le_bytes().to_vec(),
-            Self::Crc16Ccitt => crc16_ccitt(data).to_be_bytes().to_vec(),
-            Self::Crc32 => crc32(data).to_be_bytes().to_vec(),
-            Self::Xor => vec![data.iter().fold(0, |acc, b| acc ^ b)],
-            Self::Sum8 => vec![sum],
-            Self::Lrc => vec![sum.wrapping_neg()],
+            Self::Crc8 => vec![c::crc8(data)],
+            Self::Crc16Modbus => c::crc16_modbus(data).to_le_bytes().to_vec(),
+            Self::Crc16Ccitt => c::crc16_ccitt(data).to_be_bytes().to_vec(),
+            Self::Crc32 => c::crc32(data).to_be_bytes().to_vec(),
+            Self::Xor => vec![c::xor(data)],
+            Self::Sum8 => vec![c::sum8(data)],
+            Self::Lrc => vec![c::lrc(data)],
         }
     }
-}
-
-fn crc8(data: &[u8]) -> u8 {
-    let mut crc = 0u8;
-    for byte in data {
-        crc ^= byte;
-        for _ in 0..8 {
-            crc = if crc & 0x80 == 0 {
-                crc << 1
-            } else {
-                (crc << 1) ^ 0x07
-            };
-        }
-    }
-    crc
-}
-
-fn crc16_modbus(data: &[u8]) -> u16 {
-    let mut crc = 0xffff_u16;
-    for byte in data {
-        crc ^= u16::from(*byte);
-        for _ in 0..8 {
-            crc = if crc & 1 == 0 {
-                crc >> 1
-            } else {
-                (crc >> 1) ^ 0xa001
-            };
-        }
-    }
-    crc
-}
-
-fn crc16_ccitt(data: &[u8]) -> u16 {
-    let mut crc = 0xffff_u16;
-    for byte in data {
-        crc ^= u16::from(*byte) << 8;
-        for _ in 0..8 {
-            crc = if crc & 0x8000 == 0 {
-                crc << 1
-            } else {
-                (crc << 1) ^ 0x1021
-            };
-        }
-    }
-    crc
-}
-
-fn crc32(data: &[u8]) -> u32 {
-    let mut crc = 0xffff_ffff_u32;
-    for byte in data {
-        crc ^= u32::from(*byte);
-        for _ in 0..8 {
-            crc = if crc & 1 == 0 {
-                crc >> 1
-            } else {
-                (crc >> 1) ^ 0xedb8_8320
-            };
-        }
-    }
-    !crc
 }
 
 #[cfg(test)]

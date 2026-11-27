@@ -207,6 +207,7 @@ Windows 上 command 填 `serialbot.exe` 的路径（安装版或免安装版都�
 serialbot-cli ports                                   # 列出串口（也支持 --json）
 serialbot-cli send /dev/ttyUSB0 AT --expect OK       # 发送并等待回复；超时退出码为 1
 serialbot-cli monitor /dev/ttyUSB0 --until 'boot ok'  # 只接收（文本、--hex 或 --json 逐行）
+serialbot-cli monitor /dev/ttyUSB0 --decode modbus-rtu # 每条消息一行（或 slcan），校验 CRC
 serialbot-cli signal /dev/ttyUSB0 dtr=0 100ms dtr=1   # DTR/RTS 时序、BREAK
 serialbot-cli run /dev/ttyUSB0 boot.txt               # 脚本：send、expect、wait、dtr、rts、mark……
 serialbot-cli run /dev/ttyUSB0 boot.txt --runs 100  # 跑 100 轮后打印统计（--keep-going）
