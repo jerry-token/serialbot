@@ -11,11 +11,11 @@ interface Props {
   /** Shown until the first number arrives, per format. */
   emptyText: Record<PlotFormat, string>;
   label: string;
-  /** The format picker's label and its choices' names. */
-  formatLabel: string;
-  formatNames: Record<PlotFormat, string>;
+  /** The format picker's label and its choices' names (no picker without them). */
+  formatLabel?: string;
+  formatNames?: Record<PlotFormat, string>;
   /** The user picked another format (the data is read again in it). */
-  onFormat: (format: PlotFormat) => void;
+  onFormat?: (format: PlotFormat) => void;
   onError: (message: string) => void;
 }
 
@@ -79,6 +79,7 @@ export function PlotView({
     <div className="plot">
       <div className="plot-canvas" ref={host} role="img" aria-label={label} />
       {empty && <p className="plot-empty muted">{emptyText[format]}</p>}
+      {formatNames && (
       <select
         className="plot-format"
         value={format}
@@ -87,7 +88,7 @@ export function PlotView({
         onChange={(e) => {
           const next = e.target.value as PlotFormat;
           setFormat(next);
-          onFormat(next);
+          onFormat?.(next);
         }}
       >
         {(Object.keys(formatNames) as PlotFormat[]).map((f) => (
@@ -96,6 +97,7 @@ export function PlotView({
           </option>
         ))}
       </select>
+      )}
     </div>
   );
 }

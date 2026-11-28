@@ -355,6 +355,39 @@ class FakeBackend implements Backend {
     ];
   }
 
+  saved: Array<[string, string]> = [];
+  failSave: string | null = null;
+
+  async protocolSource(id: string) {
+    return id.startsWith("user:")
+      ? { name: id.slice(5), text: `name = "${id.slice(5)}"\n` }
+      : { name: "my-protocol", text: 'name = "Example"\n' };
+  }
+
+  async previewProtocol(text: string, hex: string, _lang: string) {
+    if (text.includes("oops")) throw "line 2: unknown field `oops`";
+    return hex.trim() === ""
+      ? []
+      : [
+          {
+            timestampUs: 0,
+            direction: "rx" as const,
+            bytes: hex.trim().toUpperCase(),
+            name: text.match(/name = "(.*)"/)?.[1] ?? "?",
+            summary: "temp=23.1 °C",
+            fields: [{ name: "temp", offset: 3, len: 2, value: 23.1, text: "23.1 °C" }],
+            status: "ok" as const,
+          },
+        ];
+  }
+
+  async saveProtocol(name: string, text: string) {
+    if (this.failSave) throw this.failSave;
+    this.saved.push([name, text]);
+    this.userProtocols = [{ id: `user:${name}`, name, file: `/p/${name}.toml`, error: null }];
+    return `user:${name}`;
+  }
+
   async openProtocolsDir() {
     if (this.failDir) throw this.failDir;
     this.dirOpens += 1;
@@ -2488,6 +2521,82 @@ describe("Frames window", () => {
     backend.failDir = "this system has no configuration folder";
     await user.click(screen.getByRole("button", { name: "Protocol files…" }));
     expect(await screen.findByText("this system has no configuration folder")).toBeInTheDocument();
+  });
+
+  it("edits a protocol with a live preview and saves it", async () => {
+    const backend = new FakeBackend();
+    act(() => void backend.addSession("COM3", null));
+    const { user, storage } = setupWindow(backend);
+    await user.click(await screen.findByRole("button", { name: "Edit protocol…" }));
+    const editor = within(await screen.findByRole("region", { name: "Protocol editor" }));
+    expect(editor.getByLabelText("File name")).toHaveValue("my-protocol");
+    expect(editor.getByLabelText("Description (TOML)")).toHaveValue('name = "Example"\n');
+    // The example comes with bytes to decode.
+    expect(await editor.findByText("temp=23.1 °C")).toBeInTheDocument();
+    expect(editor.getByLabelText("Sample bytes (hex, as received)")).toHaveValue("AA 55 05 81 E7 00 0F 09");
+    expect(editor.getByText("AA 55 05 81 E7 00 0F 09", { selector: "code" })).toBeInTheDocument();
+    expect(editor.getByText("temp: 23.1 °C")).toBeInTheDocument();
+
+    // A mistake replaces the preview; no bytes, nothing to show.
+    fireEvent.change(editor.getByLabelText("Description (TOML)"), {
+      target: { value: 'name = "Board"\noops = 1\n' },
+    });
+    expect(await editor.findByText("line 2: unknown field `oops`")).toBeInTheDocument();
+    fireEvent.change(editor.getByLabelText("Description (TOML)"), {
+      target: { value: 'name = "Board"\n' },
+    });
+    await user.clear(editor.getByLabelText("Sample bytes (hex, as received)"));
+    expect(await editor.findByText("Paste bytes above to see how they decode.")).toBeInTheDocument();
+
+    // Saving picks the new protocol.
+    await user.clear(editor.getByLabelText("File name"));
+    await user.type(editor.getByLabelText("File name"), "board");
+    await user.click(editor.getByRole("button", { name: "Save" }));
+    expect(await editor.findByText("Saved as board.toml.")).toBeInTheDocument();
+    expect(backend.saved).toEqual([["board", 'name = "Board"\n']]);
+    expect(storage.getItem(PROTOCOL_KEY)).toBe("user:board");
+    backend.failSave = '"a/b" cannot be a file name';
+    await user.click(editor.getByRole("button", { name: "Save" }));
+    expect(await editor.findByText('"a/b" cannot be a file name')).toBeInTheDocument();
+    await user.click(editor.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("region", { name: "Protocol editor" })).toBeNull();
+    expect(screen.getByLabelText("Protocol")).toHaveValue("user:board");
+
+    // A file of the user's opens as it is.
+    await user.click(screen.getByRole("button", { name: "Edit protocol…" }));
+    expect(await screen.findByLabelText("File name")).toHaveValue("board");
+    expect(screen.getByLabelText("Sample bytes (hex, as received)")).toHaveValue("");
+  });
+
+  it("plots numeric fields of the frames", async () => {
+    const backend = new FakeBackend();
+    let id = 0;
+    act(() => {
+      id = backend.addSession("COM3", null).id;
+    });
+    backend.frameLog = [frame(0), frame(1, { fields: [{ name: "register 0", offset: 3, len: 2, value: 400, text: "400" }] }), frame(2, { fields: [] })];
+    const user = userEvent.setup();
+    render(
+      <FramesWindow backend={backend} lang="en" storage={memoryStorage()} createChart={() => new FakeChart()} />,
+    );
+    await user.click(await screen.findByText("slave 1 · 0=231"));
+    const detail = within(screen.getByRole("region", { name: "Read Holding Registers (03)" }));
+    expect(detail.queryByRole("button", { name: "Plot slave" })).toBeInTheDocument();
+    await user.click(detail.getByRole("button", { name: "Plot register 0" }));
+    const plotted = within(screen.getByRole("region", { name: "Plotted fields" }));
+    await waitFor(() =>
+      expect(FakeChart.last?.series).toEqual([["register 0", [231, 400]]]),
+    );
+    // New frames add points.
+    backend.frameLog = [...backend.frameLog, frame(3)];
+    act(() => backend.notify([id]));
+    await waitFor(() =>
+      expect(FakeChart.last?.series).toEqual([["register 0", [231, 400, 231]]]),
+    );
+    await user.click(plotted.getByRole("button", { name: "Plot register 0" }));
+    expect(screen.queryByRole("region", { name: "Plotted fields" })).toBeNull();
+    await user.click(detail.getByRole("button", { name: "Plot slave" }));
+    await waitFor(() => expect(FakeChart.last?.series[0]?.[0]).toBe("slave"));
   });
 
   it("is opened from the main window", async () => {

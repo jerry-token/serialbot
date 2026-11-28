@@ -168,6 +168,13 @@ export interface DecodedFrame {
   status: "ok" | "badChecksum" | "incomplete" | "unknown";
 }
 
+/** A protocol description to edit, and the file name to save it under. */
+export interface ProtocolSource {
+  /** File name without `.toml`. */
+  name: string;
+  text: string;
+}
+
 /** Frames from one read. */
 export interface FramesChunk {
   frames: DecodedFrame[];
@@ -335,6 +342,12 @@ export interface Backend {
     after: number,
     max: number,
   ): Promise<FramesChunk>;
+  /** The description of `id` to edit (a built-in one gives the example). */
+  protocolSource(id: string): Promise<ProtocolSource>;
+  /** The frames a description makes of `hex`, or its mistake. Saves nothing. */
+  previewProtocol(text: string, hex: string, lang: "en" | "zh"): Promise<Omit<DecodedFrame, "seq">[]>;
+  /** Saves a description as `<name>.toml` in the protocols folder; its id. */
+  saveProtocol(name: string, text: string): Promise<string>;
   /** Opens the folder of protocol files (made, with an example, if new); its path. */
   openProtocolsDir(): Promise<string>;
   /** Opens (or focuses) the frames window. */
@@ -473,6 +486,9 @@ export const tauriBackend: Backend = {
   stopSequence: (id) => invoke("stop_sequence", { id }),
   protocols: () => invoke("protocols"),
   openProtocolsDir: () => invoke("open_protocols_dir"),
+  protocolSource: (id) => invoke("protocol_source", { id }),
+  previewProtocol: (text, hex, lang) => invoke("preview_protocol", { text, hex, lang }),
+  saveProtocol: (name, text) => invoke("save_protocol", { name, text }),
   readFrames: (id, protocol, lang, after, max) =>
     invoke("read_frames", { id, protocol, lang, after, max }),
   openFramesWindow: async (title) => {

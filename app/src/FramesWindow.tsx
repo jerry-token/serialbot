@@ -6,9 +6,14 @@ import {
   type DecodedFrame,
   errorMessage,
   type Protocol,
+  type ProtocolSource,
   type SessionInfo,
 } from "./api";
+import { type ChartFactory, chartThemeFromCss, loadUplotChart } from "./chart";
 import { browserStorage } from "./commands";
+import { PlotView } from "./components/PlotView";
+import { ProtocolEditor } from "./components/ProtocolEditor";
+import { MAX_SERIES, PlotData } from "./plot";
 import { type Lang, strings } from "./i18n";
 import { applyAppearance, loadPrefs, resolveLanguage } from "./prefs";
 import { formatTime } from "./timefmt";
@@ -17,6 +22,8 @@ interface Props {
   backend: Backend;
   lang: Lang;
   storage?: Storage | null;
+  /** Draws the chart of plotted fields (uPlot unless a test gives another). */
+  createChart?: ChartFactory;
 }
 
 /** Frames this window keeps; older ones scroll away. */
@@ -47,6 +54,17 @@ function writeProtocol(storage: Storage | null, id: string): void {
   }
 }
 
+/** The numbers of `frame`'s fields named in `plotted`, as one point. */
+function sampleOf(frame: DecodedFrame, plotted: readonly string[]): Map<string, number> {
+  const sample = new Map<string, number>();
+  for (const field of frame.fields) {
+    if (typeof field.value === "number" && plotted.includes(field.name)) {
+      sample.set(field.name, field.value);
+    }
+  }
+  return sample;
+}
+
 const MARKS: Record<DecodedFrame["status"], string> = {
   ok: "✓",
   badChecksum: "✗",
@@ -61,7 +79,12 @@ const MARKS: Record<DecodedFrame["status"], string> = {
  * takes. Decoding happens in the backend, which reads the whole log, so
  * choosing a protocol later still shows what came before.
  */
-export function FramesWindow({ backend, lang, storage = browserStorage() }: Props) {
+export function FramesWindow({
+  backend,
+  lang,
+  storage = browserStorage(),
+  createChart = loadUplotChart,
+}: Props) {
   const [prefs, setPrefs] = useState(() => loadPrefs(storage));
   const uiLang = resolveLanguage(prefs.language, lang);
   const t = strings(uiLang);
@@ -77,6 +100,12 @@ export function FramesWindow({ backend, lang, storage = browserStorage() }: Prop
   // Bumped when the window comes back into focus: a protocol file may have
   // been edited meanwhile.
   const [reload, setReload] = useState(0);
+  const [editing, setEditing] = useState<ProtocolSource | null>(null);
+  // Fields drawn as curves, by name; every frame with a number there adds
+  // a point.
+  const [plotted, setPlotted] = useState<string[]>([]);
+  const plot = useRef(new PlotData(KEEP_FRAMES));
+  const plottedUpTo = useRef<{ key: string; seq: number }>({ key: "", seq: -1 });
   const next = useRef(0);
   const reading = useRef(false);
   const again = useRef(false);
@@ -203,6 +232,60 @@ export function FramesWindow({ backend, lang, storage = browserStorage() }: Prop
     if (el && atBottom.current) el.scrollTop = el.scrollHeight;
   }, [frames]);
 
+  // Points for new frames; everything again when the fields change or the
+  // frames start over.
+  useEffect(() => {
+    const key = plotted.join("\n");
+    const done = plottedUpTo.current;
+    // The frames start over with an empty list (new session or protocol).
+    const fresh = done.key !== key || frames.length === 0;
+    if (fresh) plot.current.clear();
+    let last = fresh ? -1 : done.seq;
+    if (plotted.length > 0) {
+      for (const f of frames) {
+        if (f.seq <= last) continue;
+        const sample = sampleOf(f, plotted);
+        if (sample.size > 0) plot.current.addSample(sample, f.timestampUs);
+      }
+    }
+    last = frames.at(-1)?.seq ?? -1;
+    plottedUpTo.current = { key, seq: last };
+  }, [frames, plotted]);
+
+  const togglePlot = (name: string) =>
+    setPlotted((all) =>
+      all.includes(name)
+        ? all.filter((n) => n !== name)
+        : all.length < MAX_SERIES
+          ? [...all, name]
+          : all,
+    );
+
+  const startEditing = () => {
+    if (!chosen) return;
+    backend.protocolSource(chosen.id).then(setEditing, (e: unknown) => setError(errorMessage(e)));
+  };
+
+  if (editing) {
+    return (
+      <div className="frames-window">
+        <ProtocolEditor
+          t={t}
+          backend={backend}
+          lang={frameLang}
+          source={editing}
+          onSaved={(id) => {
+            void backend.protocols().then(setProtocols, (e: unknown) => setError(errorMessage(e)));
+            setProtocol(id);
+            writeProtocol(storage, id);
+            setReload((n) => n + 1);
+          }}
+          onClose={() => setEditing(null)}
+        />
+      </div>
+    );
+  }
+
   const needle = filter.trim().toLowerCase();
   const matching = needle
     ? frames.filter((f) =>
@@ -261,6 +344,9 @@ export function FramesWindow({ backend, lang, storage = browserStorage() }: Prop
         >
           {t.protocolFiles}
         </button>
+        <button type="button" className="chip" title={t.editProtocolHint} onClick={startEditing}>
+          {t.editProtocol}
+        </button>
         <input
           className="grow"
           type="search"
@@ -275,6 +361,33 @@ export function FramesWindow({ backend, lang, storage = browserStorage() }: Prop
       {sessions.length > 0 && frames.length === 0 && <p className="muted">{t.framesNone}</p>}
       {missed > 0 && <p className="muted">{t.framesMissed(missed)}</p>}
       {chosen?.error && <p className="error">{chosen.error}</p>}
+      {plotted.length > 0 && (
+        <section className="frames-plot" aria-label={t.framesPlot}>
+          <p className="muted">
+            {t.framesPlot}:{" "}
+            {plotted.map((name) => (
+              <button
+                key={name}
+                type="button"
+                className="chip"
+                aria-pressed
+                aria-label={t.plotField(name)}
+                onClick={() => togglePlot(name)}
+              >
+                {name} ×
+              </button>
+            ))}
+          </p>
+          <PlotView
+            data={plot.current}
+            createChart={createChart}
+            theme={chartThemeFromCss(getComputedStyle(document.documentElement))}
+            emptyText={{ text: t.framesPlotEmpty, justfloat: t.framesPlotEmpty }}
+            label={t.framesPlot}
+            onError={setError}
+          />
+        </section>
+      )}
       <div
         className="frames-list"
         ref={list}
@@ -329,6 +442,7 @@ export function FramesWindow({ backend, lang, storage = browserStorage() }: Prop
                   <th>{t.frameField}</th>
                   <th>{t.frameValue}</th>
                   <th>{t.frameBytes}</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -341,6 +455,20 @@ export function FramesWindow({ backend, lang, storage = browserStorage() }: Prop
                         .split(" ")
                         .slice(field.offset, field.offset + field.len)
                         .join(" ")}
+                    </td>
+                    <td>
+                      {typeof field.value === "number" && (
+                        <button
+                          type="button"
+                          className="chip"
+                          aria-pressed={plotted.includes(field.name)}
+                          aria-label={t.plotField(field.name)}
+                          title={t.plotField(field.name)}
+                          onClick={() => togglePlot(field.name)}
+                        >
+                          ∿
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

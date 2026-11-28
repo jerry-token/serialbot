@@ -4,8 +4,13 @@ SerialBot decodes Modbus RTU and SLCAN out of the box. For anything else, such a
 `AA 55` frames, describe the protocol in a small TOML file and SerialBot shows every message
 with its fields, checks the checksum and marks bytes that do not fit.
 
-Put the file in the **protocols folder**: in the app, open the frames window (▤ above the log)
-and press **Protocol files…**. The first time, the folder is created with `example.toml` in it.
+The quickest way is the editor: open the frames window (▤ above the log) and press **Edit
+protocol…**. You get the description on one side and, on the other, the frames it makes of bytes
+you paste (as hex), updated as you type, with any mistake and its line. **Save** writes it to
+the protocols folder and picks it.
+
+You can also put files in the **protocols folder** yourself: press **Protocol files…** in the
+frames window. The first time, the folder is created with `example.toml` in it.
 The file then shows up in the Protocol list; after you save a change, click back into the frames
 window and it decodes again with the new description. In the terminal:
 
