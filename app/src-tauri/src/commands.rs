@@ -323,6 +323,16 @@ pub struct AppState {
     protocols_dir: std::sync::Mutex<Option<std::path::PathBuf>>,
 }
 
+/// A protocol's description to edit.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtocolSource {
+    /// The file name to save it under, without `.toml`.
+    pub name: String,
+    /// The TOML text.
+    pub text: String,
+}
+
 /// A protocol the frames window can pick.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -785,6 +795,78 @@ impl AppState {
                 .map_err(|e| format!("{}: {e}", dir.display()))?;
         }
         Ok(dir)
+    }
+
+    /// The text of protocol `id` to edit, with the file name (without
+    /// `.toml`) to save it under: a file of the user's as it is, anything
+    /// else as the example to start from (`my-protocol`).
+    pub fn protocol_source(&self, id: &str) -> Result<ProtocolSource, String> {
+        if let Some(stem) = id.strip_prefix("user:") {
+            let dir = self
+                .protocols_dir()
+                .ok_or("this system has no configuration folder")?;
+            let path = dir.join(format!("{stem}.toml"));
+            let text =
+                std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            return Ok(ProtocolSource {
+                name: stem.to_owned(),
+                text,
+            });
+        }
+        Ok(ProtocolSource {
+            name: "my-protocol".to_owned(),
+            text: serialbot_decode::custom::EXAMPLE.to_owned(),
+        })
+    }
+
+    /// The frames the description `text` makes of `hex` (bytes as hex, taken
+    /// as received), named in `lang`; or the description's mistake (with its
+    /// line), or why `hex` is not hex. Nothing is saved.
+    pub fn preview_protocol(
+        &self,
+        text: &str,
+        hex: &str,
+        lang: &str,
+    ) -> Result<Vec<serialbot_decode::Frame>, String> {
+        let custom = serialbot_decode::custom::parse(text)?;
+        let bytes = if hex.trim().is_empty() {
+            Vec::new()
+        } else {
+            serialbot_core::hex::parse_hex(hex)?
+        };
+        let lang = if lang == "zh" {
+            serialbot_decode::Lang::Zh
+        } else {
+            serialbot_decode::Lang::En
+        };
+        let mut decoder = custom.decoder(lang);
+        Ok(serialbot_decode::decode_all(
+            decoder.as_mut(),
+            [(serialbot_decode::Direction::Rx, 0, bytes.as_slice())],
+        ))
+    }
+
+    /// Saves `text` as `<name>.toml` in the protocols folder (made if
+    /// missing), replacing a file of that name, and gives its id
+    /// (`user:<name>`). A name is 1 to 64 letters, digits, `-`, `_` or `.`,
+    /// not starting with `.`. The text is saved even with mistakes (the
+    /// list shows them), so work in progress is kept.
+    pub fn save_protocol(&self, name: &str, text: &str) -> Result<String, String> {
+        let ok = !name.is_empty()
+            && name.len() <= 64
+            && !name.starts_with('.')
+            && name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'));
+        if !ok {
+            return Err(format!(
+                "{name:?} cannot be a file name: use letters, digits, - _ and ."
+            ));
+        }
+        let dir = self.ensure_protocols_dir()?;
+        let path = dir.join(format!("{name}.toml"));
+        std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
+        Ok(format!("user:{name}"))
     }
 
     /// Up to `max` (at most 2000) frames of the session's log decoded as

@@ -178,6 +178,11 @@ export class PlotData {
     this.version++;
   }
 
+  /** Adds one point of named values at `timestampUs` (decoded fields). */
+  addSample(sample: Sample, timestampUs: number): void {
+    this.add(sample, timestampUs);
+  }
+
   private add(sample: Sample, timestampUs: number): void {
     if (sample.size === 0) return;
     for (const name of sample.keys()) {

@@ -160,6 +160,13 @@ for (const locale of ["en-US", "zh-CN"]) {
         await page.locator(".frames-table .frame").first().click();
         await expect(page.locator(".frame-detail")).toBeVisible();
         await fits(page, "frame fields");
+        await page.locator(".frame-fields button").first().click();
+        await expect(page.locator(".frames-plot")).toBeVisible();
+        await fits(page, "plotted field");
+        await page.locator(".frames-bar .chip").last().click();
+        await expect(page.locator(".protocol-editor")).toBeVisible();
+        await expect(page.locator(".preview-frames li").first()).toBeVisible();
+        await fits(page, "protocol editor");
         expect(errors).toEqual([]);
       });
     });

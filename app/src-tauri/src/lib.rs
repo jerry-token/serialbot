@@ -256,6 +256,33 @@ mod ipc {
     }
 
     #[tauri::command(async)]
+    pub(crate) fn protocol_source(
+        state: tauri::State<'_, AppState>,
+        id: String,
+    ) -> Result<crate::commands::ProtocolSource, String> {
+        state.protocol_source(&id)
+    }
+
+    #[tauri::command(async)]
+    pub(crate) fn preview_protocol(
+        state: tauri::State<'_, AppState>,
+        text: String,
+        hex: String,
+        lang: String,
+    ) -> Result<Vec<serialbot_decode::Frame>, String> {
+        state.preview_protocol(&text, &hex, &lang)
+    }
+
+    #[tauri::command(async)]
+    pub(crate) fn save_protocol(
+        state: tauri::State<'_, AppState>,
+        name: String,
+        text: String,
+    ) -> Result<String, String> {
+        state.save_protocol(&name, &text)
+    }
+
+    #[tauri::command(async)]
     pub(crate) fn open_protocols_dir(state: tauri::State<'_, AppState>) -> Result<String, String> {
         let dir = state.ensure_protocols_dir()?;
         open::that_detached(&dir).map_err(|e| e.to_string())?;
@@ -556,6 +583,9 @@ pub fn run() -> Result<(), tauri::Error> {
             ipc::repeat_status,
             ipc::protocols,
             ipc::open_protocols_dir,
+            ipc::protocol_source,
+            ipc::preview_protocol,
+            ipc::save_protocol,
             ipc::read_frames,
             ipc::start_sequence,
             ipc::stop_sequence,

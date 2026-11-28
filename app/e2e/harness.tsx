@@ -134,6 +134,13 @@ const fake: Record<string, unknown> = {
   captureStatus: async () => ({ running: false }),
   repeatStatus: async () => ({ running: false, sent: 0 }),
   pendingApprovals: async () => [],
+  // The editor: a long description and a preview of every frame.
+  protocolSource: async () => ({
+    name: "a-rather-long-protocol-file-name-for-the-board",
+    text: `name = "Board"\n${"# a long comment line that goes on and on to test wrapping\n".repeat(30)}`,
+  }),
+  previewProtocol: async () => frames.slice(0, 6),
+  saveProtocol: async (name: string) => `user:${name}`,
   // Frames with long names and summaries, every status, for the frames window.
   protocols: async () => [
     { id: "modbus-rtu", name: "Modbus RTU" },

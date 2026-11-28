@@ -1618,7 +1618,9 @@ mark.kw {
 }
 
 .frame-detail {
-  flex: 0 0 auto;
+  /* Shrinks (and scrolls) in a small window so nothing is pushed out. */
+  flex: 0 1 auto;
+  min-height: 60px;
   max-height: 45%;
   overflow: auto;
   padding: 8px 12px;
@@ -1633,4 +1635,111 @@ mark.kw {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Cascadia Mono", monospace;
   font-size: 12px;
   overflow-wrap: anywhere;
+}
+
+.frames-plot {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding: 6px 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.frames-plot > p {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 4px;
+}
+
+.frames-plot .plot {
+  flex: 0 1 180px;
+  min-height: 80px;
+}
+
+/* The protocol editor: the description beside its preview, stacked when narrow. */
+.protocol-editor {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.protocol-editor-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  padding: 8px 12px 12px;
+  overflow: auto;
+}
+
+.protocol-text,
+.protocol-preview,
+.protocol-preview > label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.protocol-text textarea {
+  flex: 1 0 240px;
+  resize: none;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Cascadia Mono", monospace;
+  font-size: 12px;
+}
+
+.protocol-preview {
+  overflow: auto;
+}
+
+/* Nothing in the preview column shrinks: it scrolls instead. */
+.protocol-preview > * {
+  flex-shrink: 0;
+}
+
+.protocol-sample {
+  flex: 0 0 64px;
+  min-height: 48px;
+  resize: vertical;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Cascadia Mono", monospace;
+  font-size: 12px;
+}
+
+.protocol-preview .error {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.preview-frames {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.preview-frames > li {
+  margin-bottom: 8px;
+}
+
+.preview-frames p {
+  margin: 0;
+}
+
+.preview-frames ul {
+  margin: 2px 0 0;
+  padding-left: 16px;
+  color: var(--muted);
+}
+
+.preview-frames .st-badChecksum .mark,
+.preview-frames .st-incomplete .mark,
+.preview-frames .st-unknown .mark {
+  color: var(--info);
 }

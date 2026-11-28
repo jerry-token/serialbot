@@ -121,7 +121,8 @@ Not automated, still required:
   - `src/terminal.ts` — log entries to display lines (text/hex, line breaks, UTF-8)
   - `src/commands.ts` — saved command groups (local storage) and the in-order runner
   - `src/FramesWindow.tsx` — the frames window (`#frames`): session and protocol, one row per
-    message, its fields and bytes
+    message, its fields and bytes, number fields plotted; `components/ProtocolEditor.tsx` edits a
+    protocol file with a live preview of pasted bytes
   - `src/sequence.ts` — test sequences: saved script and options, a group as a script, the
     report (the runs themselves are `serialbot-jobs::sequence` in the backend)
   - `src/App.tsx` + `src/components/` — UI; tests use a fake `Backend`
