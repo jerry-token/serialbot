@@ -39,12 +39,20 @@ Windows 可能提示「未知发布者」，点「更多信息」→「仍要运
 
 ### New in this release / 本版新增
 
+- **beta.6: frames window / 帧解析窗口** (▤ above the log): what a port sends and receives, one message per row, as **Modbus RTU** (function, slave, registers by address, exceptions, CRC checked) or **SLCAN** (CAN ID, DLC, data). A row opens its fields and the bytes each takes; ∿ plots any number field as a curve. Choosing a protocol later still decodes what came before.
+  日志上方的 ▤ 打开。端口收发的数据按 **Modbus RTU**（功能码、从站、按地址列出的寄存器、异常码、CRC 校验）或 **SLCAN**（CAN ID、DLC、数据）逐条显示，一行一条消息；点开一行可看各字段及对应字节，点 ∿ 可把任何数值字段画成曲线。先收数据、后选协议，之前的数据也会被解析。
+- **beta.6: your own protocols / 自定义协议**: describe a protocol in a small TOML file (header, length, checksum, fields with names, units and scaling) and write it in the built-in editor (*Edit protocol…*), which decodes pasted bytes as you type and shows mistakes with their line. See [docs/protocols.md](https://github.com/jerry-token/serialbot/blob/main/docs/protocols.md).
+  用一个小 TOML 文件描述协议（帧头、长度、校验、带名称/单位/缩放的字段），在内置编辑器（「编辑协议…」）里编写，粘贴字节即时显示解析结果，写错会提示行号。说明见 [docs/protocols.zh-CN.md](https://github.com/jerry-token/serialbot/blob/main/docs/protocols.zh-CN.md)。
+- **beta.6: decoding in the terminal and for AI / 命令行与 AI 也能解析**: `serialbot-cli monitor <port> --decode modbus-rtu` (or `slcan`, or your protocol file) prints one line per message, `--json` gives the fields; MCP agents call `io.read` with `decode` and get fields and checksum results instead of bytes.
+  `serialbot-cli monitor <端口> --decode modbus-rtu`（或 `slcan`、你的协议文件）每条消息一行，`--json` 输出字段；MCP 智能体调用 `io.read` 时加 `decode`，拿到的是字段和校验结果而不是原始字节。
+- **beta.6: test sequences / 测试序列** (🔁 above the log): a script of `send`, `expect`, `wait`, `dtr` / `rts` and `mark` steps run N times or until stopped, with passed / failed counts, run times, the failed steps and a report to copy; a command group becomes a script with one click. In the terminal: `serialbot-cli run <port> test.txt --runs 100`.
+  日志上方的 🔁 打开。由 `send`、`expect`、`wait`、`dtr` / `rts`、`mark` 组成的脚本跑 N 轮或直到停止，统计通过和失败、每轮耗时和失败的步骤，可复制报告；命令分组一键转成脚本。终端里：`serialbot-cli run <端口> test.txt --runs 100`。
+- **beta.6: MCP setup is copy-only / MCP 配置改为复制**: the AI page now shows, for each client, the file it reads by default and the settings to copy into it; SerialBot no longer writes other programs' files. `serialbot-cli mcp install` became `serialbot-cli mcp config <client>`.
+  AI 页按客户端显示默认配置文件位置和要复制进去的内容，SerialBot 不再改写其他程序的文件。`serialbot-cli mcp install` 改为 `serialbot-cli mcp config <客户端>`。
 - **beta.5: layout fixes / 界面修复**: with HEX on, the checksum dropdown no longer pushes the window wider; the status bar and the pop-up panels (e.g. the DTR/RTS sequence) stay inside small windows, and the waveform leaves the terminal room. A test in a real browser now checks every panel at sizes from 640×420 up.
   打开 HEX 时校验下拉框不再把窗口撑出横向滚动条；小窗口下状态栏和弹出面板（如 DTR/RTS 时序）不再超出窗口，波形图也会给终端留出空间。新增真实浏览器测试，在 640×420 起的各种窗口尺寸下检查每个面板。
 - **beta.4: XMODEM / YMODEM** to MCU bootloaders: XMODEM (128, CRC or checksum), XMODEM-1K and YMODEM (1K or 128, with name and size). Pick the protocol in the app's file send panel; `/send-file --ymodem fw.bin` in `open` / `tui`; `serialbot-cli send <port> --file fw.bin --protocol ymodem`. Tested against lrzsz; please report how it works with your bootloader.
   发送文件到 MCU bootloader：XMODEM（128，CRC 或校验和）、XMODEM-1K、YMODEM（1K 或 128，带文件名和大小）。App 文件发送面板里选协议；`open` / `tui` 里用 `/send-file --ymodem fw.bin`；命令行 `serialbot-cli send <端口> --file fw.bin --protocol ymodem`。已和 lrzsz 互通测试，欢迎反馈你的 bootloader 是否正常。
-- **beta.4: one-click MCP / 一键配置 MCP**: on the AI page, *Add SerialBot to* Claude Desktop, Cursor, VS Code, Codex, Gemini CLI or opencode (or `serialbot-cli mcp install <client>`). Only the `serialbot` entry is written and the old file is backed up.
-  AI 页「把 SerialBot 添加到」Claude Desktop、Cursor、VS Code、Codex、Gemini CLI 或 opencode（命令行 `serialbot-cli mcp install <客户端>`）。只写入 `serialbot` 这一项，原文件会备份。
 - **beta.4: Copy for AI / 复制给 AI**: copies the newest 200 lines shown, with times and a question, to paste into any AI chat.
   复制当前显示的最新 200 行，带上时间和一个问题，可直接粘贴到任意 AI 聊天里。
 - **beta.4: VOFA+ waveforms / VOFA+ 波形**: FireWater lines (`prefix:1,2,3`) plot as they are; JustFloat binary frames with the plot's format picker, or `/plot justfloat` and `--plot justfloat` in `tui`.
@@ -66,7 +74,8 @@ Windows 可能提示「未知发布者」，点「更多信息」→「仍要运
 - Text / HEX receive with timestamps, Δt, line numbers, ANSI colors, encodings (UTF-8, GBK, GB18030, Big5, …), auto frame split, pause, search and filter, keyword highlight, bookmarks; large logs stay smooth
 - Terminal mode and live plots
 - Many ports at once: tabs, ports in their own windows, news on other tabs
-- Multi-line send (text or HEX), history, timed send, saved command lists (also in their own window), checksums, file send, save or capture the log
+- Multi-line send (text or HEX), history, timed send, saved command lists (also in their own window), checksums, file send (also XMODEM / YMODEM), test sequences, save or capture the log
+- Frame decoding: Modbus RTU, SLCAN and your own TOML protocols, with plots of any field
 - DTR / RTS control and timed sequences, CTS / DSR / RI / CD status, BREAK
 - MCP server for AI agents (AI page → enable → copy the `claude mcp add …` command, or the Claude Desktop config), on this computer or optionally the local network; every change an agent makes waits for your approval, and its lines are marked AI
 - `serialbot-cli` for the terminal: one-shot commands, an interactive and a full-screen terminal, scripts, the MCP server
